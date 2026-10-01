@@ -41,15 +41,21 @@ const quranAiDetector = new QuranAIDetector(openrouterKey, openrouterModel);
 // Active session tracking for STT distribution
 let activeLiveSessionId = 'jumuah-live';
 
-// Pre-create the initial default Friday Khutbah session
+// Pre-create initial default sessions
 (async () => {
   await sessionManager.createSession({
-    sessionId: activeLiveSessionId,
+    sessionId: 'myo-youth',
+    mosqueName: 'MYO Youth Center',
+    primaryLanguage: 'uz',
+    hostUrl: `http://localhost:${PORT}`
+  });
+  await sessionManager.createSession({
+    sessionId: 'jumuah-live',
     mosqueName: process.env.DEFAULT_MASJID_NAME || 'Masjid Al-Noor',
     primaryLanguage: process.env.DEFAULT_PRIMARY_LANGUAGE || 'en',
     hostUrl: `http://localhost:${PORT}`
   });
-  console.log(`[MosqAI] Default Khutbah session ready: ${activeLiveSessionId}`);
+  console.log(`[MosqAI] Ready with sessions: myo-youth, jumuah-live`);
 })();
 
 // Initialize STT engine (Deepgram Nova-3 / Gladia / Simulator)
@@ -59,21 +65,26 @@ sttService.initSession();
  * Main Real-time Processing Pipeline:
  * Arabic Speech Transcript -> AI Quran Ayah Detection -> Multi-Language Translation -> Low-Latency Audio -> Broadcast
  */
-async function processTranscript({ text, isFinal, source }) {
+async function processTranscript({ text, isFinal, source, sessionId }) {
   if (!text || text.trim().length === 0) return null;
   const cleanArabic = text.trim();
-  console.log(`[STT -> ${source}] Received Arabic: "${cleanArabic}"`);
+  const targetSessionId = sessionId || activeLiveSessionId;
+  console.log(`[STT -> ${source} -> ${targetSessionId}] Received Arabic: "${cleanArabic}"`);
 
-  const sessionId = activeLiveSessionId;
-  let session = sessionManager.getSession(sessionId);
+  let session = sessionManager.getSession(targetSessionId);
   if (!session) {
     session = await sessionManager.createSession({
-      sessionId,
+      sessionId: targetSessionId,
       mosqueName: process.env.DEFAULT_MASJID_NAME || 'Masjid Al-Noor',
       primaryLanguage: process.env.DEFAULT_PRIMARY_LANGUAGE || 'en'
     });
   }
-  if (session.status === 'ended') return null;
+
+  // STRICT SESSION CONTROL: Only broadcast when session is active!
+  if (session.status !== 'active') {
+    console.log(`[Session ${targetSessionId}] Ignored speech because session status is "${session.status}". Start Khutbah first.`);
+    return null;
+  }
 
   // Step 1: Detect Quran Ayah in speech using AI Model & Canonical Corpus
   const ayahMatch = await quranAiDetector.detect(cleanArabic);
@@ -87,14 +98,14 @@ async function processTranscript({ text, isFinal, source }) {
     // If Quran Ayah, use canonical authenticated translations for precision
     translations = { ...ayahMatch.translations };
   } else {
-    // Regular sermon speech: translate via OpenRouter Llama 3.3 / fallback
-    const targetLanguages = ['en', 'bn', 'ur', 'fr', 'zh', 'tr'];
+    // Regular sermon speech: translate via DeepL / OpenRouter Llama 3.3
+    const targetLanguages = ['en', 'uz', 'bn', 'ur', 'fr', 'zh', 'tr', 'id', 'so'];
     translations = await translationService.translateMultiple(cleanArabic, targetLanguages);
   }
 
   // Step 3: Low-Latency Spoken Audio Generation for Earbuds (Cartesia / Sonic)
   const audioByLanguage = {};
-  const stats = sessionManager.getSessionStats(sessionId);
+  const stats = sessionManager.getSessionStats(targetSessionId);
   const neededAudioLangs = Object.keys(stats.languageCounts);
 
   // Always generate at least for English and active attendee languages
@@ -114,7 +125,7 @@ async function processTranscript({ text, isFinal, source }) {
 
   await Promise.all(ttsPromises);
 
-  // Step 4: Instant Multi-Screen & Earbud Broadcast
+  // Step 4: Instant Multi-Screen & Earbud Broadcast to THIS specific session room
   const broadcastPayload = {
     arabicText: cleanArabic,
     translations,
@@ -123,7 +134,7 @@ async function processTranscript({ text, isFinal, source }) {
     timestamp: new Date().toISOString()
   };
 
-  sessionManager.broadcastTranslations(sessionId, broadcastPayload);
+  sessionManager.broadcastTranslations(targetSessionId, broadcastPayload);
   return broadcastPayload;
 }
 
@@ -234,6 +245,11 @@ app.get('/api/qrcode', async (req, res) => {
   }
 });
 
+// List all mosque sessions
+app.get('/api/sessions', (req, res) => {
+  res.json(sessionManager.getAllActiveSessions());
+});
+
 // Create custom session
 app.post('/api/session/create', async (req, res) => {
   const { sessionId, mosqueName, primaryLanguage } = req.body;
@@ -287,15 +303,24 @@ app.post('/api/session/:id/simulate/stop', (req, res) => {
   res.json({ message: 'Simulation stopped' });
 });
 
-// Direct test text injection
+// Direct test text injection (strictly guarded: only allowed when session is active)
 app.post('/api/session/:id/inject-text', async (req, res) => {
   const { text } = req.body;
   if (!text) return res.status(400).json({ error: 'Text required' });
 
+  const session = sessionManager.getSession(req.params.id);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+  if (session.status !== 'active') {
+    return res.status(400).json({
+      error: 'Khutbah is not active. Click "Start Khutbah" first to enable live translation.'
+    });
+  }
+
   const result = await processTranscript({
     text,
     isFinal: true,
-    source: 'manual_injection'
+    source: 'manual_injection',
+    sessionId: req.params.id
   });
 
   res.json({ success: true, result });

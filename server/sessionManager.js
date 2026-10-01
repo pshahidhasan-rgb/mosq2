@@ -111,7 +111,13 @@ class SessionManager {
   }
 
   getAllActiveSessions() {
-    return Array.from(this.sessions.values());
+    return Array.from(this.sessions.values()).map(session => {
+      const stats = this.getSessionStats(session.id);
+      return {
+        ...session,
+        stats
+      };
+    });
   }
 
   startSession(sessionId) {

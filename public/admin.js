@@ -1,6 +1,8 @@
-// MosqAI - Admin & Imam Console Logic
+// MosqAI - Multi-Mosque Management & Pulpit Console Script
+const urlParams = new URLSearchParams(window.location.search);
+let currentSessionId = urlParams.get('session') || null;
+
 let ws = null;
-let currentSessionId = 'jumuah-live';
 let sessionStatus = 'idle';
 let sessionStartTime = null;
 let timerInterval = null;
@@ -8,11 +10,33 @@ let mediaStream = null;
 let audioContext = null;
 let analyser = null;
 let micInterval = null;
+let micActive = false;
+let speechRecognition = null;
 let isSimulating = false;
 
-// DOM Elements
+// DOM Views
+const viewSessionsList = document.getElementById('view-sessions-list');
+const viewSessionConsole = document.getElementById('view-session-console');
+const sessionsGridContainer = document.getElementById('sessions-grid-container');
+const btnNavSessions = document.getElementById('btn-nav-sessions');
+const btnOpenCreateModal = document.getElementById('btn-open-create-modal');
+const modalCreateSession = document.getElementById('modal-create-session');
+const btnCloseCreateModal = document.getElementById('btn-close-create-modal');
+const btnCancelCreate = document.getElementById('btn-cancel-create');
+const btnSubmitCreate = document.getElementById('btn-submit-create');
+const newMosqueNameInput = document.getElementById('new-mosque-name');
+const newSessionIdInput = document.getElementById('new-session-id');
+const newPrimaryLangSelect = document.getElementById('new-primary-lang');
+
+// Lock Banner & Console Controls
+const lockBanner = document.getElementById('lock-banner');
+const lockBannerIcon = document.getElementById('lock-banner-icon');
+const lockBannerText = document.getElementById('lock-banner-text');
+const mosqueTitle = document.getElementById('mosque-title');
+const mosqueSubtitle = document.getElementById('mosque-subtitle');
 const sessionBadge = document.getElementById('session-badge');
 const sessionStatusText = document.getElementById('session-status-text');
+const headerBtnTv = document.getElementById('header-btn-tv');
 const liveTimer = document.getElementById('live-timer');
 const btnStart = document.getElementById('btn-start');
 const btnPause = document.getElementById('btn-pause');
@@ -20,18 +44,21 @@ const btnEnd = document.getElementById('btn-end');
 const btnSimulate = document.getElementById('btn-simulate');
 const btnToggleMic = document.getElementById('btn-toggle-mic');
 const micLevelBar = document.getElementById('mic-level-bar');
-const transcriptStream = document.getElementById('transcript-stream');
-const transcriptCount = document.getElementById('transcript-count');
-const attendeeCount = document.getElementById('attendee-count');
-const tvCount = document.getElementById('tv-count');
-const totalListenersBadge = document.getElementById('total-listeners-badge');
-const languagesBreakdown = document.getElementById('languages-breakdown');
-const qrCodeImg = document.getElementById('qr-code-img');
-const joinLinkHref = document.getElementById('join-link-href');
 const manualInput = document.getElementById('manual-input');
 const btnInject = document.getElementById('btn-inject');
 
-// Authentication elements
+// Stats & Links
+const statAttendees = document.getElementById('stat-attendees');
+const statDisplays = document.getElementById('stat-displays');
+const languagesBreakdown = document.getElementById('languages-breakdown');
+const qrCodeImg = document.getElementById('qr-code-img');
+const btnCopyLink = document.getElementById('btn-copy-link');
+const btnOpenJoin = document.getElementById('btn-open-join');
+const btnOpenTvSide = document.getElementById('btn-open-tv-side');
+const transcriptFeed = document.getElementById('transcript-feed');
+const transCount = document.getElementById('trans-count');
+
+// Auth elements
 const authModal = document.getElementById('auth-modal');
 const adminPinInput = document.getElementById('admin-pin-input');
 const btnSubmitAuth = document.getElementById('btn-submit-auth');
@@ -40,6 +67,7 @@ const btnLogout = document.getElementById('btn-logout');
 
 let transcriptItemsCount = 0;
 
+// ─── AUTHENTICATION ───
 async function checkAuth() {
   const token = localStorage.getItem('mosq_admin_token');
   if (!token) {
@@ -54,9 +82,7 @@ async function checkAuth() {
       hideAuthModal();
       return true;
     }
-  } catch (e) {
-    // fallback
-  }
+  } catch (e) {}
   showAuthModal();
   return false;
 }
@@ -117,144 +143,175 @@ if (btnLogout) {
   });
 }
 
-// Initialize Session & WebSockets
-async function init() {
-  const isAuthed = await checkAuth();
-  if (!isAuthed) return;
+// ─── SESSIONS VIEW SWITCHER ───
+function setupViewRouting() {
+  if (!currentSessionId) {
+    // Show Sessions Management View
+    if (viewSessionsList) viewSessionsList.style.display = 'block';
+    if (viewSessionConsole) viewSessionConsole.style.display = 'none';
+    if (btnNavSessions) btnNavSessions.style.display = 'none';
+    mosqueTitle.textContent = 'MosqAI — Mosque Sessions';
+    mosqueSubtitle.textContent = 'Multi-Mosque Live Khutbah Manager';
+    loadAllSessionsList();
+  } else {
+    // Show Console View for specific session
+    if (viewSessionsList) viewSessionsList.style.display = 'none';
+    if (viewSessionConsole) viewSessionConsole.style.display = 'block';
+    if (btnNavSessions) {
+      btnNavSessions.style.display = 'inline-flex';
+      btnNavSessions.onclick = () => {
+        window.location.href = '/admin.html';
+      };
+    }
+    initConsoleSession(currentSessionId);
+  }
+}
 
+// Load and Render All Mosque Sessions
+async function loadAllSessionsList() {
   try {
-    const res = await fetch('/api/session/current');
-    const data = await res.json();
-    currentSessionId = data.id;
+    const res = await fetch('/api/sessions');
+    if (!res.ok) return;
+    const sessions = await res.json();
 
-    if (data.qrCodeDataUrl) {
-      qrCodeImg.src = data.qrCodeDataUrl;
-    }
-    if (data.joinUrl) {
-      joinLinkHref.href = data.joinUrl;
-    }
-    if (data.status === 'active') {
-      setSessionActive(data.startedAt);
-    }
+    sessionsGridContainer.innerHTML = '';
+    sessions.forEach(sess => {
+      const stats = sess.stats || { totalAttendees: 0, totalTVDisplays: 0 };
+      const card = document.createElement('div');
+      card.className = `session-card-item ${sess.status === 'active' ? 'active' : ''}`;
 
-    connectWebSocket();
-  } catch (err) {
-    console.error('Init failed:', err);
-  }
-}
+      const statusMap = {
+        active: { class: 'active', text: '● LIVE KHUTBAH' },
+        paused: { class: 'paused', text: '⏸ PAUSED' },
+        idle: { class: 'idle', text: '⏳ WAITING / IDLE' },
+        ended: { class: 'ended', text: '⏹ CONCLUDED' }
+      };
+      const badgeInfo = statusMap[sess.status] || statusMap.idle;
 
-function connectWebSocket() {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+      card.innerHTML = `
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
+            <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff;">${sess.mosqueName}</h3>
+            <span class="badge-status ${badgeInfo.class}">${badgeInfo.text}</span>
+          </div>
+          <div style="font-size: 0.8rem; color: #94a3b8; font-family: monospace; margin-bottom: 0.75rem;">
+            ID: ${sess.id}
+          </div>
+          <div style="display: flex; gap: 1rem; font-size: 0.82rem; color: var(--text-secondary);">
+            <span>👥 <strong>${stats.totalAttendees}</strong> Listeners</span>
+            <span>📺 <strong>${stats.totalTVDisplays}</strong> TV Screen</span>
+          </div>
+        </div>
 
-  ws.onopen = () => {
-    ws.send(JSON.stringify({
-      type: 'JOIN_ROOM',
-      sessionId: currentSessionId,
-      role: 'admin'
-    }));
-  };
-
-  ws.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
-
-      if (data.type === 'ADMIN_TRANSCRIPT') {
-        appendTranscript(data);
-      }
-
-      if (data.type === 'STATS_UPDATE') {
-        updateStats(data.stats);
-      }
-
-      if (data.type === 'SESSION_STATUS') {
-        if (data.status === 'active') {
-          setSessionActive(data.startedAt);
-        } else if (data.status === 'paused') {
-          setSessionPaused();
-        } else if (data.status === 'ended') {
-          setSessionEnded();
-        }
-      }
-    } catch (err) {
-      console.warn('WS message error:', err);
-    }
-  };
-
-  ws.onclose = () => {
-    setTimeout(connectWebSocket, 2000);
-  };
-}
-
-// Transcript UI rendering
-function appendTranscript({ arabic, translations, ayah, timestamp }) {
-  if (transcriptItemsCount === 0) {
-    transcriptStream.innerHTML = '';
-  }
-
-  transcriptItemsCount++;
-  transcriptCount.textContent = `${transcriptItemsCount} phrases`;
-
-  const itemWrapper = document.createElement('div');
-
-  if (ayah) {
-    // Reverent Quran Ayah Card
-    itemWrapper.className = 'ayah-card';
-    itemWrapper.innerHTML = `
-      <div class="ayah-header">
-        <span class="ayah-badge">📖 Quran Detected (${ayah.confidence}% match)</span>
-        <span style="font-size: 0.85rem; font-weight: 600; color: var(--accent-gold);">${ayah.reference}</span>
-      </div>
-      <div class="ayah-arabic">${ayah.arabicUthmani}</div>
-      <div class="ayah-translation">"${ayah.translations.en || ''}"</div>
-      ${ayah.translations.ur ? `<div style="font-size: 0.95rem; color: #cbd5e1; direction: rtl; text-align: right; margin-top: 0.35rem;">${ayah.translations.ur}</div>` : ''}
-    `;
-  } else {
-    // Regular Sermon Speech Bubble
-    itemWrapper.className = 'speech-bubble latest';
-    const primaryTrans = translations.en || Object.values(translations)[0] || '';
-    itemWrapper.innerHTML = `
-      <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">
-        <span>Khutbah Speech</span>
-        <span>${new Date(timestamp).toLocaleTimeString()}</span>
-      </div>
-      <div class="arabic-text">${arabic}</div>
-      <div class="translated-text">${primaryTrans}</div>
-      ${translations.bn ? `<div style="font-size: 0.85rem; color: #94a3b8; margin-top: 0.25rem;">Bengali: ${translations.bn}</div>` : ''}
-    `;
-  }
-
-  // Remove latest highlight from previous elements
-  const prevLatest = transcriptStream.querySelector('.speech-bubble.latest');
-  if (prevLatest && !ayah) prevLatest.classList.remove('latest');
-
-  transcriptStream.appendChild(itemWrapper);
-  transcriptStream.scrollTop = transcriptStream.scrollHeight;
-}
-
-function updateStats(stats) {
-  if (!stats) return;
-  attendeeCount.textContent = stats.totalAttendees || 0;
-  tvCount.textContent = stats.tvDisplays || 0;
-  totalListenersBadge.textContent = `${stats.totalAttendees || 0} Listeners`;
-
-  languagesBreakdown.innerHTML = '';
-  const counts = stats.languageCounts || {};
-  const entries = Object.entries(counts);
-
-  if (entries.length === 0) {
-    languagesBreakdown.innerHTML = '<span style="font-size: 0.8rem; color: var(--text-muted);">None active yet</span>';
-  } else {
-    entries.forEach(([lang, num]) => {
-      const tag = document.createElement('span');
-      tag.style.cssText = 'background: #334155; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;';
-      tag.textContent = `${lang.toUpperCase()}: ${num}`;
-      languagesBreakdown.appendChild(tag);
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem;">
+          <a href="/admin.html?session=${encodeURIComponent(sess.id)}" class="btn btn-primary" style="flex: 1; text-align: center; font-size: 0.82rem; padding: 0.45rem;">
+            🎙️ Open Pulpit Console →
+          </a>
+          <a href="/display.html?session=${encodeURIComponent(sess.id)}" target="_blank" class="btn btn-secondary" style="font-size: 0.82rem; padding: 0.45rem;">
+            📺 TV Display ↗
+          </a>
+          <a href="/join.html?session=${encodeURIComponent(sess.id)}" target="_blank" class="btn btn-secondary" style="font-size: 0.82rem; padding: 0.45rem;">
+            📱 Join ↗
+          </a>
+        </div>
+      `;
+      sessionsGridContainer.appendChild(card);
     });
+  } catch (err) {
+    console.warn('Failed loading sessions:', err.message);
   }
 }
 
-// Timer and State Handlers
+// Create New Session Modal Logic
+if (btnOpenCreateModal) {
+  btnOpenCreateModal.addEventListener('click', () => {
+    modalCreateSession.style.display = 'flex';
+    newMosqueNameInput.value = '';
+    newSessionIdInput.value = '';
+    newMosqueNameInput.focus();
+  });
+}
+
+if (btnCloseCreateModal) btnCloseCreateModal.addEventListener('click', () => modalCreateSession.style.display = 'none');
+if (btnCancelCreate) btnCancelCreate.addEventListener('click', () => modalCreateSession.style.display = 'none');
+
+if (newMosqueNameInput) {
+  newMosqueNameInput.addEventListener('input', () => {
+    // Auto-slugify mosque name
+    const slug = newMosqueNameInput.value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)+/g, '');
+    newSessionIdInput.value = slug;
+  });
+}
+
+if (btnSubmitCreate) {
+  btnSubmitCreate.addEventListener('click', async () => {
+    const mosqueName = newMosqueNameInput.value.trim();
+    const sessionId = newSessionIdInput.value.trim();
+    const primaryLanguage = newPrimaryLangSelect.value;
+
+    if (!mosqueName || !sessionId) {
+      alert('Please fill in both the Mosque Name and Session ID.');
+      return;
+    }
+
+    try {
+      btnSubmitCreate.disabled = true;
+      btnSubmitCreate.textContent = 'Creating...';
+      const res = await fetch('/api/session/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, mosqueName, primaryLanguage })
+      });
+      if (res.ok) {
+        modalCreateSession.style.display = 'none';
+        window.location.href = `/admin.html?session=${encodeURIComponent(sessionId)}`;
+      } else {
+        const err = await res.json();
+        alert('Error creating session: ' + (err.error || 'Failed'));
+        btnSubmitCreate.disabled = false;
+        btnSubmitCreate.textContent = 'Create & Launch Console →';
+      }
+    } catch (e) {
+      alert('Error: ' + e.message);
+      btnSubmitCreate.disabled = false;
+      btnSubmitCreate.textContent = 'Create & Launch Console →';
+    }
+  });
+}
+
+// ─── STRICT CONTROL LOCKING LOGIC ───
+function updateControlLockState() {
+  const isLive = (sessionStatus === 'active');
+
+  // Lock or Unlock Live Mic
+  btnToggleMic.disabled = !isLive;
+
+  // Lock or Unlock Manual Text Injection
+  manualInput.disabled = !isLive;
+  btnInject.disabled = !isLive;
+
+  if (isLive) {
+    manualInput.placeholder = 'Type or paste Arabic text / Ayah to test...';
+    lockBanner.className = 'control-lock-banner unlocked';
+    lockBannerIcon.textContent = '🟢';
+    lockBannerText.innerHTML = '<strong>Khutbah is LIVE!</strong> Microphone input and live translation broadcasting are enabled.';
+  } else {
+    manualInput.placeholder = 'Click "▶ Start Khutbah" first to enable live translation testing...';
+    lockBanner.className = 'control-lock-banner';
+    lockBannerIcon.textContent = '🔒';
+    lockBannerText.innerHTML = 'Controls are locked. Click <strong>"▶ Start Khutbah"</strong> to activate the microphone and begin live translation broadcasting.';
+
+    // If microphone was running, stop it immediately
+    if (micActive) {
+      stopMicrophone();
+    }
+  }
+}
+
+// ─── SESSION CONSOLE LIFECYCLE ───
 function setSessionActive(startedAt) {
   sessionStatus = 'active';
   sessionBadge.className = 'badge badge-live';
@@ -267,6 +324,7 @@ function setSessionActive(startedAt) {
   if (!timerInterval) {
     timerInterval = setInterval(updateTimerDisplay, 1000);
   }
+  updateControlLockState();
 }
 
 function setSessionPaused() {
@@ -276,6 +334,7 @@ function setSessionPaused() {
   btnStart.disabled = false;
   btnPause.disabled = true;
   btnEnd.disabled = false;
+  updateControlLockState();
 }
 
 function setSessionEnded() {
@@ -290,6 +349,7 @@ function setSessionEnded() {
 
   clearInterval(timerInterval);
   timerInterval = null;
+  updateControlLockState();
 }
 
 function updateTimerDisplay() {
@@ -301,34 +361,32 @@ function updateTimerDisplay() {
   liveTimer.textContent = `${hrs}:${mins}:${secs}`;
 }
 
-// Button Listeners — optimistic UI update (no waiting for WebSocket echo)
+// Button Listeners
 btnStart.addEventListener('click', async () => {
-  // Update UI immediately
   setSessionActive(new Date().toISOString());
   try {
     await fetch(`/api/session/${currentSessionId}/start`, { method: 'POST' });
-  } catch (e) { console.warn('Start API error:', e.message); }
+  } catch (e) { console.warn('Start error:', e.message); }
 });
 
 btnPause.addEventListener('click', async () => {
   setSessionPaused();
   try {
     await fetch(`/api/session/${currentSessionId}/pause`, { method: 'POST' });
-  } catch (e) { console.warn('Pause API error:', e.message); }
+  } catch (e) { console.warn('Pause error:', e.message); }
 });
 
 btnEnd.addEventListener('click', async () => {
-  if (confirm('Are you sure you want to end and archive this Khutbah session?')) {
+  if (confirm('Are you sure you want to conclude this Khutbah session?')) {
     setSessionEnded();
     try {
       await fetch(`/api/session/${currentSessionId}/end`, { method: 'POST' });
-    } catch (e) { console.warn('End API error:', e.message); }
+    } catch (e) { console.warn('End error:', e.message); }
   }
 });
 
 btnSimulate.addEventListener('click', async () => {
   if (!isSimulating) {
-    // Start session + simulate
     if (sessionStatus !== 'active') setSessionActive(new Date().toISOString());
     try {
       await fetch(`/api/session/${currentSessionId}/start`, { method: 'POST' });
@@ -337,7 +395,7 @@ btnSimulate.addEventListener('click', async () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ intervalMs: 3800 })
       });
-    } catch (e) { console.warn('Simulate start error:', e.message); }
+    } catch (e) {}
     isSimulating = true;
     btnSimulate.textContent = '⏹ Stop Simulation';
     btnSimulate.className = 'btn btn-danger';
@@ -351,126 +409,236 @@ btnSimulate.addEventListener('click', async () => {
   }
 });
 
+// Manual Text Injection (Strictly guarded)
 btnInject.addEventListener('click', async () => {
+  if (sessionStatus !== 'active') {
+    alert('Khutbah is not active! Please click "▶ Start Khutbah" first.');
+    return;
+  }
   const text = manualInput.value.trim();
   if (!text) return;
-  await fetch(`/api/session/${currentSessionId}/inject-text`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text })
-  });
-  manualInput.value = '';
+
+  try {
+    const res = await fetch(`/api/session/${currentSessionId}/inject-text`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      alert(err.error || 'Failed injecting text');
+      return;
+    }
+    manualInput.value = '';
+  } catch (err) {
+    console.warn('Inject error:', err.message);
+  }
 });
 
 manualInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') btnInject.click();
 });
 
-// Live Microphone — Web Speech API (Arabic ar-SA)
-// Sends TEXT to server via HTTP (works on all platforms including Railway/Vercel)
-let speechRecognition = null;
-let micActive = false;
-
+// ─── HARDWARE MIC INPUT (Web Speech API) ───
 btnToggleMic.addEventListener('click', async () => {
+  if (sessionStatus !== 'active') {
+    alert('Please click "▶ Start Khutbah" before turning on the live microphone.');
+    return;
+  }
+
   if (!micActive) {
-    try {
-      // Request mic permission + audio level visualizer
-      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const source = audioContext.createMediaStreamSource(mediaStream);
-      analyser = audioContext.createAnalyser();
-      analyser.fftSize = 256;
-      source.connect(analyser);
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
-      micInterval = setInterval(() => {
-        analyser.getByteFrequencyData(dataArray);
-        const avg = dataArray.reduce((a, v) => a + v, 0) / dataArray.length;
-        micLevelBar.style.width = `${Math.min(avg * 2.5, 100)}%`;
-      }, 100);
-
-      // Auto-start the session if not already started
-      if (sessionStatus !== 'active') {
-        setSessionActive(new Date().toISOString());
-        fetch(`/api/session/${currentSessionId}/start`, { method: 'POST' }).catch(() => {});
-      }
-
-      // Web Speech API — sends Arabic text to server
-      if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-        alert('Web Speech API not supported. Please use Google Chrome for live Arabic recognition.');
-        return;
-      }
-
-      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-      speechRecognition = new SpeechRec();
-      speechRecognition.continuous = true;
-      speechRecognition.interimResults = false;
-      speechRecognition.lang = 'ar-SA';
-      speechRecognition.maxAlternatives = 1;
-
-      speechRecognition.onresult = async (evt) => {
-        const transcript = evt.results[evt.results.length - 1][0].transcript.trim();
-        if (!transcript) return;
-        console.log('[Mic] Arabic recognized:', transcript);
-        // Send via HTTP POST — works on any platform
-        try {
-          await fetch(`/api/session/${currentSessionId}/inject-text`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: transcript })
-          });
-        } catch (err) {
-          console.warn('[Mic] Send error:', err.message);
-        }
-      };
-
-      speechRecognition.onerror = (evt) => {
-        if (evt.error === 'no-speech') return;
-        console.warn('[Speech] Error:', evt.error);
-      };
-
-      speechRecognition.onend = () => {
-        // Auto-restart so it stays continuous
-        if (micActive) {
-          try { speechRecognition.start(); } catch (e) {}
-        }
-      };
-
-      speechRecognition.start();
-      micActive = true;
-      btnToggleMic.textContent = '🛑 Stop Live Mic';
-      btnToggleMic.className = 'btn btn-danger';
-
-    } catch (err) {
-      alert('Could not access microphone: ' + err.message);
-    }
+    startMicrophone();
   } else {
-    // Stop
-    micActive = false;
-    if (speechRecognition) { try { speechRecognition.stop(); } catch (e) {} speechRecognition = null; }
-    if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
-    clearInterval(micInterval);
-    micLevelBar.style.width = '0%';
-    btnToggleMic.textContent = '🎤 Enable Live Mic';
-    btnToggleMic.className = 'btn btn-secondary';
+    stopMicrophone();
   }
 });
 
-// ============================================================================
-// Custom Khutbah Streamer & Live Congregation Simulator
-// ============================================================================
+async function startMicrophone() {
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioContext.createMediaStreamSource(mediaStream);
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    micInterval = setInterval(() => {
+      analyser.getByteFrequencyData(dataArray);
+      const avg = dataArray.reduce((a, v) => a + v, 0) / dataArray.length;
+      micLevelBar.style.width = `${Math.min(avg * 2.5, 100)}%`;
+    }, 100);
+
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      alert('Live speech recognition requires Google Chrome or Safari.');
+      return;
+    }
+
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    speechRecognition = new SpeechRec();
+    speechRecognition.continuous = true;
+    speechRecognition.interimResults = false;
+    speechRecognition.lang = 'ar-SA';
+    speechRecognition.maxAlternatives = 1;
+
+    speechRecognition.onresult = async (evt) => {
+      const transcript = evt.results[evt.results.length - 1][0].transcript.trim();
+      if (!transcript) return;
+      if (sessionStatus !== 'active') return;
+
+      try {
+        await fetch(`/api/session/${currentSessionId}/inject-text`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: transcript })
+        });
+      } catch (err) {}
+    };
+
+    speechRecognition.onend = () => {
+      if (micActive && sessionStatus === 'active') {
+        try { speechRecognition.start(); } catch (e) {}
+      }
+    };
+
+    speechRecognition.start();
+    micActive = true;
+    btnToggleMic.textContent = '🛑 Stop Live Mic';
+    btnToggleMic.className = 'btn btn-danger';
+  } catch (err) {
+    alert('Could not access microphone: ' + err.message);
+  }
+}
+
+function stopMicrophone() {
+  micActive = false;
+  if (speechRecognition) {
+    try { speechRecognition.stop(); } catch (e) {}
+    speechRecognition = null;
+  }
+  if (mediaStream) {
+    mediaStream.getTracks().forEach(t => t.stop());
+    mediaStream = null;
+  }
+  clearInterval(micInterval);
+  micLevelBar.style.width = '0%';
+  btnToggleMic.textContent = '🎤 Enable Live Mic';
+  btnToggleMic.className = 'btn btn-secondary';
+}
+
+// ─── INITIALIZE CONSOLE SESSION ───
+async function initConsoleSession(sessionId) {
+  try {
+    const res = await fetch(`/api/session/${sessionId}`);
+    if (res.ok) {
+      const data = await res.json();
+      mosqueTitle.textContent = `${data.mosqueName} — Khutbah Console`;
+      if (data.status === 'active') setSessionActive(data.startedAt);
+      else if (data.status === 'paused') setSessionPaused();
+      else if (data.status === 'ended') setSessionEnded();
+      else updateControlLockState();
+
+      if (data.stats) updateStatsDisplay(data.stats);
+    }
+  } catch (err) {}
+
+  // Update dynamic links
+  const joinUrl = `${window.location.origin}/join.html?session=${encodeURIComponent(sessionId)}`;
+  const tvUrl = `/display.html?session=${encodeURIComponent(sessionId)}`;
+  if (btnOpenJoin) btnOpenJoin.href = joinUrl;
+  if (btnOpenTvSide) btnOpenTvSide.href = tvUrl;
+  if (headerBtnTv) headerBtnTv.href = tvUrl;
+
+  if (qrCodeImg) {
+    qrCodeImg.src = `/api/qrcode?text=${encodeURIComponent(joinUrl)}`;
+  }
+
+  if (btnCopyLink) {
+    btnCopyLink.onclick = () => {
+      navigator.clipboard.writeText(joinUrl).then(() => {
+        btnCopyLink.textContent = '✅ Copied!';
+        setTimeout(() => btnCopyLink.textContent = '📋 Copy Link', 2000);
+      });
+    };
+  }
+
+  connectWebSocket(sessionId);
+}
+
+function updateStatsDisplay(stats) {
+  if (!stats) return;
+  if (statAttendees) statAttendees.textContent = stats.totalAttendees || 0;
+  if (statDisplays) statDisplays.textContent = stats.totalTVDisplays || 0;
+
+  if (languagesBreakdown) {
+    languagesBreakdown.innerHTML = '';
+    const counts = stats.languageCounts || {};
+    const entries = Object.entries(counts);
+    if (entries.length === 0) {
+      languagesBreakdown.innerHTML = '<span style="font-size: 0.8rem; color: var(--text-muted);">None active yet</span>';
+    } else {
+      entries.forEach(([lang, num]) => {
+        const tag = document.createElement('span');
+        tag.style.cssText = 'background: #334155; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;';
+        tag.textContent = `${lang.toUpperCase()}: ${num}`;
+        languagesBreakdown.appendChild(tag);
+      });
+    }
+  }
+}
+
+// ─── WEBSOCKET CONNECTION ───
+function connectWebSocket(sessionId) {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({
+      type: 'JOIN_ROOM',
+      sessionId,
+      role: 'admin'
+    }));
+  };
+
+  ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (data.type === 'SESSION_STATS') updateStatsDisplay(data.stats);
+      if (data.type === 'LIVE_SUBTITLE') addTranscriptEntry(data);
+    } catch (e) {}
+  };
+
+  ws.onclose = () => {
+    setTimeout(() => connectWebSocket(sessionId), 3000);
+  };
+}
+
+function addTranscriptEntry({ arabic, translations, ayah }) {
+  if (!arabic) return;
+  transcriptItemsCount++;
+  if (transCount) transCount.textContent = `${transcriptItemsCount} lines`;
+
+  const item = document.createElement('div');
+  item.style.cssText = 'padding: 0.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-family: var(--font-arabic); font-size: 1.15rem; direction: rtl; text-align: right; color: #f8fafc;';
+  item.textContent = arabic;
+
+  if (ayah) {
+    const badge = document.createElement('span');
+    badge.style.cssText = 'background: #f59e0b; color: #000; font-size: 0.68rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; margin-left: 0.5rem; font-family: sans-serif;';
+    badge.textContent = `📖 ${ayah.reference || 'QURAN'}`;
+    item.appendChild(badge);
+  }
+
+  if (transcriptFeed.children[0] && transcriptFeed.children[0].textContent.includes('Spoken Arabic')) {
+    transcriptFeed.innerHTML = '';
+  }
+  transcriptFeed.prepend(item);
+}
+
+// ─── CUSTOM KHUTBAH STREAMER (Preserved) ───
 const customKhutbahText = document.getElementById('custom-khutbah-text');
 const customKhutbahStatus = document.getElementById('custom-khutbah-status');
-const khutbahPacing = document.getElementById('khutbah-pacing');
 const btnDeliverKhutbah = document.getElementById('btn-deliver-khutbah');
-const btnNextPhrase = document.getElementById('btn-next-phrase');
 const btnStopKhutbah = document.getElementById('btn-stop-khutbah');
-const teleprompterBox = document.getElementById('teleprompter-box');
-const teleprompterProgress = document.getElementById('teleprompter-progress');
-const teleprompterCurrent = document.getElementById('teleprompter-current');
-const khutbahAudioFile = document.getElementById('khutbah-audio-file');
-const audioFilePlayer = document.getElementById('audio-file-player');
-const audioFileStatus = document.getElementById('audio-file-status');
-
 const btnTplTaqwa = document.getElementById('btn-tpl-taqwa');
 const btnTplEase = document.getElementById('btn-tpl-ease');
 const btnTplCharacter = document.getElementById('btn-tpl-character');
@@ -478,197 +646,79 @@ const btnTplCharacter = document.getElementById('btn-tpl-character');
 const KHUTBAH_TEMPLATES = {
   taqwa: `الحمد لله نحمده ونستعينه ونستغفره، ونعوذ بالله من شرور أنفسنا.
 يا أيها الذين آمنوا اتقوا الله حق تقاته ولا تموتن إلا وأنتم مسلمون.
-إن أصدق الحديث كتاب الله، وخير الهدي هدي محمد صلى الله عليه وسلم.
-فاتقوا الله عباد الله، واعلموا أن تقوى الله هي النجاة في الدنيا والآخرة.
-بارك الله لي ولكم في القرآن العظيم، ونفعني وإياكم بما فيه من الآيات والذكر الحكيم.`,
-
+إن أصدق الحديث كتاب الله، وخير الهدي هدي محمد صلى الله عليه وسلم.`,
   ease: `الحمد لله رب العالمين، والصلاة والسلام على رسوله الكريم.
 أيها المسلمون، إن مع العسر يسرا، وإن دوام الحال من المحال.
-فإن مع العسر يسرا، إن مع العسر يسرا.
-فاصبروا واحتسبوا، وتوكلوا على الحي الذي لا يموت.
-نسأل الله تعالى أن يفرج كروبنا وكروب المسلمين في كل مكان.`,
-
+فإن مع العسر يسرا، إن مع العسر يسرا.`,
   character: `الحمد لله الذي ألف بين قلوبنا فأصبحنا بنعمته إخوانا.
-يا أيها الناس اتقوا ربكم الذي خلقكم من نفس واحدة.
 المسلم أخو المسلم، لا يظلمه ولا يسلمه ولا يخذله.
-إنما بعثت لأتمم مكارم الأخلاق، فأحسنوا إن الله يحب المحسنين.
-أقول قولي هذا وأستغفر الله العظيم لي ولكم فاستغفروه إنه هو الغفور الرحيم.`
+إنما بعثت لأتمم مكارم الأخلاق.`
 };
 
-if (btnTplTaqwa) {
-  btnTplTaqwa.addEventListener('click', () => {
-    customKhutbahText.value = KHUTBAH_TEMPLATES.taqwa;
-    customKhutbahStatus.textContent = "Template 1 (Taqwa & Ali 'Imran) Loaded";
-  });
-}
-
-if (btnTplEase) {
-  btnTplEase.addEventListener('click', () => {
-    customKhutbahText.value = KHUTBAH_TEMPLATES.ease;
-    customKhutbahStatus.textContent = 'Template 2 (Ash-Sharh) Loaded';
-  });
-}
-
-if (btnTplCharacter) {
-  btnTplCharacter.addEventListener('click', () => {
-    customKhutbahText.value = KHUTBAH_TEMPLATES.character;
-    customKhutbahStatus.textContent = 'Template 3 (Brotherhood) Loaded';
-  });
-}
+if (btnTplTaqwa) btnTplTaqwa.onclick = () => { customKhutbahText.value = KHUTBAH_TEMPLATES.taqwa; customKhutbahStatus.textContent = 'Template 1 Loaded'; };
+if (btnTplEase) btnTplEase.onclick = () => { customKhutbahText.value = KHUTBAH_TEMPLATES.ease; customKhutbahStatus.textContent = 'Template 2 Loaded'; };
+if (btnTplCharacter) btnTplCharacter.onclick = () => { customKhutbahText.value = KHUTBAH_TEMPLATES.character; customKhutbahStatus.textContent = 'Template 3 Loaded'; };
 
 let deliveryQueue = [];
 let deliveryIndex = 0;
 let deliveryTimer = null;
-let isDelivering = false;
 
-function parseKhutbahPhrases(text) {
-  if (!text) return [];
-  const lines = text.split('\n');
-  const phrases = [];
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    const parts = trimmed.split(/([.،؟!]+)/);
-    let buffer = '';
-    for (const part of parts) {
-      if (/^[.،؟!\s]+$/.test(part)) {
-        buffer += part;
-        if (buffer.trim().length > 3) {
-          phrases.push(buffer.trim());
-          buffer = '';
-        }
-      } else {
-        if (buffer.trim().length > 0) {
-          phrases.push(buffer.trim());
-          buffer = '';
-        }
-        buffer = part;
-      }
+if (btnDeliverKhutbah) {
+  btnDeliverKhutbah.onclick = () => {
+    const text = customKhutbahText.value.trim();
+    if (!text) { alert('Please paste Arabic Khutbah text.'); return; }
+    if (sessionStatus !== 'active') {
+      setSessionActive(new Date().toISOString());
+      fetch(`/api/session/${currentSessionId}/start`, { method: 'POST' }).catch(() => {});
     }
-    if (buffer.trim().length > 0) {
-      phrases.push(buffer.trim());
-    }
-  }
-  return phrases.filter(p => p && p.length > 2);
+
+    deliveryQueue = text.split('\n').map(l => l.trim()).filter(l => l.length > 2);
+    deliveryIndex = 0;
+    btnDeliverKhutbah.style.display = 'none';
+    btnStopKhutbah.style.display = 'inline-block';
+    deliverNextSentence();
+  };
 }
 
-async function deliverCurrentPhrase() {
+if (btnStopKhutbah) {
+  btnStopKhutbah.onclick = () => {
+    clearTimeout(deliveryTimer);
+    btnDeliverKhutbah.style.display = 'inline-block';
+    btnStopKhutbah.style.display = 'none';
+    customKhutbahStatus.textContent = 'Delivery stopped';
+  };
+}
+
+async function deliverNextSentence() {
   if (deliveryIndex >= deliveryQueue.length) {
-    stopKhutbahDelivery(true);
+    btnDeliverKhutbah.style.display = 'inline-block';
+    btnStopKhutbah.style.display = 'none';
+    customKhutbahStatus.textContent = 'Khutbah delivered completely!';
     return;
   }
 
-  const phrase = deliveryQueue[deliveryIndex];
-  const phraseNum = deliveryIndex + 1;
-  const total = deliveryQueue.length;
-
-  teleprompterProgress.textContent = `Sentence ${phraseNum} of ${total}`;
-  teleprompterCurrent.textContent = phrase;
-  customKhutbahStatus.textContent = `Delivering sentence ${phraseNum}/${total}...`;
-
+  const sentence = deliveryQueue[deliveryIndex];
+  customKhutbahStatus.textContent = `Delivering sentence ${deliveryIndex + 1}/${deliveryQueue.length}...`;
   try {
     await fetch(`/api/session/${currentSessionId}/inject-text`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: phrase })
+      body: JSON.stringify({ text: sentence })
     });
-  } catch (err) {
-    console.warn('Failed delivering phrase:', err.message);
-  }
+  } catch (e) {}
 
   deliveryIndex++;
+  deliveryTimer = setTimeout(deliverNextSentence, 4500);
+}
 
-  if (deliveryIndex >= deliveryQueue.length) {
-    setTimeout(() => {
-      stopKhutbahDelivery(true);
-    }, 2000);
-    return;
-  }
-
-  const pacing = khutbahPacing.value;
-  if (pacing !== 'manual' && isDelivering) {
-    const ms = parseInt(pacing, 10) || 5000;
-    deliveryTimer = setTimeout(deliverCurrentPhrase, ms);
+// ─── INITIALIZATION ───
+async function init() {
+  const authed = await checkAuth();
+  if (authed) {
+    setupViewRouting();
   }
 }
 
-async function startKhutbahDelivery() {
-  const text = customKhutbahText.value.trim();
-  if (!text) {
-    alert('Please enter or select a Khutbah text first!');
-    return;
-  }
-
-  deliveryQueue = parseKhutbahPhrases(text);
-  if (deliveryQueue.length === 0) {
-    alert('Could not find sentences in the entered text.');
-    return;
-  }
-
-  if (sessionStatus !== 'active') {
-    try {
-      const res = await fetch(`/api/session/${currentSessionId}/start`, { method: 'POST' });
-      if (res.ok) setSessionActive();
-    } catch (e) {
-      console.warn('Could not auto-start session:', e);
-    }
-  }
-
-  isDelivering = true;
-  deliveryIndex = 0;
-
-  btnDeliverKhutbah.style.display = 'none';
-  btnStopKhutbah.style.display = 'inline-block';
-  btnNextPhrase.style.display = 'inline-block';
-  teleprompterBox.style.display = 'block';
-
-  deliverCurrentPhrase();
-}
-
-function stopKhutbahDelivery(isCompleted = false) {
-  isDelivering = false;
-  if (deliveryTimer) {
-    clearTimeout(deliveryTimer);
-    deliveryTimer = null;
-  }
-
-  btnDeliverKhutbah.style.display = 'inline-block';
-  btnStopKhutbah.style.display = 'none';
-  btnNextPhrase.style.display = 'none';
-
-  if (isCompleted) {
-    customKhutbahStatus.textContent = 'Khutbah Completed! (All phrases delivered)';
-    teleprompterProgress.textContent = 'Completed';
-    teleprompterCurrent.textContent = '✨ الحمد لله - Khutbah Finished Successfully.';
-  } else {
-    customKhutbahStatus.textContent = 'Delivery Stopped';
-    teleprompterBox.style.display = 'none';
-  }
-}
-
-if (btnDeliverKhutbah) btnDeliverKhutbah.addEventListener('click', startKhutbahDelivery);
-if (btnStopKhutbah) btnStopKhutbah.addEventListener('click', () => stopKhutbahDelivery(false));
-if (btnNextPhrase) {
-  btnNextPhrase.addEventListener('click', () => {
-    if (deliveryTimer) clearTimeout(deliveryTimer);
-    deliverCurrentPhrase();
-  });
-}
-
-// Audio File handler
-if (khutbahAudioFile) {
-  khutbahAudioFile.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const objectUrl = URL.createObjectURL(file);
-    audioFilePlayer.src = objectUrl;
-    audioFilePlayer.style.display = 'block';
-    audioFileStatus.style.display = 'block';
-    audioFileStatus.textContent = `🎵 Loaded: "${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)} MB). Play through speakers with Live Mic active for full real-voice testing!`;
-  });
-}
-
-// Initialize safely across all document states
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', init);
 } else {

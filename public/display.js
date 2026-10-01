@@ -1,21 +1,8 @@
-// MosqAI - Live TV Split-Screen Script (Matches Competitor TV Layout)
+// MosqAI - Live TV Split-Screen Script (Enhanced with Dropdown & QR Safety)
 const urlParams = new URLSearchParams(window.location.search);
-const sessionId = urlParams.get('session') || 'jumuah-live';
+const sessionId = urlParams.get('session') || 'myo-youth';
 
-const SUPPORTED_LANGS = [
-  { code: 'en', name: 'English' },
-  { code: 'uz', name: 'Uzbek' },
-  { code: 'tr', name: 'Turkish' },
-  { code: 'ur', name: 'Urdu' },
-  { code: 'bn', name: 'Bengali' },
-  { code: 'fr', name: 'French' }
-];
-
-let currentLangIndex = 0;
-let targetLang = urlParams.get('lang') || SUPPORTED_LANGS[0].code;
-const initialIdx = SUPPORTED_LANGS.findIndex(l => l.code === targetLang);
-if (initialIdx !== -1) currentLangIndex = initialIdx;
-
+let targetLang = urlParams.get('lang') || 'en';
 let ws = null;
 let lastDisplayTimestamp = null;
 let ayahTimer = null;
@@ -27,8 +14,7 @@ const transHistory = [];
 
 // DOM Elements
 const mosqueNameEl = document.getElementById('mosque-name');
-const targetLangLabel = document.getElementById('target-lang-label');
-const pillTargetLang = document.getElementById('pill-target-lang');
+const targetLangSelect = document.getElementById('target-lang-select');
 const arabicFeed = document.getElementById('arabic-feed');
 const transFeed = document.getElementById('trans-feed');
 const qrImg = document.getElementById('qr-img');
@@ -37,34 +23,31 @@ const ayahRefEl = document.getElementById('ayah-reference');
 const ayahArabicEl = document.getElementById('ayah-arabic');
 const ayahTransEl = document.getElementById('ayah-trans');
 
-// Initialize Target Language Label
-function updateLangUI() {
-  const current = SUPPORTED_LANGS[currentLangIndex];
-  targetLang = current.code;
-  targetLangLabel.textContent = current.name;
-}
-updateLangUI();
+// Initialize Dropdown Selection
+if (targetLangSelect) {
+  // If lang is in URL, set dropdown
+  if (['en', 'uz', 'tr', 'ur', 'bn', 'fr', 'id', 'so'].includes(targetLang)) {
+    targetLangSelect.value = targetLang;
+  } else {
+    targetLang = targetLangSelect.value;
+  }
 
-// Allow TV operator to click and cycle target language
-if (pillTargetLang) {
-  pillTargetLang.addEventListener('click', () => {
-    currentLangIndex = (currentLangIndex + 1) % SUPPORTED_LANGS.length;
-    updateLangUI();
-    // Re-render latest translated text with newly selected language if available
+  // Handle Dropdown Change
+  targetLangSelect.addEventListener('change', () => {
+    targetLang = targetLangSelect.value;
+    initQRCode();
     renderFeed();
   });
 }
 
 /**
  * Generate QR code pointing to the real, current origin
- * Fixes localhost bug: will encode https://<deployed-url>/join.html
  */
 function initQRCode() {
   const joinUrl = `${window.location.origin}/join.html?session=${encodeURIComponent(sessionId)}&lang=${encodeURIComponent(targetLang)}`;
   if (qrImg) {
     qrImg.src = `/api/qrcode?text=${encodeURIComponent(joinUrl)}`;
     qrImg.onerror = () => {
-      // Fallback to third-party public QR generator if local generator is offline
       qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(joinUrl)}`;
     };
   }
@@ -95,7 +78,6 @@ function renderFeed() {
     const p = document.createElement('div');
     p.className = `para-item ${isLatest ? 'current' : 'history'}`;
 
-    // Select text in current TV language, fallback to English, fallback to raw text
     let displayTrans = '';
     if (typeof item === 'object' && item !== null) {
       displayTrans = item[targetLang] || item['en'] || Object.values(item)[0] || '';
@@ -107,7 +89,7 @@ function renderFeed() {
     transFeed.appendChild(p);
   });
 
-  // Keep latest text in comfortable view
+  // Scroll so latest paragraph is visible
   arabicFeed.parentElement.scrollTop = arabicFeed.parentElement.scrollHeight;
   transFeed.parentElement.scrollTop = transFeed.parentElement.scrollHeight;
 }
@@ -118,7 +100,7 @@ function renderFeed() {
 function handleIncomingSpeech({ arabic, translations, translated, ayah, timestamp }) {
   if (!arabic && !translated) return;
 
-  // 1. Check for Quran Ayah Detection
+  // 1. Quran Ayah Detection Overlay
   if (ayah) {
     showAyahOverlay(ayah, arabic, translations || translated);
   } else {
@@ -127,14 +109,12 @@ function handleIncomingSpeech({ arabic, translations, translated, ayah, timestam
 
   // 2. Append to History
   if (arabic) {
-    // Avoid immediate duplicate
     if (arabicHistory.length === 0 || arabicHistory[arabicHistory.length - 1] !== arabic) {
       arabicHistory.push(arabic);
       if (arabicHistory.length > MAX_HISTORY) arabicHistory.shift();
     }
   }
 
-  // Translations object or string
   const transObj = translations || (typeof translated === 'string' ? { [targetLang]: translated } : translated);
   if (transObj) {
     transHistory.push(transObj);
@@ -167,7 +147,6 @@ function showAyahOverlay(ayah, fallbackArabic, fallbackTrans) {
 
   ayahOverlay.classList.add('active');
 
-  // Auto-hide after 10 seconds unless new speech arrives
   clearTimeout(ayahTimer);
   ayahTimer = setTimeout(() => {
     hideAyahOverlay();
@@ -192,6 +171,11 @@ async function initSession() {
       const data = await res.json();
       if (data.mosqueName && mosqueNameEl) {
         mosqueNameEl.textContent = data.mosqueName;
+      }
+      if (data.primaryLanguage && targetLangSelect && !urlParams.has('lang')) {
+        targetLang = data.primaryLanguage;
+        targetLangSelect.value = targetLang;
+        initQRCode();
       }
     }
   } catch (err) {}
@@ -227,7 +211,7 @@ function connectWebSocket() {
 }
 
 /**
- * HTTP Feed Polling Fallback (ensures smooth real-time sync even through strict firewalls)
+ * HTTP Feed Polling Fallback
  */
 function startFeedSync() {
   setInterval(async () => {

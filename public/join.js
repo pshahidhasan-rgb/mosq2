@@ -294,8 +294,23 @@ function startFeedSync() {
   }, 2000);
 }
 
+async function fetchMosqueDetails() {
+  try {
+    const res = await fetch(`/api/session/${sessionId}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.mosqueName && s1MosqueName) {
+        const parts = data.mosqueName.split(' ');
+        s1MosqueName.innerHTML = `<span>${parts[0]}</span> ${parts.slice(1).join(' ')}`;
+      }
+    }
+  } catch (err) {}
+}
+fetchMosqueDetails();
+
 async function initLiveSession() {
   updateLangDisplay();
+  await fetchMosqueDetails();
   connectWebSocket();
   startFeedSync();
 

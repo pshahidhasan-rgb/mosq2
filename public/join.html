@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Live Khutbah — MosqAI</title>
+  <title>Live Khutbah Audio & Subtitles — MosqAI</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -14,13 +14,10 @@
       --emerald-dark: #059669;
       --emerald-glow: rgba(16, 185, 129, 0.35);
       --bg: #071510;
-      --bg-surface: #0a1f17;
       --card-bg: #0e291e;
       --card-border: rgba(16, 185, 129, 0.22);
-      --card-border-active: rgba(16, 185, 129, 0.6);
       --text: #f8fafc;
       --text-muted: rgba(255, 255, 255, 0.6);
-      --text-dim: rgba(255, 255, 255, 0.4);
       --gold: #f59e0b;
     }
 
@@ -66,21 +63,21 @@
     }
 
     .brand-avatar {
-      width: 68px;
-      height: 68px;
-      border-radius: 20px;
+      width: 64px;
+      height: 64px;
+      border-radius: 18px;
       background: #10b981;
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: 900;
-      font-size: 2.2rem;
+      font-size: 2rem;
       color: #071510;
-      box-shadow: 0 0 35px var(--emerald-glow);
+      box-shadow: 0 0 30px var(--emerald-glow);
     }
 
     #s1-mosque-name {
-      font-size: 1.85rem;
+      font-size: 1.75rem;
       font-weight: 800;
       line-height: 1.2;
       letter-spacing: -0.02em;
@@ -94,14 +91,14 @@
       background: rgba(16, 185, 129, 0.15);
       border: 1px solid rgba(16, 185, 129, 0.4);
       color: #34d399;
-      padding: 0.35rem 1rem;
+      padding: 0.35rem 0.95rem;
       border-radius: 999px;
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       font-weight: 800;
       letter-spacing: 0.06em;
     }
     .pulsing-dot {
-      width: 8px; height: 8px;
+      width: 7px; height: 7px;
       border-radius: 50%;
       background: #34d399;
       animation: pulseDot 1.4s infinite ease-in-out;
@@ -109,9 +106,9 @@
     @keyframes pulseDot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.75); } }
 
     .s1-desc {
-      font-size: 0.95rem;
+      font-size: 0.92rem;
       color: var(--text-muted);
-      max-width: 320px;
+      max-width: 300px;
       line-height: 1.5;
     }
 
@@ -122,16 +119,16 @@
       gap: 0.6rem;
       background: #10b981;
       color: #071510;
-      font-size: 1.15rem;
+      font-size: 1.1rem;
       font-weight: 800;
-      padding: 1.1rem 2rem;
-      border-radius: 18px;
+      padding: 1rem 2rem;
+      border-radius: 16px;
       border: none;
       cursor: pointer;
       width: 100%;
-      max-width: 330px;
-      box-shadow: 0 10px 30px rgba(16, 185, 129, 0.4);
-      transition: transform 0.15s, box-shadow 0.15s;
+      max-width: 320px;
+      box-shadow: 0 10px 25px rgba(16, 185, 129, 0.35);
+      transition: transform 0.15s;
     }
     .btn-main-join:active { transform: scale(0.98); }
 
@@ -139,38 +136,38 @@
        STEP 2 — LANGUAGE SELECTION CARDS
     ══════════════════════════════════════════════ */
     #step2 {
-      padding: 1.75rem 1.25rem 2rem;
-      gap: 1.25rem;
+      padding: 1.5rem 1.25rem 2rem;
+      gap: 1.1rem;
     }
     .s2-header {
       text-align: center;
-      margin-bottom: 0.5rem;
+      margin-bottom: 0.25rem;
     }
     .s2-header h2 {
-      font-size: 1.5rem;
+      font-size: 1.35rem;
       font-weight: 800;
-      margin-bottom: 0.35rem;
+      margin-bottom: 0.25rem;
     }
     .s2-header p {
-      font-size: 0.88rem;
+      font-size: 0.82rem;
       color: var(--text-muted);
     }
 
     .lang-card-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 0.85rem;
+      gap: 0.75rem;
       flex: 1;
     }
     .lang-card-item {
       background: var(--card-bg);
       border: 1.5px solid var(--card-border);
-      border-radius: 16px;
-      padding: 1.15rem 1rem;
+      border-radius: 14px;
+      padding: 0.95rem 0.85rem;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 0.4rem;
+      gap: 0.3rem;
       cursor: pointer;
       text-align: center;
       transition: all 0.2s ease;
@@ -184,23 +181,23 @@
     .lang-card-item.selected {
       border-color: #10b981;
       background: rgba(16, 185, 129, 0.18);
-      box-shadow: 0 0 20px rgba(16, 185, 129, 0.25);
+      box-shadow: 0 0 15px rgba(16, 185, 129, 0.25);
     }
-    .lang-flag { font-size: 2rem; }
-    .lang-title { font-size: 1rem; font-weight: 700; color: #fff; }
-    .lang-sub { font-size: 0.8rem; color: var(--text-muted); }
+    .lang-flag { font-size: 1.75rem; }
+    .lang-title { font-size: 0.92rem; font-weight: 700; color: #fff; }
+    .lang-sub { font-size: 0.75rem; color: var(--text-muted); }
 
     .btn-submit-lang {
       background: var(--emerald);
       color: #071510;
-      font-size: 1.05rem;
+      font-size: 1rem;
       font-weight: 800;
-      padding: 1rem;
-      border-radius: 16px;
+      padding: 0.9rem;
+      border-radius: 14px;
       border: none;
       cursor: pointer;
       width: 100%;
-      box-shadow: 0 8px 25px rgba(16, 185, 129, 0.35);
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.3);
       transition: opacity 0.2s;
     }
     .btn-submit-lang:disabled {
@@ -209,7 +206,7 @@
     }
 
     /* ══════════════════════════════════════════════
-       STEP 3 — COMPETITOR LIVE FEED (Matches photo)
+       STEP 3 — MOBILE LIVE STREAM (Clean Header without Competitor Title)
     ══════════════════════════════════════════════ */
     #step3 {
       background: var(--bg);
@@ -219,12 +216,12 @@
       overflow: hidden;
     }
 
-    /* Top Bar */
+    /* Top Bar: Clean icon & Live badge (No competitor name) */
     .comp-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0.85rem 1.15rem;
+      padding: 0.75rem 1rem;
       background: rgba(7, 21, 16, 0.95);
       backdrop-filter: blur(12px);
       border-bottom: 1px solid rgba(16, 185, 129, 0.15);
@@ -234,13 +231,13 @@
     .comp-header .left-meta {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
+      gap: 0.6rem;
     }
 
     .btn-back-step {
       background: none;
       border: none;
-      color: rgba(255, 255, 255, 0.7);
+      color: rgba(255, 255, 255, 0.75);
       font-size: 1.3rem;
       cursor: pointer;
       padding: 0.2rem;
@@ -249,42 +246,35 @@
     }
 
     .comp-logo-glyph {
-      width: 24px;
-      height: 24px;
+      width: 22px;
+      height: 22px;
       border-radius: 6px;
       background: #10b981;
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: 900;
-      font-size: 0.85rem;
+      font-size: 0.8rem;
       color: #071510;
-    }
-
-    .comp-app-name {
-      font-size: 1.05rem;
-      font-weight: 800;
-      letter-spacing: -0.01em;
-      color: #fff;
     }
 
     .comp-live-badge {
       display: flex;
       align-items: center;
-      gap: 0.4rem;
+      gap: 0.35rem;
       background: rgba(16, 185, 129, 0.15);
       border: 1px solid rgba(16, 185, 129, 0.4);
       color: #34d399;
-      padding: 0.25rem 0.65rem;
+      padding: 0.2rem 0.6rem;
       border-radius: 999px;
-      font-size: 0.72rem;
+      font-size: 0.7rem;
       font-weight: 800;
       letter-spacing: 0.05em;
     }
 
     /* Sub-header Language Switcher Bar */
     .lang-switcher-bar {
-      padding: 0.6rem 1.15rem;
+      padding: 0.5rem 1rem;
       background: rgba(10, 31, 23, 0.6);
       border-bottom: 1px solid rgba(16, 185, 129, 0.1);
       display: flex;
@@ -294,13 +284,13 @@
     .lang-pill-selector {
       display: flex;
       align-items: center;
-      gap: 0.5rem;
+      gap: 0.45rem;
       background: rgba(16, 185, 129, 0.12);
       border: 1px solid rgba(16, 185, 129, 0.25);
       color: #e2e8f0;
-      padding: 0.35rem 0.85rem;
+      padding: 0.3rem 0.75rem;
       border-radius: 999px;
-      font-size: 0.82rem;
+      font-size: 0.78rem;
       font-weight: 600;
       cursor: pointer;
       transition: background 0.2s;
@@ -309,88 +299,87 @@
       background: rgba(16, 185, 129, 0.2);
     }
 
-    /* ─── FEED STREAM ─── */
+    /* ─── SCROLLABLE FEED OF SERMON CARDS (Proportional & Compact) ─── */
     #mobile-cards-feed {
       flex: 1;
       overflow-y: auto;
-      padding: 1rem 1.15rem 7.5rem; /* space for fixed audio footer */
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-      -webkit-overflow-scrolling: touch;
-    }
-    #mobile-cards-feed::-webkit-scrollbar { width: 4px; }
-    #mobile-cards-feed::-webkit-scrollbar-thumb { background: rgba(16, 185, 129, 0.2); border-radius: 4px; }
-
-    /* Each Sermon Speech Card (Direct Match to Competitor Image) */
-    .sermon-card {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 18px;
-      padding: 1.15rem 1.25rem;
+      padding: 0.75rem 1rem 6.5rem; /* space for fixed audio footer */
       display: flex;
       flex-direction: column;
       gap: 0.75rem;
-      animation: cardFadeUp 0.35s ease;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+      -webkit-overflow-scrolling: touch;
+    }
+    #mobile-cards-feed::-webkit-scrollbar { width: 3px; }
+    #mobile-cards-feed::-webkit-scrollbar-thumb { background: rgba(16, 185, 129, 0.2); border-radius: 4px; }
+
+    /* Balanced Card Dimensions */
+    .sermon-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 0.85rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      animation: cardFadeUp 0.3s ease;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
       position: relative;
     }
 
     @keyframes cardFadeUp {
-      from { opacity: 0; transform: translateY(12px); }
+      from { opacity: 0; transform: translateY(10px); }
       to { opacity: 1; transform: translateY(0); }
     }
 
     .sermon-card .card-brand-glyph {
-      width: 20px;
-      height: 20px;
-      border-radius: 5px;
+      width: 17px;
+      height: 17px;
+      border-radius: 4px;
       background: #10b981;
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: 900;
-      font-size: 0.7rem;
+      font-size: 0.65rem;
       color: #071510;
-      margin-bottom: 0.25rem;
+      margin-bottom: 0.15rem;
     }
 
-    /* Main Translated Text */
+    /* Main Translated Text (Compact, Readable) */
     .sermon-card .card-translated-text {
-      font-size: 1.15rem;
-      font-weight: 700;
-      line-height: 1.45;
+      font-size: 1rem;
+      font-weight: 600;
+      line-height: 1.4;
       color: #ffffff;
       letter-spacing: -0.01em;
     }
 
-    /* Arabic Source Text Below */
+    /* Arabic Source Text (Proportional, Not Huge) */
     .sermon-card .card-arabic-text {
       font-family: 'Amiri', serif;
-      font-size: 1.1rem;
-      line-height: 1.65;
+      font-size: 0.96rem;
+      line-height: 1.5;
       color: rgba(255, 255, 255, 0.65);
       direction: rtl;
       text-align: right;
-      padding-top: 0.2rem;
     }
 
-    /* Card Badge Tag (QUR'AN / HADITH / TERM) */
+    /* Card Badge Tag */
     .card-tag-pill {
       align-self: flex-start;
       display: inline-flex;
       align-items: center;
-      gap: 0.35rem;
+      gap: 0.3rem;
       background: rgba(16, 185, 129, 0.12);
       border: 1px solid rgba(16, 185, 129, 0.3);
       color: #6ee7b7;
-      font-size: 0.7rem;
+      font-size: 0.65rem;
       font-weight: 700;
       letter-spacing: 0.04em;
-      padding: 0.2rem 0.55rem;
-      border-radius: 6px;
+      padding: 0.15rem 0.45rem;
+      border-radius: 5px;
       text-transform: uppercase;
-      margin-top: 0.2rem;
+      margin-top: 0.15rem;
     }
     .card-tag-pill.quran {
       background: rgba(245, 158, 11, 0.15);
@@ -398,55 +387,55 @@
       color: #fde68a;
     }
 
-    /* Active "Listening..." Card */
+    /* Active "Listening..." Card (Compact) */
     #active-listening-card {
-      background: rgba(14, 41, 30, 0.7);
+      background: rgba(14, 41, 30, 0.65);
       border: 1px dashed rgba(16, 185, 129, 0.35);
-      border-radius: 18px;
-      padding: 1rem 1.25rem;
+      border-radius: 14px;
+      padding: 0.7rem 0.95rem;
       display: flex;
       align-items: center;
-      gap: 0.85rem;
+      gap: 0.75rem;
       animation: cardFadeUp 0.3s ease;
     }
     .listening-title {
-      font-size: 1.05rem;
+      font-size: 0.88rem;
       font-weight: 600;
-      color: rgba(255, 255, 255, 0.75);
+      color: rgba(255, 255, 255, 0.7);
     }
     .pulse-wave-dots {
       display: flex;
-      gap: 4px;
+      gap: 3px;
       align-items: center;
     }
     .wave-dot {
-      width: 4px; height: 12px;
+      width: 3px; height: 10px;
       background: #10b981;
       border-radius: 2px;
       animation: wavePulse 1s infinite ease-in-out;
     }
-    .wave-dot:nth-child(2) { animation-delay: 0.15s; height: 18px; }
-    .wave-dot:nth-child(3) { animation-delay: 0.3s; height: 14px; }
+    .wave-dot:nth-child(2) { animation-delay: 0.15s; height: 15px; }
+    .wave-dot:nth-child(3) { animation-delay: 0.3s; height: 12px; }
     @keyframes wavePulse { 0%, 100% { transform: scaleY(0.4); opacity: 0.5; } 50% { transform: scaleY(1); opacity: 1; } }
 
-    /* ─── FIXED BOTTOM AUDIO PLAYER BAR (Matches Competitor) ─── */
+    /* ─── FIXED BOTTOM AUDIO PLAYER BAR (Refined) ─── */
     .comp-player-bar {
       position: fixed;
       bottom: 0; left: 0; right: 0;
-      background: rgba(6, 20, 14, 0.94);
+      background: rgba(6, 20, 14, 0.95);
       backdrop-filter: blur(18px);
       border-top: 1px solid rgba(16, 185, 129, 0.2);
-      padding: 0.85rem 1.25rem;
+      padding: 0.75rem 1rem;
       display: flex;
       align-items: center;
-      gap: 1rem;
+      gap: 0.85rem;
       z-index: 100;
     }
 
     /* Round Green Button */
     .btn-circle-play {
-      width: 48px;
-      height: 48px;
+      width: 44px;
+      height: 44px;
       border-radius: 50%;
       background: #10b981;
       border: none;
@@ -454,10 +443,10 @@
       align-items: center;
       justify-content: center;
       color: #071510;
-      font-size: 1.25rem;
+      font-size: 1.15rem;
       cursor: pointer;
-      box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
-      transition: transform 0.15s, background 0.2s;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+      transition: transform 0.15s;
       flex-shrink: 0;
     }
     .btn-circle-play:active {
@@ -469,25 +458,25 @@
       display: flex;
       align-items: center;
       gap: 3px;
-      height: 20px;
+      height: 18px;
     }
     .freq-bar {
-      width: 3px;
+      width: 2.5px;
       height: 100%;
       background: #10b981;
       border-radius: 2px;
       transform-origin: bottom;
       animation: soundWave 1.2s infinite ease-in-out;
     }
-    .freq-bar:nth-child(1) { height: 8px; animation-delay: 0.1s; }
-    .freq-bar:nth-child(2) { height: 16px; animation-delay: 0.3s; }
-    .freq-bar:nth-child(3) { height: 22px; animation-delay: 0.15s; }
-    .freq-bar:nth-child(4) { height: 14px; animation-delay: 0.25s; }
-    .freq-bar:nth-child(5) { height: 6px; animation-delay: 0.05s; }
+    .freq-bar:nth-child(1) { height: 7px; animation-delay: 0.1s; }
+    .freq-bar:nth-child(2) { height: 14px; animation-delay: 0.3s; }
+    .freq-bar:nth-child(3) { height: 18px; animation-delay: 0.15s; }
+    .freq-bar:nth-child(4) { height: 12px; animation-delay: 0.25s; }
+    .freq-bar:nth-child(5) { height: 5px; animation-delay: 0.05s; }
 
     .freq-bars.idle .freq-bar {
       animation: none;
-      height: 4px;
+      height: 3px;
       opacity: 0.4;
     }
 
@@ -503,12 +492,12 @@
       flex-direction: column;
     }
     .player-top-title {
-      font-size: 0.95rem;
+      font-size: 0.88rem;
       font-weight: 700;
       color: #ffffff;
     }
     .player-sub-title {
-      font-size: 0.78rem;
+      font-size: 0.72rem;
       color: rgba(255, 255, 255, 0.55);
       margin-top: 0.1rem;
     }
@@ -529,26 +518,26 @@
     .lang-sheet {
       background: #0a1f17;
       border-top: 1px solid rgba(16, 185, 129, 0.3);
-      border-radius: 24px 24px 0 0;
+      border-radius: 20px 20px 0 0;
       width: 100%;
       max-height: 80vh;
       overflow-y: auto;
-      padding: 1.5rem 1.25rem 2.5rem;
+      padding: 1.25rem 1rem 2.25rem;
       display: flex;
       flex-direction: column;
-      gap: 1.25rem;
-      animation: slideUpSheet 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      gap: 1rem;
+      animation: slideUpSheet 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     }
     @keyframes slideUpSheet {
       from { transform: translateY(100%); }
       to { transform: translateY(0); }
     }
     .sheet-handle {
-      width: 44px; height: 5px;
+      width: 40px; height: 4px;
       background: rgba(255, 255, 255, 0.2);
       border-radius: 999px;
       align-self: center;
-      margin-bottom: 0.5rem;
+      margin-bottom: 0.25rem;
     }
   </style>
 </head>
@@ -558,7 +547,7 @@
   <div class="step-screen active" id="step1">
     <div class="brand-avatar">T</div>
     <div>
-      <div id="s1-mosque-name"><span>MYO</span> Youth Center</div>
+      <div id="s1-mosque-name"><span>Masjid</span> Live Khutbah</div>
     </div>
     <div class="live-indicator-pill">
       <div class="pulsing-dot"></div>
@@ -621,14 +610,13 @@
     <button class="btn-submit-lang" id="btn-confirm-lang" disabled>Continue to Sermon →</button>
   </div>
 
-  <!-- ═══════════ STEP 3: COMPETITOR LIVE STREAM ═══════════ -->
+  <!-- ═══════════ STEP 3: LIVE STREAM (No Competitor Title) ═══════════ -->
   <div class="step-screen" id="step3">
-    <!-- Top Header -->
+    <!-- Top Header (Clean back button, glyph, and live badge) -->
     <header class="comp-header">
       <div class="left-meta">
         <button class="btn-back-step" id="btn-back" title="Back to languages">‹</button>
         <div class="comp-logo-glyph">T</div>
-        <div class="comp-app-name" id="comp-app-name">Tarjam</div>
       </div>
       <div class="comp-live-badge">
         <div class="pulsing-dot"></div>
@@ -683,7 +671,7 @@
   <div id="lang-modal">
     <div class="lang-sheet">
       <div class="sheet-handle"></div>
-      <h3 style="font-size: 1.15rem; font-weight: 800;">Switch Translation Language</h3>
+      <h3 style="font-size: 1.05rem; font-weight: 800;">Switch Translation Language</h3>
       <div class="lang-card-grid" id="modal-lang-grid">
         <!-- Reusable cards injected via JS -->
       </div>
