@@ -5,296 +5,689 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Live Khutbah — MosqAI</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com">
-  <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
       --emerald: #10b981;
       --emerald-dark: #059669;
+      --emerald-glow: rgba(16, 185, 129, 0.35);
+      --bg: #071510;
+      --bg-surface: #0a1f17;
+      --card-bg: #0e291e;
+      --card-border: rgba(16, 185, 129, 0.22);
+      --card-border-active: rgba(16, 185, 129, 0.6);
+      --text: #f8fafc;
+      --text-muted: rgba(255, 255, 255, 0.6);
+      --text-dim: rgba(255, 255, 255, 0.4);
       --gold: #f59e0b;
-      --bg: #040810;
-      --bg2: #0a1322;
-      --card: #0f1d33;
-      --border: rgba(255,255,255,0.08);
-      --text: #f1f5f9;
-      --text-muted: rgba(255,255,255,0.45);
     }
-    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; }
-    body { display: flex; flex-direction: column; min-height: 100vh; }
 
-    /* ── STEP WRAPPER ── */
-    .step { display: none; flex-direction: column; min-height: 100vh; }
-    .step.active { display: flex; }
+    html, body {
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
 
-    /* ═══════════════════════════════════════════
-       STEP 1 — LANDING
-    ═══════════════════════════════════════════ */
+    body {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ─── STEP CONTAINERS ─── */
+    .step-screen {
+      display: none;
+      flex-direction: column;
+      height: 100vh;
+      width: 100%;
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      overflow-y: auto;
+    }
+    .step-screen.active {
+      display: flex;
+    }
+
+    /* ══════════════════════════════════════════════
+       STEP 1 — WELCOME / LANDING
+    ══════════════════════════════════════════════ */
     #step1 {
-      align-items: center; justify-content: center;
-      padding: 2rem 1.5rem; text-align: center; gap: 1.75rem;
-      background: radial-gradient(ellipse at 50% 0%, rgba(16,185,129,0.12) 0%, transparent 65%);
+      align-items: center;
+      justify-content: center;
+      padding: 2.5rem 1.5rem;
+      text-align: center;
+      gap: 1.5rem;
+      background: radial-gradient(circle at 50% 15%, rgba(16, 185, 129, 0.15) 0%, transparent 70%), var(--bg);
     }
-    .mosque-icon { font-size: 4rem; filter: drop-shadow(0 0 20px rgba(16,185,129,0.4)); }
-    #s1-mosque-name { font-size: 1.9rem; font-weight: 800; line-height: 1.15; letter-spacing: -0.02em; }
-    #s1-mosque-name span { color: var(--emerald); }
-    .s1-sub { font-size: 1rem; color: var(--text-muted); max-width: 300px; }
-    .live-pill {
-      display: inline-flex; align-items: center; gap: 0.45rem;
-      background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.35);
-      color: #34d399; padding: 0.35rem 1rem; border-radius: 999px;
-      font-size: 0.82rem; font-weight: 700; letter-spacing: 0.06em;
-    }
-    .pulse { width: 7px; height: 7px; border-radius: 50%; background: #34d399; animation: pulse 1.4s ease-in-out infinite; }
-    @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.4; transform:scale(0.7); } }
 
-    .btn-join {
-      display: flex; align-items: center; justify-content: center; gap: 0.6rem;
-      background: var(--emerald); color: #fff; font-size: 1.15rem; font-weight: 700;
-      padding: 1rem 2.5rem; border-radius: 16px; border: none; cursor: pointer;
-      width: 100%; max-width: 340px;
-      box-shadow: 0 8px 30px rgba(16,185,129,0.35);
+    .brand-avatar {
+      width: 68px;
+      height: 68px;
+      border-radius: 20px;
+      background: #10b981;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 2.2rem;
+      color: #071510;
+      box-shadow: 0 0 35px var(--emerald-glow);
+    }
+
+    #s1-mosque-name {
+      font-size: 1.85rem;
+      font-weight: 800;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+    }
+    #s1-mosque-name span { color: var(--emerald); }
+
+    .live-indicator-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #34d399;
+      padding: 0.35rem 1rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+    }
+    .pulsing-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #34d399;
+      animation: pulseDot 1.4s infinite ease-in-out;
+    }
+    @keyframes pulseDot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.75); } }
+
+    .s1-desc {
+      font-size: 0.95rem;
+      color: var(--text-muted);
+      max-width: 320px;
+      line-height: 1.5;
+    }
+
+    .btn-main-join {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+      background: #10b981;
+      color: #071510;
+      font-size: 1.15rem;
+      font-weight: 800;
+      padding: 1.1rem 2rem;
+      border-radius: 18px;
+      border: none;
+      cursor: pointer;
+      width: 100%;
+      max-width: 330px;
+      box-shadow: 0 10px 30px rgba(16, 185, 129, 0.4);
       transition: transform 0.15s, box-shadow 0.15s;
     }
-    .btn-join:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(16,185,129,0.45); }
-    .btn-join:active { transform: translateY(0); }
+    .btn-main-join:active { transform: scale(0.98); }
 
-    .no-app { font-size: 0.78rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.3rem; }
+    /* ══════════════════════════════════════════════
+       STEP 2 — LANGUAGE SELECTION CARDS
+    ══════════════════════════════════════════════ */
+    #step2 {
+      padding: 1.75rem 1.25rem 2rem;
+      gap: 1.25rem;
+    }
+    .s2-header {
+      text-align: center;
+      margin-bottom: 0.5rem;
+    }
+    .s2-header h2 {
+      font-size: 1.5rem;
+      font-weight: 800;
+      margin-bottom: 0.35rem;
+    }
+    .s2-header p {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+    }
 
-    /* ═══════════════════════════════════════════
-       STEP 2 — LANGUAGE CARDS
-    ═══════════════════════════════════════════ */
-    #step2 { padding: 2rem 1.25rem; gap: 1.5rem; }
-    .s2-header { text-align: center; }
-    .s2-header h2 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.3rem; }
-    .s2-header p { font-size: 0.88rem; color: var(--text-muted); }
-
-    .lang-grid {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 0.875rem;
+    .lang-card-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.85rem;
       flex: 1;
     }
-    .lang-card {
-      background: var(--card); border: 2px solid var(--border);
-      border-radius: 16px; padding: 1.25rem 1rem;
-      display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
-      cursor: pointer; transition: border-color 0.2s, transform 0.15s, background 0.2s;
-      text-align: center; user-select: none;
+    .lang-card-item {
+      background: var(--card-bg);
+      border: 1.5px solid var(--card-border);
+      border-radius: 16px;
+      padding: 1.15rem 1rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.4rem;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.2s ease;
+      user-select: none;
     }
-    .lang-card:hover { border-color: rgba(16,185,129,0.5); background: rgba(16,185,129,0.05); transform: translateY(-2px); }
-    .lang-card.selected { border-color: var(--emerald); background: rgba(16,185,129,0.1); }
-    .lang-flag { font-size: 2.25rem; }
-    .lang-name { font-size: 0.95rem; font-weight: 700; color: var(--text); }
-    .lang-native { font-size: 0.82rem; color: var(--text-muted); }
-
-    .btn-confirm {
-      background: var(--emerald); color: #fff; font-size: 1.05rem; font-weight: 700;
-      padding: 0.9rem; border-radius: 14px; border: none; cursor: pointer; width: 100%;
-      box-shadow: 0 6px 20px rgba(16,185,129,0.3); transition: opacity 0.2s, transform 0.15s;
+    .lang-card-item:hover, .lang-card-item:active {
+      border-color: var(--emerald);
+      background: rgba(16, 185, 129, 0.1);
+      transform: translateY(-2px);
     }
-    .btn-confirm:disabled { opacity: 0.4; cursor: default; }
-    .btn-confirm:not(:disabled):hover { transform: translateY(-1px); }
-
-    /* ═══════════════════════════════════════════
-       STEP 3 — LIVE SCREEN
-    ═══════════════════════════════════════════ */
-    #step3 { background: #000; }
-
-    /* Header bar */
-    .live-header {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 0.9rem 1.25rem;
-      background: rgba(0,0,0,0.8); backdrop-filter: blur(8px);
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-      position: sticky; top: 0; z-index: 50;
+    .lang-card-item.selected {
+      border-color: #10b981;
+      background: rgba(16, 185, 129, 0.18);
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.25);
     }
-    .live-header .left { display: flex; align-items: center; gap: 0.7rem; }
-    .live-badge-sm {
-      display: flex; align-items: center; gap: 0.35rem;
-      background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.4);
-      color: #34d399; padding: 0.25rem 0.7rem; border-radius: 999px;
-      font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em;
-    }
-    #s3-mosque-name { font-size: 0.95rem; font-weight: 700; }
-    .btn-change-lang {
-      font-size: 0.75rem; color: var(--text-muted); background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.1); padding: 0.28rem 0.65rem; border-radius: 8px;
-      cursor: pointer; font-family: inherit; transition: background 0.2s;
-    }
-    .btn-change-lang:hover { background: rgba(255,255,255,0.12); color: var(--text); }
+    .lang-flag { font-size: 2rem; }
+    .lang-title { font-size: 1rem; font-weight: 700; color: #fff; }
+    .lang-sub { font-size: 0.8rem; color: var(--text-muted); }
 
-    /* Waveform */
-    .waveform-bar {
-      display: flex; align-items: center; justify-content: center; gap: 4px;
-      padding: 0.75rem 0; background: rgba(0,0,0,0.5);
+    .btn-submit-lang {
+      background: var(--emerald);
+      color: #071510;
+      font-size: 1.05rem;
+      font-weight: 800;
+      padding: 1rem;
+      border-radius: 16px;
+      border: none;
+      cursor: pointer;
+      width: 100%;
+      box-shadow: 0 8px 25px rgba(16, 185, 129, 0.35);
+      transition: opacity 0.2s;
     }
-    .bar {
-      width: 3px; border-radius: 3px; background: var(--emerald);
-      animation: wave 1.2s ease-in-out infinite;
+    .btn-submit-lang:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
     }
-    .bar:nth-child(1) { height: 8px; animation-delay: 0s; }
-    .bar:nth-child(2) { height: 18px; animation-delay: 0.1s; }
-    .bar:nth-child(3) { height: 26px; animation-delay: 0.2s; }
-    .bar:nth-child(4) { height: 20px; animation-delay: 0.3s; }
-    .bar:nth-child(5) { height: 30px; animation-delay: 0.15s; }
-    .bar:nth-child(6) { height: 18px; animation-delay: 0.25s; }
-    .bar:nth-child(7) { height: 10px; animation-delay: 0.05s; }
-    .bar:nth-child(8) { height: 22px; animation-delay: 0.35s; }
-    .bar:nth-child(9) { height: 14px; animation-delay: 0.2s; }
-    @keyframes wave { 0%,100% { transform:scaleY(0.4); opacity:0.6; } 50% { transform:scaleY(1); opacity:1; } }
-    .waveform-bar.idle .bar { animation: none; height: 4px; opacity: 0.3; }
 
-    /* Listening label */
-    .listening-label { text-align: center; font-size: 0.8rem; color: var(--text-muted); padding: 0.25rem 0 0.75rem; letter-spacing: 0.04em; }
-
-    /* Feed */
-    #live-feed {
-      flex: 1; overflow-y: auto; padding: 1rem 1.25rem 6rem;
-      display: flex; flex-direction: column; gap: 0.875rem;
+    /* ══════════════════════════════════════════════
+       STEP 3 — COMPETITOR LIVE FEED (Matches photo)
+    ══════════════════════════════════════════════ */
+    #step3 {
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
     }
-    #live-feed::-webkit-scrollbar { width: 4px; }
-    #live-feed::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
 
-    /* Waiting state inside feed */
-    #feed-waiting { text-align: center; padding: 3rem 1rem; color: var(--text-muted); }
-    #feed-waiting .big-icon { font-size: 3rem; margin-bottom: 1rem; }
-
-    /* Translation cards */
-    .trans-card {
-      background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
-      border-radius: 16px; padding: 1rem 1.1rem; animation: slideIn 0.4s ease;
+    /* Top Bar */
+    .comp-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.85rem 1.15rem;
+      background: rgba(7, 21, 16, 0.95);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(16, 185, 129, 0.15);
+      z-index: 50;
     }
-    .trans-card.latest { border-color: rgba(16,185,129,0.3); background: rgba(16,185,129,0.04); }
-    @keyframes slideIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
-    .card-time { font-size: 0.68rem; color: var(--text-muted); margin-bottom: 0.4rem; }
-    .card-arabic { font-family: 'Amiri', serif; font-size: 1.2rem; direction: rtl; line-height: 1.6; color: rgba(255,255,255,0.75); margin-bottom: 0.5rem; }
-    .card-translated { font-size: 1.05rem; font-weight: 500; color: var(--text); line-height: 1.5; }
 
-    /* Ayah card */
-    .ayah-card {
-      background: rgba(245,158,11,0.06); border: 1px solid rgba(245,158,11,0.25);
-      border-radius: 16px; padding: 1.1rem; animation: slideIn 0.4s ease;
+    .comp-header .left-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
     }
-    .ayah-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
-    .ayah-pill { background: var(--gold); color: #000; font-size: 0.72rem; font-weight: 700; padding: 0.2rem 0.65rem; border-radius: 999px; }
-    .ayah-ref { font-size: 0.8rem; font-weight: 600; color: #fde68a; }
-    .ayah-arabic { font-family: 'Amiri', serif; font-size: 1.3rem; direction: rtl; line-height: 1.65; color: #fef3c7; margin-bottom: 0.6rem; }
-    .ayah-trans { font-size: 0.95rem; font-style: italic; color: rgba(255,255,255,0.8); line-height: 1.5; }
 
-    /* Audio control bar */
-    .audio-bar {
-      position: fixed; bottom: 0; left: 0; right: 0;
-      background: rgba(4,8,16,0.95); backdrop-filter: blur(12px);
-      border-top: 1px solid rgba(255,255,255,0.08);
+    .btn-back-step {
+      background: none;
+      border: none;
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 1.3rem;
+      cursor: pointer;
+      padding: 0.2rem;
+      display: flex;
+      align-items: center;
+    }
+
+    .comp-logo-glyph {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      background: #10b981;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 0.85rem;
+      color: #071510;
+    }
+
+    .comp-app-name {
+      font-size: 1.05rem;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      color: #fff;
+    }
+
+    .comp-live-badge {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #34d399;
+      padding: 0.25rem 0.65rem;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+    }
+
+    /* Sub-header Language Switcher Bar */
+    .lang-switcher-bar {
+      padding: 0.6rem 1.15rem;
+      background: rgba(10, 31, 23, 0.6);
+      border-bottom: 1px solid rgba(16, 185, 129, 0.1);
+      display: flex;
+      align-items: center;
+    }
+
+    .lang-pill-selector {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      color: #e2e8f0;
+      padding: 0.35rem 0.85rem;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .lang-pill-selector:hover {
+      background: rgba(16, 185, 129, 0.2);
+    }
+
+    /* ─── FEED STREAM ─── */
+    #mobile-cards-feed {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1rem 1.15rem 7.5rem; /* space for fixed audio footer */
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      -webkit-overflow-scrolling: touch;
+    }
+    #mobile-cards-feed::-webkit-scrollbar { width: 4px; }
+    #mobile-cards-feed::-webkit-scrollbar-thumb { background: rgba(16, 185, 129, 0.2); border-radius: 4px; }
+
+    /* Each Sermon Speech Card (Direct Match to Competitor Image) */
+    .sermon-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 18px;
+      padding: 1.15rem 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      animation: cardFadeUp 0.35s ease;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+      position: relative;
+    }
+
+    @keyframes cardFadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .sermon-card .card-brand-glyph {
+      width: 20px;
+      height: 20px;
+      border-radius: 5px;
+      background: #10b981;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 0.7rem;
+      color: #071510;
+      margin-bottom: 0.25rem;
+    }
+
+    /* Main Translated Text */
+    .sermon-card .card-translated-text {
+      font-size: 1.15rem;
+      font-weight: 700;
+      line-height: 1.45;
+      color: #ffffff;
+      letter-spacing: -0.01em;
+    }
+
+    /* Arabic Source Text Below */
+    .sermon-card .card-arabic-text {
+      font-family: 'Amiri', serif;
+      font-size: 1.1rem;
+      line-height: 1.65;
+      color: rgba(255, 255, 255, 0.65);
+      direction: rtl;
+      text-align: right;
+      padding-top: 0.2rem;
+    }
+
+    /* Card Badge Tag (QUR'AN / HADITH / TERM) */
+    .card-tag-pill {
+      align-self: flex-start;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #6ee7b7;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      padding: 0.2rem 0.55rem;
+      border-radius: 6px;
+      text-transform: uppercase;
+      margin-top: 0.2rem;
+    }
+    .card-tag-pill.quran {
+      background: rgba(245, 158, 11, 0.15);
+      border-color: rgba(245, 158, 11, 0.4);
+      color: #fde68a;
+    }
+
+    /* Active "Listening..." Card */
+    #active-listening-card {
+      background: rgba(14, 41, 30, 0.7);
+      border: 1px dashed rgba(16, 185, 129, 0.35);
+      border-radius: 18px;
+      padding: 1rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      animation: cardFadeUp 0.3s ease;
+    }
+    .listening-title {
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.75);
+    }
+    .pulse-wave-dots {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+    .wave-dot {
+      width: 4px; height: 12px;
+      background: #10b981;
+      border-radius: 2px;
+      animation: wavePulse 1s infinite ease-in-out;
+    }
+    .wave-dot:nth-child(2) { animation-delay: 0.15s; height: 18px; }
+    .wave-dot:nth-child(3) { animation-delay: 0.3s; height: 14px; }
+    @keyframes wavePulse { 0%, 100% { transform: scaleY(0.4); opacity: 0.5; } 50% { transform: scaleY(1); opacity: 1; } }
+
+    /* ─── FIXED BOTTOM AUDIO PLAYER BAR (Matches Competitor) ─── */
+    .comp-player-bar {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: rgba(6, 20, 14, 0.94);
+      backdrop-filter: blur(18px);
+      border-top: 1px solid rgba(16, 185, 129, 0.2);
       padding: 0.85rem 1.25rem;
-      display: flex; align-items: center; gap: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      z-index: 100;
     }
-    .audio-info { flex: 1; }
-    .audio-title { font-size: 0.9rem; font-weight: 600; }
-    .audio-sub { font-size: 0.72rem; color: var(--text-muted); margin-top: 0.15rem; }
-    .btn-audio {
-      display: flex; align-items: center; gap: 0.4rem;
-      padding: 0.6rem 1.1rem; border-radius: 12px; border: none; cursor: pointer;
-      font-size: 0.88rem; font-weight: 700; font-family: inherit; transition: all 0.2s;
+
+    /* Round Green Button */
+    .btn-circle-play {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: #10b981;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #071510;
+      font-size: 1.25rem;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+      transition: transform 0.15s, background 0.2s;
+      flex-shrink: 0;
     }
-    .btn-audio.play { background: var(--emerald); color: #fff; box-shadow: 0 4px 15px rgba(16,185,129,0.3); }
-    .btn-audio.stop { background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
-    .btn-audio:hover { transform: scale(1.04); }
+    .btn-circle-play:active {
+      transform: scale(0.94);
+    }
+
+    /* Frequency Wave Graphic */
+    .freq-bars {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      height: 20px;
+    }
+    .freq-bar {
+      width: 3px;
+      height: 100%;
+      background: #10b981;
+      border-radius: 2px;
+      transform-origin: bottom;
+      animation: soundWave 1.2s infinite ease-in-out;
+    }
+    .freq-bar:nth-child(1) { height: 8px; animation-delay: 0.1s; }
+    .freq-bar:nth-child(2) { height: 16px; animation-delay: 0.3s; }
+    .freq-bar:nth-child(3) { height: 22px; animation-delay: 0.15s; }
+    .freq-bar:nth-child(4) { height: 14px; animation-delay: 0.25s; }
+    .freq-bar:nth-child(5) { height: 6px; animation-delay: 0.05s; }
+
+    .freq-bars.idle .freq-bar {
+      animation: none;
+      height: 4px;
+      opacity: 0.4;
+    }
+
+    @keyframes soundWave {
+      0%, 100% { transform: scaleY(0.3); opacity: 0.5; }
+      50% { transform: scaleY(1); opacity: 1; }
+    }
+
+    /* Player Status Text */
+    .player-text-block {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    .player-top-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #ffffff;
+    }
+    .player-sub-title {
+      font-size: 0.78rem;
+      color: rgba(255, 255, 255, 0.55);
+      margin-top: 0.1rem;
+    }
+
+    /* ─── MODAL: IN-STREAM LANGUAGE PICKER ─── */
+    #lang-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      z-index: 200;
+      align-items: flex-end;
+    }
+    #lang-modal.open {
+      display: flex;
+    }
+    .lang-sheet {
+      background: #0a1f17;
+      border-top: 1px solid rgba(16, 185, 129, 0.3);
+      border-radius: 24px 24px 0 0;
+      width: 100%;
+      max-height: 80vh;
+      overflow-y: auto;
+      padding: 1.5rem 1.25rem 2.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      animation: slideUpSheet 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes slideUpSheet {
+      from { transform: translateY(100%); }
+      to { transform: translateY(0); }
+    }
+    .sheet-handle {
+      width: 44px; height: 5px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 999px;
+      align-self: center;
+      margin-bottom: 0.5rem;
+    }
   </style>
 </head>
 <body>
 
-  <!-- ══ STEP 1: LANDING ══ -->
-  <div class="step active" id="step1">
-    <div class="mosque-icon">🕌</div>
+  <!-- ═══════════ STEP 1: LANDING SCREEN ═══════════ -->
+  <div class="step-screen active" id="step1">
+    <div class="brand-avatar">T</div>
     <div>
-      <div id="s1-mosque-name"><span>Masjid</span> Al-Noor</div>
+      <div id="s1-mosque-name"><span>MYO</span> Youth Center</div>
     </div>
-    <div class="live-pill">
-      <div class="pulse"></div>
-      LIVE NOW
+    <div class="live-indicator-pill">
+      <div class="pulsing-dot"></div>
+      LIVE SERMON
     </div>
-    <p class="s1-sub">Live Khutbah translation in your language — free, no sign-up needed</p>
-    <button class="btn-join" id="btn-join">
+    <p class="s1-desc">Instant real-time translation on your phone and live earbuds audio.</p>
+    <button class="btn-main-join" id="btn-join">
       <span>▶</span> Join Live Khutbah
     </button>
-    <div class="no-app">✓ No app download required</div>
   </div>
 
-  <!-- ══ STEP 2: LANGUAGE SELECTION ══ -->
-  <div class="step" id="step2">
+  <!-- ═══════════ STEP 2: LANGUAGE SELECTION ═══════════ -->
+  <div class="step-screen" id="step2">
     <div class="s2-header">
-      <h2>Choose Your Language</h2>
-      <p>Translations will appear in your selected language</p>
+      <h2>Select Your Language</h2>
+      <p>Translations and audio will stream in your choice</p>
     </div>
-    <div class="lang-grid">
-      <div class="lang-card" data-lang="en" id="lang-en">
+    <div class="lang-card-grid" id="step2-lang-grid">
+      <div class="lang-card-item" data-lang="en">
         <div class="lang-flag">🇬🇧</div>
-        <div class="lang-name">English</div>
-        <div class="lang-native">English</div>
+        <div class="lang-title">English</div>
+        <div class="lang-sub">English</div>
       </div>
-      <div class="lang-card" data-lang="bn" id="lang-bn">
-        <div class="lang-flag">🇧🇩</div>
-        <div class="lang-name">Bengali</div>
-        <div class="lang-native">বাংলা</div>
+      <div class="lang-card-item" data-lang="uz">
+        <div class="lang-flag">🇺🇿</div>
+        <div class="lang-title">Uzbek</div>
+        <div class="lang-sub">O‘zbekcha</div>
       </div>
-      <div class="lang-card" data-lang="ur" id="lang-ur">
-        <div class="lang-flag">🇵🇰</div>
-        <div class="lang-name">Urdu</div>
-        <div class="lang-native">اردو</div>
-      </div>
-      <div class="lang-card" data-lang="fr" id="lang-fr">
-        <div class="lang-flag">🇫🇷</div>
-        <div class="lang-name">French</div>
-        <div class="lang-native">Français</div>
-      </div>
-      <div class="lang-card" data-lang="zh" id="lang-zh">
-        <div class="lang-flag">🇨🇳</div>
-        <div class="lang-name">Chinese</div>
-        <div class="lang-native">中文</div>
-      </div>
-      <div class="lang-card" data-lang="tr" id="lang-tr">
+      <div class="lang-card-item" data-lang="tr">
         <div class="lang-flag">🇹🇷</div>
-        <div class="lang-name">Turkish</div>
-        <div class="lang-native">Türkçe</div>
+        <div class="lang-title">Turkish</div>
+        <div class="lang-sub">Türkçe</div>
+      </div>
+      <div class="lang-card-item" data-lang="ur">
+        <div class="lang-flag">🇵🇰</div>
+        <div class="lang-title">Urdu</div>
+        <div class="lang-sub">اردو</div>
+      </div>
+      <div class="lang-card-item" data-lang="bn">
+        <div class="lang-flag">🇧🇩</div>
+        <div class="lang-title">Bengali</div>
+        <div class="lang-sub">বাংলা</div>
+      </div>
+      <div class="lang-card-item" data-lang="fr">
+        <div class="lang-flag">🇫🇷</div>
+        <div class="lang-title">French</div>
+        <div class="lang-sub">Français</div>
+      </div>
+      <div class="lang-card-item" data-lang="id">
+        <div class="lang-flag">🇮🇩</div>
+        <div class="lang-title">Indonesian</div>
+        <div class="lang-sub">Bahasa</div>
+      </div>
+      <div class="lang-card-item" data-lang="so">
+        <div class="lang-flag">🇸🇴</div>
+        <div class="lang-title">Somali</div>
+        <div class="lang-sub">Soomaali</div>
       </div>
     </div>
-    <button class="btn-confirm" id="btn-confirm-lang" disabled>Continue →</button>
+    <button class="btn-submit-lang" id="btn-confirm-lang" disabled>Continue to Sermon →</button>
   </div>
 
-  <!-- ══ STEP 3: LIVE SCREEN ══ -->
-  <div class="step" id="step3">
-    <div class="live-header">
-      <div class="left">
-        <span id="s3-mosque-name">Masjid Al-Noor</span>
-        <div class="live-badge-sm">
-          <div class="pulse"></div>
-          LIVE
+  <!-- ═══════════ STEP 3: COMPETITOR LIVE STREAM ═══════════ -->
+  <div class="step-screen" id="step3">
+    <!-- Top Header -->
+    <header class="comp-header">
+      <div class="left-meta">
+        <button class="btn-back-step" id="btn-back" title="Back to languages">‹</button>
+        <div class="comp-logo-glyph">T</div>
+        <div class="comp-app-name" id="comp-app-name">Tarjam</div>
+      </div>
+      <div class="comp-live-badge">
+        <div class="pulsing-dot"></div>
+        LIVE
+      </div>
+    </header>
+
+    <!-- Language Selector Bar -->
+    <div class="lang-switcher-bar">
+      <div class="lang-pill-selector" id="btn-open-lang-modal">
+        <span>🌐 Arabic ➔ <strong id="current-lang-name">English</strong></span>
+        <span style="font-size: 0.7rem; opacity: 0.7;">▾</span>
+      </div>
+    </div>
+
+    <!-- Scrollable Feed of Sermon Cards -->
+    <main id="mobile-cards-feed">
+      <!-- Active Listening Pulse Card -->
+      <div id="active-listening-card">
+        <div class="comp-logo-glyph">T</div>
+        <div class="listening-title">Listening...</div>
+        <div class="pulse-wave-dots">
+          <div class="wave-dot"></div>
+          <div class="wave-dot"></div>
+          <div class="wave-dot"></div>
         </div>
       </div>
-      <button class="btn-change-lang" id="btn-change-lang">🌐 Change language</button>
-    </div>
+    </main>
 
-    <div class="waveform-bar idle" id="waveform">
-      <div class="bar"></div><div class="bar"></div><div class="bar"></div>
-      <div class="bar"></div><div class="bar"></div><div class="bar"></div>
-      <div class="bar"></div><div class="bar"></div><div class="bar"></div>
-    </div>
-    <div class="listening-label" id="listening-label">Waiting for Imam to speak...</div>
+    <!-- Fixed Bottom Audio Player Bar -->
+    <footer class="comp-player-bar">
+      <button class="btn-circle-play" id="btn-toggle-audio" title="Play or Pause Audio">
+        <span id="play-pause-icon">⏸</span>
+      </button>
 
-    <div id="live-feed">
-      <div id="feed-waiting">
-        <div class="big-icon">⏳</div>
-        <p style="font-size:1rem; font-weight:600; color:rgba(255,255,255,0.6);">Connected to Live Khutbah</p>
-        <p style="font-size:0.85rem; margin-top:0.5rem;">Translations will appear here as the Imam speaks.</p>
+      <div class="freq-bars" id="audio-freq-bars">
+        <div class="freq-bar"></div>
+        <div class="freq-bar"></div>
+        <div class="freq-bar"></div>
+        <div class="freq-bar"></div>
+        <div class="freq-bar"></div>
       </div>
-    </div>
 
-    <div class="audio-bar">
-      <div class="audio-info">
-        <div class="audio-title" id="audio-title">🎧 Audio: Off</div>
-        <div class="audio-sub" id="audio-sub">Tap to hear translated speech</div>
+      <div class="player-text-block">
+        <div class="player-top-title" id="player-title">Translating live</div>
+        <div class="player-sub-title" id="player-subtitle">Tap to mute audio</div>
       </div>
-      <button class="btn-audio play" id="btn-audio">▶ Play</button>
+    </footer>
+  </div>
+
+  <!-- ═══════════ LANGUAGE MODAL / BOTTOM SHEET ═══════════ -->
+  <div id="lang-modal">
+    <div class="lang-sheet">
+      <div class="sheet-handle"></div>
+      <h3 style="font-size: 1.15rem; font-weight: 800;">Switch Translation Language</h3>
+      <div class="lang-card-grid" id="modal-lang-grid">
+        <!-- Reusable cards injected via JS -->
+      </div>
+      <button class="btn-submit-lang" id="btn-close-modal">Done</button>
     </div>
   </div>
 

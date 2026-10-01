@@ -1,115 +1,242 @@
-// MosqAI - Attendee 3-Step Flow
+// MosqAI - Attendee Mobile App Script (Direct Competitor Tarjam UI Match)
 const urlParams = new URLSearchParams(window.location.search);
 const sessionId = urlParams.get('session') || 'jumuah-live';
-let currentLanguage = urlParams.get('lang') || null;
+let currentLanguage = urlParams.get('lang') || 'en';
+
+const LANGUAGES = [
+  { code: 'en', name: 'English', native: 'English', flag: '🇬🇧' },
+  { code: 'uz', name: 'Uzbek', native: 'O‘zbekcha', flag: '🇺🇿' },
+  { code: 'tr', name: 'Turkish', native: 'Türkçe', flag: '🇹🇷' },
+  { code: 'ur', name: 'Urdu', native: 'اردو', flag: '🇵🇰' },
+  { code: 'bn', name: 'Bengali', native: 'বাংলা', flag: '🇧🇩' },
+  { code: 'fr', name: 'French', native: 'Français', flag: '🇫🇷' },
+  { code: 'id', name: 'Indonesian', native: 'Bahasa', flag: '🇮🇩' },
+  { code: 'so', name: 'Somali', native: 'Soomaali', flag: '🇸🇴' }
+];
+
 let ws = null;
-let isAudioEnabled = false;
+let isAudioEnabled = true;
 let audioCtx = null;
 const audioQueue = [];
 let isPlayingAudio = false;
 const renderedTimestamps = new Set();
 let lastSyncTime = null;
 
-// DOM
+// DOM Elements
 const step1 = document.getElementById('step1');
 const step2 = document.getElementById('step2');
 const step3 = document.getElementById('step3');
 const btnJoin = document.getElementById('btn-join');
 const btnConfirmLang = document.getElementById('btn-confirm-lang');
-const btnChangeLang = document.getElementById('btn-change-lang');
-const btnAudio = document.getElementById('btn-audio');
-const liveFeed = document.getElementById('live-feed');
-const feedWaiting = document.getElementById('feed-waiting');
-const audioTitle = document.getElementById('audio-title');
-const audioSub = document.getElementById('audio-sub');
-const waveform = document.getElementById('waveform');
-const listeningLabel = document.getElementById('listening-label');
-const s1MosqueName = document.getElementById('s1-mosque-name');
-const s3MosqueName = document.getElementById('s3-mosque-name');
+const btnBack = document.getElementById('btn-back');
+const btnOpenLangModal = document.getElementById('btn-open-lang-modal');
+const langModal = document.getElementById('lang-modal');
+const btnCloseModal = document.getElementById('btn-close-modal');
+const modalLangGrid = document.getElementById('modal-lang-grid');
+const currentLangNameEl = document.getElementById('current-lang-name');
+const mobileCardsFeed = document.getElementById('mobile-cards-feed');
+const activeListeningCard = document.getElementById('active-listening-card');
 
-const LANG_NAMES = { en: 'English', bn: 'Bengali', ur: 'Urdu', fr: 'French', zh: 'Chinese', tr: 'Turkish' };
+// Audio elements
+const btnToggleAudio = document.getElementById('btn-toggle-audio');
+const playPauseIcon = document.getElementById('play-pause-icon');
+const audioFreqBars = document.getElementById('audio-freq-bars');
+const playerTitle = document.getElementById('player-title');
+const playerSubtitle = document.getElementById('player-subtitle');
 
-// ── STEP 1: Join button
-btnJoin.addEventListener('click', () => {
-  // If lang already in URL, skip step 2
-  if (currentLanguage) {
-    showStep(3);
-    initLiveSession();
-  } else {
-    showStep(2);
+function getLangName(code) {
+  const item = LANGUAGES.find(l => l.code === code);
+  return item ? item.name : code.toUpperCase();
+}
+
+function updateLangDisplay() {
+  if (currentLangNameEl) currentLangNameEl.textContent = getLangName(currentLanguage);
+  if (playerSubtitle && isAudioEnabled) {
+    playerSubtitle.textContent = `Streaming in ${getLangName(currentLanguage)}`;
   }
-});
+}
 
-// ── STEP 2: Language card selection
-let selectedLang = null;
-document.querySelectorAll('.lang-card').forEach(card => {
+// ─── STEP NAVIGATION ───
+function showStep(num) {
+  step1.classList.remove('active');
+  step2.classList.remove('active');
+  step3.classList.remove('active');
+
+  const target = document.getElementById(`step${num}`);
+  if (target) target.classList.add('active');
+}
+
+// Step 1: Join Click
+if (btnJoin) {
+  btnJoin.addEventListener('click', () => {
+    // If lang was explicitly passed in URL, jump directly to feed
+    if (urlParams.has('lang')) {
+      showStep(3);
+      initLiveSession();
+    } else {
+      showStep(2);
+    }
+  });
+}
+
+// Step 2: Language Card Selection
+let tempSelectedLang = currentLanguage;
+document.querySelectorAll('#step2-lang-grid .lang-card-item').forEach(card => {
   card.addEventListener('click', () => {
-    document.querySelectorAll('.lang-card').forEach(c => c.classList.remove('selected'));
+    document.querySelectorAll('#step2-lang-grid .lang-card-item').forEach(c => c.classList.remove('selected'));
     card.classList.add('selected');
-    selectedLang = card.dataset.lang;
+    tempSelectedLang = card.dataset.lang;
     btnConfirmLang.disabled = false;
   });
 });
 
-btnConfirmLang.addEventListener('click', () => {
-  if (!selectedLang) return;
-  currentLanguage = selectedLang;
-  showStep(3);
-  initLiveSession();
-});
-
-// ── STEP 3: Change language
-btnChangeLang.addEventListener('click', () => {
-  showStep(2);
-});
-
-// ── AUDIO TOGGLE
-btnAudio.addEventListener('click', async () => {
-  if (!isAudioEnabled) {
-    try {
-      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      if (audioCtx.state === 'suspended') await audioCtx.resume();
-      isAudioEnabled = true;
-      btnAudio.className = 'btn-audio stop';
-      btnAudio.textContent = '⏹ Stop';
-      audioTitle.textContent = '🔊 Audio: Live';
-      audioSub.textContent = `Streaming in ${LANG_NAMES[currentLanguage] || currentLanguage}`;
-    } catch (err) {
-      alert('Could not start audio: ' + err.message);
-    }
-  } else {
-    isAudioEnabled = false;
-    btnAudio.className = 'btn-audio play';
-    btnAudio.textContent = '▶ Play';
-    audioTitle.textContent = '🎧 Audio: Off';
-    audioSub.textContent = 'Tap to hear translated speech';
-  }
-});
-
-function showStep(n) {
-  step1.classList.remove('active');
-  step2.classList.remove('active');
-  step3.classList.remove('active');
-  document.getElementById('step' + n).classList.add('active');
+if (btnConfirmLang) {
+  btnConfirmLang.addEventListener('click', () => {
+    currentLanguage = tempSelectedLang;
+    updateLangDisplay();
+    showStep(3);
+    initLiveSession();
+  });
 }
 
-async function initLiveSession() {
-  // Fetch mosque name
-  try {
-    const res = await fetch(`/api/session/${sessionId}`);
-    if (res.ok) {
-      const data = await res.json();
-      if (data.mosqueName) {
-        s1MosqueName.innerHTML = `<span>${data.mosqueName.split(' ')[0]}</span> ${data.mosqueName.split(' ').slice(1).join(' ')}`;
-        s3MosqueName.textContent = data.mosqueName;
+// Back Button in Step 3
+if (btnBack) {
+  btnBack.addEventListener('click', () => {
+    openLangModal();
+  });
+}
+
+// ─── IN-STREAM LANGUAGE MODAL ───
+function renderModalLangs() {
+  if (!modalLangGrid) return;
+  modalLangGrid.innerHTML = '';
+  LANGUAGES.forEach(l => {
+    const card = document.createElement('div');
+    card.className = `lang-card-item ${l.code === currentLanguage ? 'selected' : ''}`;
+    card.innerHTML = `
+      <div class="lang-flag">${l.flag}</div>
+      <div class="lang-title">${l.name}</div>
+      <div class="lang-sub">${l.native}</div>
+    `;
+    card.addEventListener('click', () => {
+      currentLanguage = l.code;
+      updateLangDisplay();
+      closeLangModal();
+      // Notify server of language change
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'JOIN_ROOM',
+          sessionId,
+          role: 'attendee',
+          language: currentLanguage
+        }));
       }
-    }
-  } catch (e) {}
-
-  connectWebSocket();
-  startFeedSync();
+    });
+    modalLangGrid.appendChild(card);
+  });
 }
 
+function openLangModal() {
+  renderModalLangs();
+  langModal.classList.add('open');
+}
+
+function closeLangModal() {
+  langModal.classList.remove('open');
+}
+
+if (btnOpenLangModal) btnOpenLangModal.addEventListener('click', openLangModal);
+if (btnCloseModal) btnCloseModal.addEventListener('click', closeLangModal);
+if (langModal) {
+  langModal.addEventListener('click', (e) => {
+    if (e.target === langModal) closeLangModal();
+  });
+}
+
+// ─── AUDIO TOGGLE & SYNTHESIS ───
+function toggleAudio() {
+  isAudioEnabled = !isAudioEnabled;
+  if (isAudioEnabled) {
+    if (playPauseIcon) playPauseIcon.textContent = '⏸';
+    if (audioFreqBars) audioFreqBars.classList.remove('idle');
+    if (playerTitle) playerTitle.textContent = 'Translating live';
+    if (playerSubtitle) playerSubtitle.textContent = `Streaming in ${getLangName(currentLanguage)}`;
+    // Resume audio context
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } else {
+    if (playPauseIcon) playPauseIcon.textContent = '▶';
+    if (audioFreqBars) audioFreqBars.classList.add('idle');
+    if (playerTitle) playerTitle.textContent = 'Audio muted';
+    if (playerSubtitle) playerSubtitle.textContent = 'Tap play to resume earbuds voice';
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  }
+}
+
+if (btnToggleAudio) btnToggleAudio.addEventListener('click', toggleAudio);
+
+// ─── RENDERING COMPETITOR SERMON CARDS ───
+function renderSermonCard({ arabic, translations, translated, ayah, timestamp }) {
+  if (!arabic && !translated) return;
+
+  // Resolve translation text for current language
+  let displayText = '';
+  if (ayah) {
+    displayText = (ayah.translations && (ayah.translations[currentLanguage] || ayah.translations['en'])) ||
+                  ayah.translation || translated || '';
+  } else if (translations && typeof translations === 'object') {
+    displayText = translations[currentLanguage] || translations['en'] || Object.values(translations)[0] || translated || '';
+  } else {
+    displayText = translated || '';
+  }
+
+  const card = document.createElement('div');
+  card.className = 'sermon-card';
+
+  // Tag: Quran, Hadith, or Sermon
+  let tagHtml = '';
+  if (ayah) {
+    const ref = ayah.reference || `Quran ${ayah.surahNumber || ''}:${ayah.ayahNumber || ''}`;
+    tagHtml = `<span class="card-tag-pill quran">📖 ${ref}</span>`;
+  } else if (arabic && (arabic.includes('قال رسول الله') || arabic.includes('صلى الله عليه وسلم'))) {
+    tagHtml = `<span class="card-tag-pill">Aa HADITH</span>`;
+  } else {
+    tagHtml = `<span class="card-tag-pill">Aa SERMON</span>`;
+  }
+
+  card.innerHTML = `
+    <div class="card-brand-glyph">T</div>
+    <div class="card-translated-text">${displayText}</div>
+    ${arabic ? `<div class="card-arabic-text" dir="rtl">${ayah && ayah.arabicUthmani ? ayah.arabicUthmani : arabic}</div>` : ''}
+    ${tagHtml}
+  `;
+
+  // Insert before active listening card
+  mobileCardsFeed.insertBefore(card, activeListeningCard);
+
+  // Scroll to bottom
+  mobileCardsFeed.scrollTop = mobileCardsFeed.scrollHeight;
+
+  // Play audio if enabled
+  if (isAudioEnabled && displayText) {
+    speakSpeech(displayText, currentLanguage);
+  }
+}
+
+// ─── AUDIO PLAYBACK (Cartesia or Web Speech Synthesis) ───
+function speakSpeech(text, lang) {
+  if (!('speechSynthesis' in window)) return;
+  try {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = lang || 'en';
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    window.speechSynthesis.speak(utterance);
+  } catch (err) {}
+}
+
+// ─── WEBSOCKET & SYNC ───
 function connectWebSocket() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
@@ -119,7 +246,7 @@ function connectWebSocket() {
       type: 'JOIN_ROOM',
       sessionId,
       role: 'attendee',
-      language: currentLanguage || 'en'
+      language: currentLanguage
     }));
   };
 
@@ -130,21 +257,17 @@ function connectWebSocket() {
         const key = data.timestamp || `${data.arabic}_${Date.now()}`;
         if (!renderedTimestamps.has(key)) {
           renderedTimestamps.add(key);
-          renderCard(data);
-          activateWaveform();
-          if (isAudioEnabled) {
-            if (data.audio && data.audio.audioBase64) queueAudio(data.audio.audioBase64);
-            else if (data.translated) speakFallback(data.translated, currentLanguage);
-          }
+          renderSermonCard(data);
         }
       }
     } catch (e) {}
   };
 
-  ws.onclose = () => setTimeout(connectWebSocket, 2000);
+  ws.onclose = () => {
+    setTimeout(connectWebSocket, 2500);
+  };
 }
 
-// Polling fallback (works even on serverless)
 function startFeedSync() {
   setInterval(async () => {
     try {
@@ -157,11 +280,13 @@ function startFeedSync() {
         data.transcripts.forEach(item => {
           if (!renderedTimestamps.has(item.timestamp)) {
             renderedTimestamps.add(item.timestamp);
-            const translated = (item.translations && item.translations[currentLanguage || 'en']) ||
-                               (item.translations && item.translations.en) || item.arabic;
-            renderCard({ arabic: item.arabic, translated, ayah: item.ayah, timestamp: item.timestamp });
-            activateWaveform();
-            if (isAudioEnabled && translated) speakFallback(translated, currentLanguage);
+            renderSermonCard({
+              arabic: item.arabic,
+              translations: item.translations,
+              translated: (item.translations && item.translations[currentLanguage]) || (item.translations && item.translations.en) || item.arabic,
+              ayah: item.ayah,
+              timestamp: item.timestamp
+            });
           }
         });
       }
@@ -169,83 +294,23 @@ function startFeedSync() {
   }, 2000);
 }
 
-function activateWaveform() {
-  waveform.classList.remove('idle');
-  listeningLabel.textContent = 'Listening...';
-  clearTimeout(waveform._idleTimer);
-  waveform._idleTimer = setTimeout(() => {
-    waveform.classList.add('idle');
-    listeningLabel.textContent = 'Waiting for Imam to speak...';
-  }, 6000);
-}
+async function initLiveSession() {
+  updateLangDisplay();
+  connectWebSocket();
+  startFeedSync();
 
-function renderCard({ arabic, translated, ayah, timestamp }) {
-  if (feedWaiting) feedWaiting.style.display = 'none';
-
-  // Remove latest class from previous
-  const prevLatest = liveFeed.querySelector('.trans-card.latest');
-  if (prevLatest) prevLatest.classList.remove('latest');
-
-  const card = document.createElement('div');
-
-  if (ayah) {
-    card.className = 'ayah-card';
-    const ref = ayah.reference || `Quran (${ayah.surahNumber}:${ayah.ayahNumber})`;
-    const trans = (ayah.translations && (ayah.translations[currentLanguage] || ayah.translations.en)) || ayah.translation || translated || '';
-    card.innerHTML = `
-      <div class="ayah-header">
-        <span class="ayah-pill">📖 Holy Quran</span>
-        <span class="ayah-ref">${ref}</span>
-      </div>
-      <div class="ayah-arabic">${ayah.arabicUthmani || arabic}</div>
-      <div class="ayah-trans">"${trans}"</div>
-    `;
-  } else {
-    card.className = 'trans-card latest';
-    const timeStr = timestamp ? new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
-    card.innerHTML = `
-      <div class="card-time">${timeStr}</div>
-      <div class="card-arabic">${arabic}</div>
-      <div class="card-translated">${translated}</div>
-    `;
-  }
-
-  liveFeed.appendChild(card);
-  liveFeed.scrollTop = liveFeed.scrollHeight;
-}
-
-// Audio queue
-function queueAudio(base64Data) {
-  audioQueue.push(base64Data);
-  if (!isPlayingAudio) playNextAudio();
-}
-
-async function playNextAudio() {
-  if (!audioQueue.length || !isAudioEnabled) { isPlayingAudio = false; return; }
-  isPlayingAudio = true;
-  const b64 = audioQueue.shift();
+  // Try to pre-warm audio context on user interaction
   try {
-    const binary = atob(b64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const buf = await audioCtx.decodeAudioData(bytes.buffer);
-    const src = audioCtx.createBufferSource();
-    src.buffer = buf;
-    src.connect(audioCtx.destination);
-    src.onended = playNextAudio;
-    src.start(0);
-  } catch (e) { playNextAudio(); }
+    if (audioCtx.state === 'suspended') await audioCtx.resume();
+  } catch (e) {}
 }
 
-function speakFallback(text, lang) {
-  if (!('speechSynthesis' in window)) return;
-  const utt = new SpeechSynthesisUtterance(text);
-  utt.lang = lang || 'en';
-  window.speechSynthesis.speak(utt);
-}
-
-// Auto-start if lang in URL
-if (currentLanguage) {
-  showStep(1); // show landing first so they can click join
+// If session or lang pre-set, automatically start
+if (urlParams.has('session') && urlParams.has('lang')) {
+  currentLanguage = urlParams.get('lang') || 'en';
+  showStep(3);
+  initLiveSession();
+} else {
+  showStep(1);
 }

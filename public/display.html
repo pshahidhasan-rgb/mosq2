@@ -3,100 +3,414 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Live Khutbah Display — MosqAI</title>
+  <title>Live Khutbah TV Display — MosqAI</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com">
-  <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root { --emerald: #10b981; --gold: #f59e0b; --gold-light: #fde68a; --bg: #050a14; --divider: rgba(255,255,255,0.08); --text-muted: rgba(255,255,255,0.45); }
-    html, body { height: 100%; background: var(--bg); color: #fff; font-family: 'Inter', sans-serif; overflow: hidden; }
-    #topbar { position: fixed; top: 0; left: 0; right: 0; height: 64px; background: rgba(5,10,20,0.92); backdrop-filter: blur(12px); border-bottom: 1px solid var(--divider); display: flex; align-items: center; justify-content: space-between; padding: 0 2.5rem; z-index: 100; }
-    #topbar .left { display: flex; align-items: center; gap: 1rem; }
-    #mosque-name { font-size: 1.25rem; font-weight: 700; }
-    #clock { font-family: monospace; font-size: 1.05rem; font-weight: 600; color: rgba(255,255,255,0.7); letter-spacing: 0.05em; }
-    .live-badge { display: flex; align-items: center; gap: 0.5rem; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.5); color: #34d399; padding: 0.35rem 0.85rem; border-radius: 999px; font-size: 0.85rem; font-weight: 700; letter-spacing: 0.05em; }
-    .live-badge.idle { background: rgba(148,163,184,0.1); border-color: rgba(148,163,184,0.3); color: #94a3b8; }
-    .pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: #34d399; animation: pulse 1.5s ease-in-out infinite; }
-    .idle .pulse-dot { background: #94a3b8; animation: none; }
-    @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.4; transform:scale(0.75); } }
-    #stage { position: fixed; top: 64px; bottom: 0; left: 0; right: 0; display: flex; }
-    #waiting { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 3rem; gap: 1.5rem; transition: opacity 0.5s; }
-    #waiting h2 { font-size: 2.75rem; font-weight: 800; color: rgba(255,255,255,0.9); line-height: 1.2; }
-    #waiting p { font-size: 1.2rem; color: rgba(255,255,255,0.5); max-width: 560px; }
-    .waiting-qr { background: #fff; padding: 1.25rem; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
-    .waiting-qr img { width: 200px; height: 200px; display: block; }
-    .scan-label { font-size: 1rem; color: var(--emerald); font-weight: 600; }
-    #split-screen { display: none; width: 100%; height: 100%; position: relative; }
-    #split-screen.visible { display: flex; }
-    #arabic-panel { flex: 0 0 58%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3rem 4rem; border-right: 1px solid var(--divider); position: relative; background: linear-gradient(135deg, rgba(16,185,129,0.03) 0%, transparent 60%); }
-    #translation-panel { flex: 0 0 42%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3rem 3.5rem; position: relative; }
-    .panel-label { position: absolute; top: 1.5rem; font-size: 0.78rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); border: 1px solid var(--divider); padding: 0.2rem 0.7rem; border-radius: 999px; }
-    #arabic-text { font-family: 'Amiri', serif; font-size: clamp(2rem, 4.5vw, 4rem); line-height: 1.7; text-align: center; direction: rtl; color: #f1f5f9; text-shadow: 0 2px 20px rgba(16,185,129,0.15); }
-    #translated-text { font-size: clamp(1.5rem, 3vw, 2.8rem); font-weight: 500; line-height: 1.55; text-align: center; color: #e2e8f0; }
-    .fade-in { animation: fadeUp 0.5s ease forwards; }
-    @keyframes fadeUp { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
-    #ayah-banner { display: none; position: absolute; inset: 0; flex-direction: column; align-items: center; justify-content: center; padding: 4rem; background: radial-gradient(ellipse at center, rgba(245,158,11,0.08) 0%, transparent 70%); }
-    #ayah-banner.visible { display: flex; }
-    .ayah-badge { display: inline-flex; align-items: center; gap: 0.5rem; background: var(--gold); color: #000; font-size: 0.95rem; font-weight: 700; padding: 0.4rem 1.1rem; border-radius: 999px; letter-spacing: 0.04em; margin-bottom: 2rem; }
-    #ayah-reference { font-size: 1.1rem; color: var(--gold-light); font-weight: 600; margin-bottom: 2rem; }
-    #ayah-arabic { font-family: 'Amiri', serif; font-size: clamp(2.5rem, 5vw, 4.5rem); line-height: 1.65; direction: rtl; text-align: center; color: #fef3c7; text-shadow: 0 0 40px rgba(245,158,11,0.3); margin-bottom: 2.5rem; }
-    #ayah-translation { font-size: clamp(1.4rem, 2.5vw, 2.2rem); font-weight: 400; font-style: italic; text-align: center; color: rgba(255,255,255,0.8); max-width: 900px; line-height: 1.6; }
-    #qr-corner { position: fixed; bottom: 1.75rem; right: 1.75rem; z-index: 200; display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
-    .qr-label { font-size: 0.72rem; font-weight: 600; color: rgba(255,255,255,0.5); letter-spacing: 0.06em; text-transform: uppercase; }
-    .qr-box { background: #fff; border-radius: 14px; padding: 0.75rem; box-shadow: 0 8px 30px rgba(0,0,0,0.5); }
-    #qr-corner img { width: 100px; height: 100px; display: block; }
-    .join-url { font-size: 0.65rem; color: rgba(255,255,255,0.4); text-align: center; max-width: 110px; word-break: break-all; }
-    #btn-fullscreen { position: fixed; top: 70px; right: 16px; z-index: 300; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12); color: rgba(255,255,255,0.5); font-size: 0.78rem; padding: 0.3rem 0.65rem; border-radius: 6px; cursor: pointer; transition: background 0.2s; font-family: inherit; }
-    #btn-fullscreen:hover { background: rgba(255,255,255,0.12); color: #fff; }
+    :root {
+      --emerald: #10b981;
+      --emerald-glow: rgba(16, 185, 129, 0.4);
+      --gold: #f59e0b;
+      --gold-light: #fef08a;
+      --bg: #030711;
+      --card-bg: rgba(9, 18, 32, 0.85);
+      --divider: rgba(255, 255, 255, 0.08);
+      --text-muted: rgba(255, 255, 255, 0.38);
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: #fff;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* ─── TOP BAR (Matches MYO Youth Center TV Screen) ─── */
+    #topbar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 68px;
+      background: rgba(3, 7, 17, 0.95);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--divider);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 3rem;
+      z-index: 100;
+    }
+
+    /* Left Language Pill */
+    .pill-source {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 0.88rem;
+      font-weight: 600;
+      padding: 0.35rem 1.1rem;
+      border-radius: 999px;
+      letter-spacing: 0.04em;
+    }
+
+    /* Center Mosque Brand */
+    .center-brand {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: #10b981;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 1.15rem;
+      color: #030711;
+      box-shadow: 0 0 15px var(--emerald-glow);
+    }
+
+    #mosque-name {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #f8fafc;
+    }
+
+    /* Right Target Language Pill */
+    .pill-target {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      color: #34d399;
+      font-size: 0.88rem;
+      font-weight: 700;
+      padding: 0.35rem 1.1rem;
+      border-radius: 999px;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .pill-target:hover {
+      background: rgba(16, 185, 129, 0.2);
+    }
+
+    .live-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.75); } }
+
+    /* ─── MAIN STAGE: 2 SPLIT COLUMNS ─── */
+    #stage {
+      position: fixed;
+      top: 68px; bottom: 0; left: 0; right: 0;
+      display: flex;
+    }
+
+    .split-col {
+      flex: 1;
+      height: 100%;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding: 3rem 4rem 4rem;
+      overflow: hidden;
+    }
+
+    /* Left Side: Arabic */
+    #arabic-col {
+      border-right: 1px solid var(--divider);
+      direction: rtl;
+      background: radial-gradient(circle at 10% 90%, rgba(16, 185, 129, 0.03) 0%, transparent 60%);
+    }
+
+    /* Right Side: Translation */
+    #trans-col {
+      direction: ltr;
+      background: radial-gradient(circle at 90% 90%, rgba(59, 130, 246, 0.02) 0%, transparent 60%);
+    }
+
+    /* Content Scrolling Feed */
+    .feed-container {
+      display: flex;
+      flex-direction: column;
+      gap: 1.75rem;
+      justify-content: flex-end;
+      width: 100%;
+      transition: transform 0.4s ease;
+    }
+
+    /* Text Paragraph Styles with Dimmed History */
+    .para-item {
+      transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* Arabic Text */
+    #arabic-col .para-item {
+      font-family: 'Amiri', serif;
+      line-height: 1.75;
+      text-align: right;
+    }
+
+    #arabic-col .para-item.history {
+      font-size: clamp(1.8rem, 2.8vw, 2.6rem);
+      color: rgba(255, 255, 255, 0.38);
+      font-weight: 400;
+      filter: blur(0.2px);
+    }
+
+    #arabic-col .para-item.current {
+      font-size: clamp(2.3rem, 4vw, 3.6rem);
+      color: #ffffff;
+      font-weight: 700;
+      text-shadow: 0 0 35px rgba(255, 255, 255, 0.25);
+      animation: textGlowIn 0.5s ease;
+    }
+
+    /* Translated Text */
+    #trans-col .para-item {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      line-height: 1.5;
+      text-align: left;
+    }
+
+    #trans-col .para-item.history {
+      font-size: clamp(1.4rem, 2vw, 2rem);
+      color: rgba(255, 255, 255, 0.38);
+      font-weight: 400;
+      filter: blur(0.2px);
+    }
+
+    #trans-col .para-item.current {
+      font-size: clamp(1.8rem, 2.8vw, 2.8rem);
+      color: #ffffff;
+      font-weight: 600;
+      text-shadow: 0 0 35px rgba(255, 255, 255, 0.25);
+      animation: textGlowIn 0.5s ease;
+    }
+
+    @keyframes textGlowIn {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Placeholder Idle Welcome Text */
+    .idle-placeholder {
+      color: rgba(255, 255, 255, 0.25);
+      font-style: italic;
+      text-align: center;
+      margin: auto 0;
+      font-size: 1.5rem;
+    }
+
+    /* ─── BOTTOM RIGHT QR WIDGET (Matches Competitor Photo) ─── */
+    #qr-widget {
+      position: fixed;
+      bottom: 2rem;
+      right: 2.5rem;
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: rgba(10, 20, 32, 0.75);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      padding: 0.65rem 0.75rem 0.55rem;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+      transition: transform 0.2s ease;
+    }
+    #qr-widget:hover {
+      transform: scale(1.02);
+    }
+
+    .qr-frame {
+      background: #ffffff;
+      padding: 0.35rem;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #qr-img {
+      width: 108px;
+      height: 108px;
+      display: block;
+      image-rendering: pixelated;
+    }
+
+    .qr-caption {
+      margin-top: 0.5rem;
+      font-size: 0.68rem;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.85);
+      text-align: center;
+    }
+
+    /* ─── FULLSCREEN QURAN AYAH OVERLAY ─── */
+    #ayah-overlay {
+      display: none;
+      position: fixed;
+      inset: 68px 0 0 0;
+      z-index: 150;
+      background: rgba(3, 7, 17, 0.96);
+      backdrop-filter: blur(20px);
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 6rem;
+      text-align: center;
+    }
+    #ayah-overlay.active {
+      display: flex;
+      animation: fadeIn 0.4s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .ayah-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      color: #030711;
+      font-weight: 800;
+      font-size: 0.95rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 0.4rem 1.25rem;
+      border-radius: 999px;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 0 25px rgba(245, 158, 11, 0.35);
+    }
+
+    #ayah-reference {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--gold-light);
+      margin-bottom: 2rem;
+      letter-spacing: 0.05em;
+    }
+
+    #ayah-arabic {
+      font-family: 'Amiri', serif;
+      font-size: clamp(2.5rem, 5vw, 4.5rem);
+      line-height: 1.7;
+      direction: rtl;
+      color: #fef08a;
+      text-shadow: 0 0 45px rgba(245, 158, 11, 0.4);
+      margin-bottom: 2rem;
+      max-width: 1200px;
+    }
+
+    #ayah-trans {
+      font-size: clamp(1.4rem, 2.5vw, 2.2rem);
+      font-weight: 500;
+      font-style: italic;
+      color: rgba(255, 255, 255, 0.88);
+      max-width: 1050px;
+      line-height: 1.55;
+    }
+
+    /* Fullscreen Toggle Button */
+    #btn-fullscreen {
+      position: fixed;
+      top: 18px;
+      right: 1.25rem;
+      z-index: 250;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 0.8rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+    #btn-fullscreen:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff;
+    }
   </style>
 </head>
 <body>
-  <div id="topbar">
-    <div class="left">
-      <span style="font-size:1.6rem">🕌</span>
-      <span id="mosque-name">Masjid Al-Noor</span>
-      <div class="live-badge idle" id="live-badge">
-        <div class="pulse-dot"></div>
-        <span id="live-text">WAITING</span>
-      </div>
-    </div>
-    <span id="clock">--:--:--</span>
-  </div>
 
+  <!-- Top Bar -->
+  <header id="topbar">
+    <!-- Left: Source Language Indicator -->
+    <div class="pill-source">Arabic</div>
+
+    <!-- Center: Mosque / Center Branding -->
+    <div class="center-brand">
+      <div class="brand-icon">T</div>
+      <div id="mosque-name">MYO YOUTH CENTER</div>
+    </div>
+
+    <!-- Right: Target Display Language (Clickable to switch) -->
+    <div class="pill-target" id="pill-target-lang" title="Click to cycle translation language">
+      <div class="live-dot"></div>
+      <span id="target-lang-label">English</span>
+      <span style="font-size: 0.75rem; opacity: 0.6;">▾</span>
+    </div>
+  </header>
+
+  <!-- Fullscreen Button -->
   <button id="btn-fullscreen" onclick="toggleFullscreen()">⛶ Fullscreen</button>
 
-  <div id="stage">
-    <div id="waiting">
-      <div style="font-size:4rem">📖</div>
-      <h2>Friday Khutbah Starting Soon</h2>
-      <p>Scan the QR code to follow along and hear live translation in your own language</p>
-      <div class="waiting-qr"><img id="waiting-qr-img" src="" alt="Join QR" /></div>
-      <div class="scan-label">📱 Scan to join on your phone — no app needed</div>
-    </div>
+  <!-- Split Screen Stage -->
+  <main id="stage">
+    <!-- Left Column: Arabic Stream -->
+    <section class="split-col" id="arabic-col">
+      <div class="feed-container" id="arabic-feed">
+        <div class="idle-placeholder">في انتظار بدء الخطبة...</div>
+      </div>
+    </section>
 
-    <div id="split-screen">
-      <div id="arabic-panel">
-        <span class="panel-label">Arabic — عربي</span>
-        <div id="arabic-text" dir="rtl"></div>
+    <!-- Right Column: Translation Stream -->
+    <section class="split-col" id="trans-col">
+      <div class="feed-container" id="trans-feed">
+        <div class="idle-placeholder">Waiting for sermon to begin...</div>
       </div>
-      <div id="translation-panel">
-        <span id="lang-indicator" class="panel-label">English</span>
-        <div id="translated-text"></div>
-      </div>
-      <div id="ayah-banner">
-        <div class="ayah-badge">📖 Holy Quran</div>
-        <div id="ayah-reference"></div>
-        <div id="ayah-arabic" dir="rtl"></div>
-        <div id="ayah-translation"></div>
-      </div>
-    </div>
-  </div>
+    </section>
+  </main>
 
-  <div id="qr-corner">
-    <div class="qr-label">Scan to listen</div>
-    <div class="qr-box"><img id="qr-img" src="" alt="Join QR" /></div>
-    <div class="join-url" id="join-url-text"></div>
+  <!-- Bottom Right QR Widget: "LISTEN ON YOUR PHONE" -->
+  <aside id="qr-widget" title="Scan to open translation on your phone">
+    <div class="qr-frame">
+      <img id="qr-img" src="" alt="Scan QR to listen on phone" />
+    </div>
+    <div class="qr-caption">LISTEN ON YOUR PHONE</div>
+  </aside>
+
+  <!-- Quran Ayah Fullscreen Overlay -->
+  <div id="ayah-overlay">
+    <div class="ayah-badge">📖 Holy Quran</div>
+    <div id="ayah-reference">Surah Ali 'Imran (3:102)</div>
+    <div id="ayah-arabic" dir="rtl"></div>
+    <div id="ayah-trans"></div>
   </div>
 
   <script src="display.js"></script>

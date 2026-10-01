@@ -10,6 +10,7 @@ const express = require('express');
 const cors = require('cors');
 const { WebSocketServer } = require('ws');
 
+const QRCode = require('qrcode');
 const { SessionManager } = require('./sessionManager');
 const { STTService } = require('./services/sttService');
 const { TranslationService } = require('./services/translationService');
@@ -18,6 +19,7 @@ const { QuranAIDetector } = require('./services/quranAiDetector');
 
 const PORT = process.env.PORT || 3000;
 const app = express();
+app.set('trust proxy', 1);
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
@@ -211,6 +213,25 @@ app.get('/api/session/:id', async (req, res) => {
   session = await sessionManager.updateHostUrl(req.params.id, hostUrl);
   const stats = sessionManager.getSessionStats(req.params.id);
   res.json({ ...session, stats });
+});
+
+// Dynamic QR code generator (renders directly as PNG)
+app.get('/api/qrcode', async (req, res) => {
+  const text = req.query.text || '';
+  if (!text) return res.status(400).send('Text parameter required');
+  try {
+    const dataUrl = await QRCode.toDataURL(text, {
+      margin: 1,
+      width: 320,
+      color: { dark: '#000000', light: '#ffffff' }
+    });
+    const imgBuffer = Buffer.from(dataUrl.split(',')[1], 'base64');
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send(imgBuffer);
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
 });
 
 // Create custom session
