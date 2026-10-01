@@ -65,6 +65,15 @@ const btnSubmitAuth = document.getElementById('btn-submit-auth');
 const authErrorMsg = document.getElementById('auth-error-msg');
 const btnLogout = document.getElementById('btn-logout');
 
+// QR Preview Modal elements
+const modalQrPreview = document.getElementById('modal-qr-preview');
+const btnCloseQrModal = document.getElementById('btn-close-qr-modal');
+const qrModalMosqueName = document.getElementById('qr-modal-mosque-name');
+const qrModalImg = document.getElementById('qr-modal-img');
+const qrModalLinkText = document.getElementById('qr-modal-link-text');
+const btnCopyQrModalLink = document.getElementById('btn-copy-qr-modal-link');
+const btnOpenQrModalLink = document.getElementById('btn-open-qr-modal-link');
+
 let transcriptItemsCount = 0;
 
 // ─── AUTHENTICATION ───
@@ -181,7 +190,7 @@ async function loadAllSessionsList() {
       card.className = `session-card-item ${sess.status === 'active' ? 'active' : ''}`;
 
       const statusMap = {
-        active: { class: 'active', text: '● LIVE KHUTBAH' },
+        active: { class: 'active', text: '● LIVE' },
         paused: { class: 'paused', text: '⏸ PAUSED' },
         idle: { class: 'idle', text: '⏳ WAITING / IDLE' },
         ended: { class: 'ended', text: '⏹ CONCLUDED' }
@@ -204,22 +213,60 @@ async function loadAllSessionsList() {
         </div>
 
         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem;">
-          <a href="/admin.html?session=${encodeURIComponent(sess.id)}" class="btn btn-primary" style="flex: 1; text-align: center; font-size: 0.82rem; padding: 0.45rem;">
+          <a href="/admin.html?session=${encodeURIComponent(sess.id)}" class="btn btn-primary" style="flex: 1 1 100%; text-align: center; font-size: 0.84rem; padding: 0.48rem;">
             🎙️ Open Pulpit Console →
           </a>
-          <a href="/display.html?session=${encodeURIComponent(sess.id)}" target="_blank" class="btn btn-secondary" style="font-size: 0.82rem; padding: 0.45rem;">
+          <button type="button" class="btn btn-secondary btn-show-session-qr" data-session-id="${sess.id}" data-mosque-name="${sess.mosqueName}" data-lang="${sess.primaryLanguage || 'en'}" style="flex: 1; font-size: 0.82rem; padding: 0.45rem;">
+            📱 Show QR Code
+          </button>
+          <a href="/display.html?session=${encodeURIComponent(sess.id)}" target="_blank" class="btn btn-secondary" style="flex: 1; font-size: 0.82rem; padding: 0.45rem;">
             📺 TV Display ↗
-          </a>
-          <a href="/join.html?session=${encodeURIComponent(sess.id)}" target="_blank" class="btn btn-secondary" style="font-size: 0.82rem; padding: 0.45rem;">
-            📱 Join ↗
           </a>
         </div>
       `;
       sessionsGridContainer.appendChild(card);
     });
+
+    // Wire up QR Code preview buttons
+    document.querySelectorAll('.btn-show-session-qr').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const sid = e.currentTarget.getAttribute('data-session-id');
+        const mname = e.currentTarget.getAttribute('data-mosque-name');
+        const lang = e.currentTarget.getAttribute('data-lang') || 'en';
+        openQrModal(sid, mname, lang);
+      });
+    });
   } catch (err) {
     console.warn('Failed loading sessions:', err.message);
   }
+}
+
+function openQrModal(sessionId, mosqueName, lang = 'en') {
+  const joinUrl = `${window.location.origin}/join.html?session=${encodeURIComponent(sessionId)}&lang=${encodeURIComponent(lang)}`;
+  if (qrModalMosqueName) qrModalMosqueName.textContent = mosqueName || sessionId;
+  if (qrModalImg) {
+    qrModalImg.src = `/api/qrcode?text=${encodeURIComponent(joinUrl)}`;
+    qrModalImg.onerror = () => {
+      qrModalImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(joinUrl)}`;
+    };
+  }
+  if (qrModalLinkText) qrModalLinkText.textContent = joinUrl;
+  if (btnOpenQrModalLink) btnOpenQrModalLink.href = joinUrl;
+  if (btnCopyQrModalLink) {
+    btnCopyQrModalLink.onclick = () => {
+      navigator.clipboard.writeText(joinUrl).then(() => {
+        btnCopyQrModalLink.textContent = '✅ Copied!';
+        setTimeout(() => btnCopyQrModalLink.textContent = '📋 Copy Link', 2000);
+      });
+    };
+  }
+  if (modalQrPreview) modalQrPreview.style.display = 'flex';
+}
+
+if (btnCloseQrModal) {
+  btnCloseQrModal.addEventListener('click', () => {
+    if (modalQrPreview) modalQrPreview.style.display = 'none';
+  });
 }
 
 // Create New Session Modal Logic
@@ -297,14 +344,19 @@ function updateControlLockState() {
     manualInput.placeholder = 'Type or paste Arabic text / Ayah to test...';
     lockBanner.className = 'control-lock-banner unlocked';
     lockBannerIcon.textContent = '🟢';
-    lockBannerText.innerHTML = '<strong>Khutbah is LIVE!</strong> Microphone input and live translation broadcasting are enabled.';
+    lockBannerText.innerHTML = '<strong>Session is LIVE!</strong> Microphone input and live translation broadcasting are enabled.';
+  } else if (sessionStatus === 'paused') {
+    manualInput.placeholder = 'Session paused. Click "▶ Resume" to continue...';
+    lockBanner.className = 'control-lock-banner';
+    lockBannerIcon.textContent = '⏸';
+    lockBannerText.innerHTML = '<strong>Session is PAUSED.</strong> Translation is paused. Click <strong>"▶ Resume"</strong> to continue.';
+    if (micActive) stopMicrophone();
   } else {
-    manualInput.placeholder = 'Click "▶ Start Khutbah" first to enable live translation testing...';
+    manualInput.placeholder = 'Click "▶ Start" first to enable live translation testing...';
     lockBanner.className = 'control-lock-banner';
     lockBannerIcon.textContent = '🔒';
-    lockBannerText.innerHTML = 'Controls are locked. Click <strong>"▶ Start Khutbah"</strong> to activate the microphone and begin live translation broadcasting.';
+    lockBannerText.innerHTML = 'Controls are locked. Click <strong>"▶ Start"</strong> to activate the microphone and begin live translation broadcasting.';
 
-    // If microphone was running, stop it immediately
     if (micActive) {
       stopMicrophone();
     }
@@ -315,9 +367,12 @@ function updateControlLockState() {
 function setSessionActive(startedAt) {
   sessionStatus = 'active';
   sessionBadge.className = 'badge badge-live';
-  sessionStatusText.textContent = 'LIVE KHUTBAH';
+  sessionStatusText.textContent = 'LIVE';
+  btnStart.textContent = '▶ Start';
   btnStart.disabled = true;
+  btnPause.textContent = '⏸ Pause';
   btnPause.disabled = false;
+  btnEnd.textContent = '⏹ End';
   btnEnd.disabled = false;
 
   sessionStartTime = startedAt ? new Date(startedAt) : new Date();
@@ -331,6 +386,7 @@ function setSessionPaused() {
   sessionStatus = 'paused';
   sessionBadge.className = 'badge badge-idle';
   sessionStatusText.textContent = 'PAUSED';
+  btnStart.textContent = '▶ Resume';
   btnStart.disabled = false;
   btnPause.disabled = true;
   btnEnd.disabled = false;
@@ -341,10 +397,11 @@ function setSessionEnded() {
   sessionStatus = 'ended';
   sessionBadge.className = 'badge badge-idle';
   sessionStatusText.textContent = 'ENDED';
+  btnStart.textContent = '▶ Start';
   btnStart.disabled = false;
   btnPause.disabled = true;
   btnEnd.disabled = true;
-  btnSimulate.textContent = '⚡ Simulate Live Khutbah Demo';
+  btnSimulate.textContent = '⚡ Simulate Demo';
   isSimulating = false;
 
   clearInterval(timerInterval);
@@ -377,7 +434,7 @@ btnPause.addEventListener('click', async () => {
 });
 
 btnEnd.addEventListener('click', async () => {
-  if (confirm('Are you sure you want to conclude this Khutbah session?')) {
+  if (confirm('Are you sure you want to conclude this session?')) {
     setSessionEnded();
     try {
       await fetch(`/api/session/${currentSessionId}/end`, { method: 'POST' });
@@ -404,7 +461,7 @@ btnSimulate.addEventListener('click', async () => {
       await fetch(`/api/session/${currentSessionId}/simulate/stop`, { method: 'POST' });
     } catch (e) {}
     isSimulating = false;
-    btnSimulate.textContent = '⚡ Simulate Live Khutbah Demo';
+    btnSimulate.textContent = '⚡ Simulate Demo';
     btnSimulate.className = 'btn btn-accent';
   }
 });
@@ -412,7 +469,7 @@ btnSimulate.addEventListener('click', async () => {
 // Manual Text Injection (Strictly guarded)
 btnInject.addEventListener('click', async () => {
   if (sessionStatus !== 'active') {
-    alert('Khutbah is not active! Please click "▶ Start Khutbah" first.');
+    alert('Session is not active! Please click "▶ Start" or "▶ Resume" first.');
     return;
   }
   const text = manualInput.value.trim();
@@ -442,7 +499,7 @@ manualInput.addEventListener('keydown', (e) => {
 // ─── HARDWARE MIC INPUT (Web Speech API) ───
 btnToggleMic.addEventListener('click', async () => {
   if (sessionStatus !== 'active') {
-    alert('Please click "▶ Start Khutbah" before turning on the live microphone.');
+    alert('Please click "▶ Start" before turning on the live microphone.');
     return;
   }
 
@@ -531,35 +588,35 @@ async function initConsoleSession(sessionId) {
     const res = await fetch(`/api/session/${sessionId}`);
     if (res.ok) {
       const data = await res.json();
-      mosqueTitle.textContent = `${data.mosqueName} — Khutbah Console`;
+      mosqueTitle.textContent = `${data.mosqueName} — Pulpit Console`;
       if (data.status === 'active') setSessionActive(data.startedAt);
       else if (data.status === 'paused') setSessionPaused();
       else if (data.status === 'ended') setSessionEnded();
       else updateControlLockState();
 
       if (data.stats) updateStatsDisplay(data.stats);
+
+      // Update dynamic links with session primary language
+      const joinUrl = `${window.location.origin}/join.html?session=${encodeURIComponent(sessionId)}&lang=${encodeURIComponent(data.primaryLanguage || 'en')}`;
+      const tvUrl = `/display.html?session=${encodeURIComponent(sessionId)}`;
+      if (btnOpenJoin) btnOpenJoin.href = joinUrl;
+      if (btnOpenTvSide) btnOpenTvSide.href = tvUrl;
+      if (headerBtnTv) headerBtnTv.href = tvUrl;
+
+      if (qrCodeImg) {
+        qrCodeImg.src = `/api/qrcode?text=${encodeURIComponent(joinUrl)}`;
+      }
+
+      if (btnCopyLink) {
+        btnCopyLink.onclick = () => {
+          navigator.clipboard.writeText(joinUrl).then(() => {
+            btnCopyLink.textContent = '✅ Copied!';
+            setTimeout(() => btnCopyLink.textContent = '📋 Copy Link', 2000);
+          });
+        };
+      }
     }
   } catch (err) {}
-
-  // Update dynamic links
-  const joinUrl = `${window.location.origin}/join.html?session=${encodeURIComponent(sessionId)}`;
-  const tvUrl = `/display.html?session=${encodeURIComponent(sessionId)}`;
-  if (btnOpenJoin) btnOpenJoin.href = joinUrl;
-  if (btnOpenTvSide) btnOpenTvSide.href = tvUrl;
-  if (headerBtnTv) headerBtnTv.href = tvUrl;
-
-  if (qrCodeImg) {
-    qrCodeImg.src = `/api/qrcode?text=${encodeURIComponent(joinUrl)}`;
-  }
-
-  if (btnCopyLink) {
-    btnCopyLink.onclick = () => {
-      navigator.clipboard.writeText(joinUrl).then(() => {
-        btnCopyLink.textContent = '✅ Copied!';
-        setTimeout(() => btnCopyLink.textContent = '📋 Copy Link', 2000);
-      });
-    };
-  }
 
   connectWebSocket(sessionId);
 }
@@ -602,6 +659,11 @@ function connectWebSocket(sessionId) {
   ws.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data);
+      if (data.type === 'SESSION_STATUS') {
+        if (data.status === 'active') setSessionActive(data.startedAt);
+        else if (data.status === 'paused') setSessionPaused();
+        else if (data.status === 'ended') setSessionEnded();
+      }
       if (data.type === 'SESSION_STATS') updateStatsDisplay(data.stats);
       if (data.type === 'LIVE_SUBTITLE') addTranscriptEntry(data);
     } catch (e) {}

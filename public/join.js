@@ -1,7 +1,8 @@
-// MosqAI - Attendee Mobile App Script (Direct Competitor Tarjam UI Match)
+// MosqAI - Attendee Mobile App Script (Competitor Layout with History Persistence & Audio Off by Default)
 const urlParams = new URLSearchParams(window.location.search);
-const sessionId = urlParams.get('session') || 'jumuah-live';
+const sessionId = urlParams.get('session') || 'myo-youth';
 let currentLanguage = urlParams.get('lang') || 'en';
+let currentMosqueName = 'Live Sermon';
 
 const LANGUAGES = [
   { code: 'en', name: 'English', native: 'English', flag: '🇬🇧' },
@@ -15,7 +16,7 @@ const LANGUAGES = [
 ];
 
 let ws = null;
-let isAudioEnabled = true;
+let isAudioEnabled = false; // INITIALLY COMPLETELY OFF!
 let audioCtx = null;
 const audioQueue = [];
 let isPlayingAudio = false;
@@ -26,6 +27,7 @@ let lastSyncTime = null;
 const step1 = document.getElementById('step1');
 const step2 = document.getElementById('step2');
 const step3 = document.getElementById('step3');
+const s1MosqueName = document.getElementById('s1-mosque-name');
 const btnJoin = document.getElementById('btn-join');
 const btnConfirmLang = document.getElementById('btn-confirm-lang');
 const btnBack = document.getElementById('btn-back');
@@ -36,6 +38,9 @@ const modalLangGrid = document.getElementById('modal-lang-grid');
 const currentLangNameEl = document.getElementById('current-lang-name');
 const mobileCardsFeed = document.getElementById('mobile-cards-feed');
 const activeListeningCard = document.getElementById('active-listening-card');
+const compLiveBadge = document.querySelector('.comp-live-badge');
+const mobileSessionBanner = document.getElementById('mobile-session-banner');
+const mobileSessionBannerText = document.getElementById('mobile-session-banner-text');
 
 // Audio elements
 const btnToggleAudio = document.getElementById('btn-toggle-audio');
@@ -56,6 +61,45 @@ function updateLangDisplay() {
   }
 }
 
+function updateMobileStatus(status, mosqueName) {
+  if (mosqueName) currentMosqueName = mosqueName;
+
+  if (status === 'active') {
+    if (compLiveBadge) {
+      compLiveBadge.innerHTML = '<div class="pulsing-dot"></div> LIVE';
+      compLiveBadge.style.cssText = 'background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); color: #34d399;';
+    }
+    if (mobileSessionBanner) {
+      mobileSessionBanner.style.display = 'block';
+      mobileSessionBanner.style.background = 'rgba(16, 185, 129, 0.15)';
+      mobileSessionBanner.style.color = '#34d399';
+      mobileSessionBannerText.textContent = `${currentMosqueName} — LIVE`;
+    }
+  } else if (status === 'paused') {
+    if (compLiveBadge) {
+      compLiveBadge.innerHTML = '⏸ PAUSED';
+      compLiveBadge.style.cssText = 'background: rgba(245, 158, 11, 0.2); border: 1px solid rgba(245, 158, 11, 0.4); color: #fbbf24;';
+    }
+    if (mobileSessionBanner) {
+      mobileSessionBanner.style.display = 'block';
+      mobileSessionBanner.style.background = 'rgba(245, 158, 11, 0.2)';
+      mobileSessionBanner.style.color = '#fde68a';
+      mobileSessionBannerText.textContent = `${currentMosqueName} — Live Translation Paused`;
+    }
+  } else if (status === 'ended') {
+    if (compLiveBadge) {
+      compLiveBadge.innerHTML = '⏹ ENDED';
+      compLiveBadge.style.cssText = 'background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171;';
+    }
+    if (mobileSessionBanner) {
+      mobileSessionBanner.style.display = 'block';
+      mobileSessionBanner.style.background = 'rgba(239, 68, 68, 0.2)';
+      mobileSessionBanner.style.color = '#fca5a5';
+      mobileSessionBannerText.textContent = `${currentMosqueName} — Session Ended`;
+    }
+  }
+}
+
 // ─── STEP NAVIGATION ───
 function showStep(num) {
   step1.classList.remove('active');
@@ -69,7 +113,6 @@ function showStep(num) {
 // Step 1: Join Click
 if (btnJoin) {
   btnJoin.addEventListener('click', () => {
-    // If lang was explicitly passed in URL, jump directly to feed
     if (urlParams.has('lang')) {
       showStep(3);
       initLiveSession();
@@ -122,7 +165,6 @@ function renderModalLangs() {
       currentLanguage = l.code;
       updateLangDisplay();
       closeLangModal();
-      // Notify server of language change
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
           type: 'JOIN_ROOM',
@@ -153,33 +195,34 @@ if (langModal) {
   });
 }
 
-// ─── AUDIO TOGGLE & SYNTHESIS ───
-function toggleAudio() {
+// ─── AUDIO TOGGLE & SYNTHESIS (Off by default, Turn on when clicked) ───
+async function toggleAudio() {
   isAudioEnabled = !isAudioEnabled;
   if (isAudioEnabled) {
     if (playPauseIcon) playPauseIcon.textContent = '⏸';
     if (audioFreqBars) audioFreqBars.classList.remove('idle');
     if (playerTitle) playerTitle.textContent = 'Translating live';
     if (playerSubtitle) playerSubtitle.textContent = `Streaming in ${getLangName(currentLanguage)}`;
-    // Resume audio context
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') await audioCtx.resume();
+    } catch (e) {}
   } else {
     if (playPauseIcon) playPauseIcon.textContent = '▶';
     if (audioFreqBars) audioFreqBars.classList.add('idle');
-    if (playerTitle) playerTitle.textContent = 'Audio muted';
-    if (playerSubtitle) playerSubtitle.textContent = 'Tap play to resume earbuds voice';
+    if (playerTitle) playerTitle.textContent = 'Audio off';
+    if (playerSubtitle) playerSubtitle.textContent = 'Tap play to stream audio to earbuds';
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
   }
 }
 
 if (btnToggleAudio) btnToggleAudio.addEventListener('click', toggleAudio);
 
-// ─── RENDERING COMPETITOR SERMON CARDS ───
+// ─── RENDERING SERMON CARDS ───
 function renderSermonCard({ arabic, translations, translated, ayah, timestamp }) {
   if (!arabic && !translated) return;
 
-  // Resolve translation text for current language
   let displayText = '';
   if (ayah) {
     displayText = (ayah.translations && (ayah.translations[currentLanguage] || ayah.translations['en'])) ||
@@ -193,7 +236,6 @@ function renderSermonCard({ arabic, translations, translated, ayah, timestamp })
   const card = document.createElement('div');
   card.className = 'sermon-card';
 
-  // Tag: Quran, Hadith, or Sermon
   let tagHtml = '';
   if (ayah) {
     const ref = ayah.reference || `Quran ${ayah.surahNumber || ''}:${ayah.ayahNumber || ''}`;
@@ -211,19 +253,15 @@ function renderSermonCard({ arabic, translations, translated, ayah, timestamp })
     ${tagHtml}
   `;
 
-  // Insert before active listening card
   mobileCardsFeed.insertBefore(card, activeListeningCard);
-
-  // Scroll to bottom
   mobileCardsFeed.scrollTop = mobileCardsFeed.scrollHeight;
 
-  // Play audio if enabled
+  // Speak only if user explicitly turned audio on
   if (isAudioEnabled && displayText) {
     speakSpeech(displayText, currentLanguage);
   }
 }
 
-// ─── AUDIO PLAYBACK (Cartesia or Web Speech Synthesis) ───
 function speakSpeech(text, lang) {
   if (!('speechSynthesis' in window)) return;
   try {
@@ -253,6 +291,9 @@ function connectWebSocket() {
   ws.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data);
+      if (data.type === 'SESSION_STATUS') {
+        updateMobileStatus(data.status, data.mosqueName);
+      }
       if (data.type === 'LIVE_SUBTITLE') {
         const key = data.timestamp || `${data.arabic}_${Date.now()}`;
         if (!renderedTimestamps.has(key)) {
@@ -275,6 +316,9 @@ function startFeedSync() {
       const res = await fetch(url);
       if (!res.ok) return;
       const data = await res.json();
+      if (data.status) {
+        updateMobileStatus(data.status, data.mosqueName);
+      }
       if (data.serverTime) lastSyncTime = data.serverTime;
       if (data.transcripts && data.transcripts.length > 0) {
         data.transcripts.forEach(item => {
@@ -299,29 +343,48 @@ async function fetchMosqueDetails() {
     const res = await fetch(`/api/session/${sessionId}`);
     if (res.ok) {
       const data = await res.json();
-      if (data.mosqueName && s1MosqueName) {
-        const parts = data.mosqueName.split(' ');
-        s1MosqueName.innerHTML = `<span>${parts[0]}</span> ${parts.slice(1).join(' ')}`;
+      if (data.mosqueName) {
+        currentMosqueName = data.mosqueName;
+        if (s1MosqueName) {
+          const parts = data.mosqueName.split(' ');
+          s1MosqueName.innerHTML = `<span>${parts[0]}</span> ${parts.slice(1).join(' ')}`;
+        }
       }
+      if (data.status) {
+        updateMobileStatus(data.status, data.mosqueName);
+      }
+      return data;
     }
   } catch (err) {}
+  return null;
 }
 fetchMosqueDetails();
 
 async function initLiveSession() {
   updateLangDisplay();
-  await fetchMosqueDetails();
+  const sessionData = await fetchMosqueDetails();
+
+  // ─── RESTORE PREVIOUS CARDS ON PAGE REFRESH ───
+  if (sessionData && sessionData.transcripts && sessionData.transcripts.length > 0) {
+    sessionData.transcripts.forEach(item => {
+      if (!renderedTimestamps.has(item.timestamp)) {
+        renderedTimestamps.add(item.timestamp);
+        renderSermonCard({
+          arabic: item.arabic,
+          translations: item.translations,
+          translated: (item.translations && item.translations[currentLanguage]) || (item.translations && item.translations.en) || item.arabic,
+          ayah: item.ayah,
+          timestamp: item.timestamp
+        });
+      }
+    });
+  }
+
   connectWebSocket();
   startFeedSync();
-
-  // Try to pre-warm audio context on user interaction
-  try {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') await audioCtx.resume();
-  } catch (e) {}
 }
 
-// If session or lang pre-set, automatically start
+// Auto-start if session and lang in URL
 if (urlParams.has('session') && urlParams.has('lang')) {
   currentLanguage = urlParams.get('lang') || 'en';
   showStep(3);

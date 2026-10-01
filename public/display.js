@@ -1,8 +1,9 @@
-// MosqAI - Live TV Split-Screen Script (Enhanced with Dropdown & QR Safety)
+// MosqAI - Live TV Split-Screen Script (Enhanced with Dropdown, Safe QR & History Persistence)
 const urlParams = new URLSearchParams(window.location.search);
 const sessionId = urlParams.get('session') || 'myo-youth';
 
 let targetLang = urlParams.get('lang') || 'en';
+let currentMosqueName = 'MYO YOUTH CENTER';
 let ws = null;
 let lastDisplayTimestamp = null;
 let ayahTimer = null;
@@ -14,6 +15,10 @@ const transHistory = [];
 
 // DOM Elements
 const mosqueNameEl = document.getElementById('mosque-name');
+const sessionStatusBadge = document.getElementById('session-status-badge');
+const stageStatusBanner = document.getElementById('stage-status-banner');
+const stageStatusText = document.getElementById('stage-status-text');
+const liveDotIndicator = document.getElementById('live-dot-indicator');
 const targetLangSelect = document.getElementById('target-lang-select');
 const arabicFeed = document.getElementById('arabic-feed');
 const transFeed = document.getElementById('trans-feed');
@@ -25,14 +30,12 @@ const ayahTransEl = document.getElementById('ayah-trans');
 
 // Initialize Dropdown Selection
 if (targetLangSelect) {
-  // If lang is in URL, set dropdown
   if (['en', 'uz', 'tr', 'ur', 'bn', 'fr', 'id', 'so'].includes(targetLang)) {
     targetLangSelect.value = targetLang;
   } else {
     targetLang = targetLangSelect.value;
   }
 
-  // Handle Dropdown Change
   targetLangSelect.addEventListener('change', () => {
     targetLang = targetLangSelect.value;
     initQRCode();
@@ -40,8 +43,62 @@ if (targetLangSelect) {
   });
 }
 
+function updateTVStatusUI(status, mosqueName) {
+  if (mosqueName) currentMosqueName = mosqueName;
+  if (mosqueNameEl) mosqueNameEl.textContent = currentMosqueName;
+
+  if (status === 'active') {
+    if (sessionStatusBadge) {
+      sessionStatusBadge.style.cssText = 'font-size: 0.72rem; font-weight: 800; padding: 0.2rem 0.6rem; border-radius: 999px; letter-spacing: 0.05em; background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.4); color: #34d399;';
+      sessionStatusBadge.textContent = 'LIVE';
+    }
+    if (liveDotIndicator) liveDotIndicator.style.display = 'block';
+    if (stageStatusBanner) {
+      stageStatusBanner.style.display = 'block';
+      stageStatusBanner.style.background = 'rgba(16, 185, 129, 0.2)';
+      stageStatusBanner.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+      stageStatusBanner.style.color = '#34d399';
+      stageStatusText.textContent = `${currentMosqueName} — LIVE`;
+    }
+  } else if (status === 'paused') {
+    if (sessionStatusBadge) {
+      sessionStatusBadge.style.cssText = 'font-size: 0.72rem; font-weight: 800; padding: 0.2rem 0.6rem; border-radius: 999px; letter-spacing: 0.05em; background: rgba(245, 158, 11, 0.2); border: 1px solid rgba(245, 158, 11, 0.4); color: #fbbf24;';
+      sessionStatusBadge.textContent = 'PAUSED';
+    }
+    if (liveDotIndicator) liveDotIndicator.style.display = 'none';
+    if (stageStatusBanner) {
+      stageStatusBanner.style.display = 'block';
+      stageStatusBanner.style.background = 'rgba(245, 158, 11, 0.25)';
+      stageStatusBanner.style.border = '1px solid rgba(245, 158, 11, 0.4)';
+      stageStatusBanner.style.color = '#fde68a';
+      stageStatusText.textContent = `${currentMosqueName} — Live Translation Paused`;
+    }
+  } else if (status === 'ended') {
+    if (sessionStatusBadge) {
+      sessionStatusBadge.style.cssText = 'font-size: 0.72rem; font-weight: 800; padding: 0.2rem 0.6rem; border-radius: 999px; letter-spacing: 0.05em; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171;';
+      sessionStatusBadge.textContent = 'ENDED';
+    }
+    if (liveDotIndicator) liveDotIndicator.style.display = 'none';
+    if (stageStatusBanner) {
+      stageStatusBanner.style.display = 'block';
+      stageStatusBanner.style.background = 'rgba(239, 68, 68, 0.25)';
+      stageStatusBanner.style.border = '1px solid rgba(239, 68, 68, 0.4)';
+      stageStatusBanner.style.color = '#fca5a5';
+      stageStatusText.textContent = `${currentMosqueName} — Session Ended`;
+    }
+  } else {
+    // idle
+    if (sessionStatusBadge) {
+      sessionStatusBadge.style.cssText = 'font-size: 0.72rem; font-weight: 800; padding: 0.2rem 0.6rem; border-radius: 999px; letter-spacing: 0.05em; background: rgba(148, 163, 184, 0.15); border: 1px solid rgba(148, 163, 184, 0.3); color: #94a3b8;';
+      sessionStatusBadge.textContent = 'IDLE';
+    }
+    if (liveDotIndicator) liveDotIndicator.style.display = 'none';
+    if (stageStatusBanner) stageStatusBanner.style.display = 'none';
+  }
+}
+
 /**
- * Generate QR code pointing to the real, current origin
+ * Generate QR code pointing to current origin
  */
 function initQRCode() {
   const joinUrl = `${window.location.origin}/join.html?session=${encodeURIComponent(sessionId)}&lang=${encodeURIComponent(targetLang)}`;
@@ -59,7 +116,6 @@ function initQRCode() {
 function renderFeed() {
   if (arabicHistory.length === 0) return;
 
-  // Clear placeholders
   arabicFeed.innerHTML = '';
   transFeed.innerHTML = '';
 
@@ -89,7 +145,6 @@ function renderFeed() {
     transFeed.appendChild(p);
   });
 
-  // Scroll so latest paragraph is visible
   arabicFeed.parentElement.scrollTop = arabicFeed.parentElement.scrollHeight;
   transFeed.parentElement.scrollTop = transFeed.parentElement.scrollHeight;
 }
@@ -100,7 +155,7 @@ function renderFeed() {
 function handleIncomingSpeech({ arabic, translations, translated, ayah, timestamp }) {
   if (!arabic && !translated) return;
 
-  // 1. Quran Ayah Detection Overlay
+  // 1. Quran Ayah Overlay
   if (ayah) {
     showAyahOverlay(ayah, arabic, translations || translated);
   } else {
@@ -160,7 +215,7 @@ function hideAyahOverlay() {
 }
 
 /**
- * Initialize Session details
+ * Initialize Session details & RESTORE HISTORY ON REFRESH
  */
 async function initSession() {
   initQRCode();
@@ -169,13 +224,27 @@ async function initSession() {
     const res = await fetch(`/api/session/${sessionId}`);
     if (res.ok) {
       const data = await res.json();
-      if (data.mosqueName && mosqueNameEl) {
-        mosqueNameEl.textContent = data.mosqueName;
-      }
+      if (data.mosqueName) currentMosqueName = data.mosqueName;
+      updateTVStatusUI(data.status, data.mosqueName);
+
       if (data.primaryLanguage && targetLangSelect && !urlParams.has('lang')) {
         targetLang = data.primaryLanguage;
         targetLangSelect.value = targetLang;
         initQRCode();
+      }
+
+      // ─── RESTORE HISTORY ON PAGE REFRESH ───
+      if (data.transcripts && data.transcripts.length > 0) {
+        const recent = data.transcripts.slice(-MAX_HISTORY);
+        arabicHistory.length = 0;
+        transHistory.length = 0;
+        recent.forEach(item => {
+          if (item.arabic) arabicHistory.push(item.arabic);
+          const transObj = item.translations || (typeof item.translated === 'string' ? { [targetLang]: item.translated } : item.translated);
+          if (transObj) transHistory.push(transObj);
+        });
+        lastDisplayTimestamp = data.transcripts[data.transcripts.length - 1].timestamp;
+        renderFeed();
       }
     }
   } catch (err) {}
@@ -198,6 +267,9 @@ function connectWebSocket() {
   ws.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data);
+      if (data.type === 'SESSION_STATUS') {
+        updateTVStatusUI(data.status, data.mosqueName);
+      }
       if (data.type === 'LIVE_SUBTITLE') {
         lastDisplayTimestamp = data.timestamp;
         handleIncomingSpeech(data);
@@ -220,6 +292,9 @@ function startFeedSync() {
       const res = await fetch(url);
       if (!res.ok) return;
       const data = await res.json();
+      if (data.status) {
+        updateTVStatusUI(data.status, data.mosqueName);
+      }
       if (data.transcripts && data.transcripts.length > 0) {
         data.transcripts.forEach(item => {
           if (item.timestamp !== lastDisplayTimestamp) {

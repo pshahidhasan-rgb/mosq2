@@ -266,21 +266,28 @@ app.post('/api/session/create', async (req, res) => {
   res.json(session);
 });
 
-// Start Khutbah Session
+// Start Session
 app.post('/api/session/:id/start', (req, res) => {
   const session = sessionManager.startSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
   res.json(session);
 });
 
-// Pause Khutbah Session
+// Resume Session (alias to start)
+app.post('/api/session/:id/resume', (req, res) => {
+  const session = sessionManager.startSession(req.params.id);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+  res.json(session);
+});
+
+// Pause Session
 app.post('/api/session/:id/pause', (req, res) => {
   const session = sessionManager.pauseSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
   res.json(session);
 });
 
-// End Khutbah Session
+// End Session
 app.post('/api/session/:id/end', (req, res) => {
   sttService.stopSimulation();
   const session = sessionManager.endSession(req.params.id);
@@ -312,7 +319,7 @@ app.post('/api/session/:id/inject-text', async (req, res) => {
   if (!session) return res.status(404).json({ error: 'Session not found' });
   if (session.status !== 'active') {
     return res.status(400).json({
-      error: 'Khutbah is not active. Click "Start Khutbah" first to enable live translation.'
+      error: 'Session is not active. Click "Start" or "Resume" first to enable live translation.'
     });
   }
 

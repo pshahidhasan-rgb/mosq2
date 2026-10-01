@@ -128,6 +128,7 @@ class SessionManager {
     this.broadcastToSession(sessionId, {
       type: 'SESSION_STATUS',
       status: 'active',
+      mosqueName: session.mosqueName,
       startedAt: session.startedAt
     });
     return session;
@@ -139,7 +140,8 @@ class SessionManager {
     session.status = 'paused';
     this.broadcastToSession(sessionId, {
       type: 'SESSION_STATUS',
-      status: 'paused'
+      status: 'paused',
+      mosqueName: session.mosqueName
     });
     return session;
   }
@@ -176,6 +178,7 @@ class SessionManager {
     this.broadcastToSession(sessionId, {
       type: 'SESSION_STATUS',
       status: 'ended',
+      mosqueName: session.mosqueName,
       summary: archiveRecord
     });
 

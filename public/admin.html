@@ -78,7 +78,7 @@
       <div class="logo-area">
         <div class="logo-icon">🕌</div>
         <div class="logo-title">
-          <h1 id="mosque-title">MosqAI — Khutbah Console</h1>
+          <h1 id="mosque-title">MosqAI — Pulpit Console</h1>
           <p id="mosque-subtitle">Live Arabic Translation & Earbud Audio Hub</p>
         </div>
       </div>
@@ -130,7 +130,7 @@
     <div id="view-sessions-list" style="display: none;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
         <div>
-          <h2 style="font-size: 1.4rem; font-weight: 700;">Mosque & Khutbah Sessions</h2>
+          <h2 style="font-size: 1.4rem; font-weight: 700;">Mosque & Translation Sessions</h2>
           <p style="color: var(--text-secondary); font-size: 0.88rem;">Manage live pulpits, TV screens, and attendee channels for multiple mosques.</p>
         </div>
         <button id="btn-open-create-modal" class="btn btn-primary" style="font-size: 0.92rem; padding: 0.55rem 1.1rem; display: flex; align-items: center; gap: 0.4rem;">
@@ -150,7 +150,7 @@
       <!-- Session Lock Banner -->
       <div class="control-lock-banner" id="lock-banner">
         <span id="lock-banner-icon">🔒</span>
-        <span id="lock-banner-text">Controls are locked. Click <strong>"▶ Start Khutbah"</strong> to activate the microphone and begin live translation broadcasting.</span>
+        <span id="lock-banner-text">Controls are locked. Click <strong>"▶ Start"</strong> to activate the microphone and begin live translation broadcasting.</span>
       </div>
 
       <!-- Main Grid -->
@@ -167,10 +167,10 @@
             </div>
 
             <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1.25rem;">
-              <button id="btn-start" class="btn btn-primary">▶ Start Khutbah</button>
+              <button id="btn-start" class="btn btn-primary">▶ Start</button>
               <button id="btn-pause" class="btn btn-secondary" disabled>⏸ Pause</button>
-              <button id="btn-end" class="btn btn-danger" disabled>⏹ End Khutbah</button>
-              <button id="btn-simulate" class="btn btn-accent">⚡ Simulate Live Khutbah Demo</button>
+              <button id="btn-end" class="btn btn-danger" disabled>⏹ End</button>
+              <button id="btn-simulate" class="btn btn-accent">⚡ Simulate Demo</button>
             </div>
 
             <!-- Microphone Streaming Section -->
@@ -191,7 +191,7 @@
 
             <!-- Manual Speech / Ayah Injection for instant manual test (Guarded) -->
             <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
-              <input type="text" id="manual-input" class="form-select" disabled placeholder="Start Khutbah to enable live translation testing..." dir="rtl" style="font-family: var(--font-arabic); font-size: 1.05rem;" />
+              <input type="text" id="manual-input" class="form-select" disabled placeholder="Start session to enable live translation testing..." dir="rtl" style="font-family: var(--font-arabic); font-size: 1.05rem;" />
               <button id="btn-inject" class="btn btn-secondary" disabled style="white-space: nowrap;">Send ↵</button>
             </div>
           </div>
@@ -302,30 +302,6 @@
             </div>
           </div>
 
-          <!-- System Status Monitor -->
-          <div class="card">
-            <div class="card-title">
-              <span>⚡ Pipeline Performance</span>
-            </div>
-            <div style="font-size: 0.82rem; display: flex; flex-direction: column; gap: 0.5rem;">
-              <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--text-secondary);">Speech-to-Text:</span>
-                <span style="color: #34d399; font-weight: 600;">Deepgram Nova-3 (Arabic)</span>
-              </div>
-              <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--text-secondary);">Translation Engine:</span>
-                <span style="color: #38bdf8; font-weight: 600;">DeepL API + Llama 3.3 70B</span>
-              </div>
-              <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--text-secondary);">Quran AI Detection:</span>
-                <span style="color: #fde68a; font-weight: 600;">Active (Uthmani Corpus)</span>
-              </div>
-              <div style="display: flex; justify-content: space-between;">
-                <span style="color: var(--text-secondary);">End-to-End Latency:</span>
-                <span style="color: #a7f3d0; font-family: monospace;">~280ms</span>
-              </div>
-            </div>
-          </div>
         </div>
 
       </div>
@@ -372,6 +348,39 @@
           <button type="button" id="btn-submit-create" class="btn btn-primary">Create & Launch Console →</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       MODAL: ATTENDEE QR CODE PREVIEW MODAL
+  ══════════════════════════════════════════════ -->
+  <div id="modal-qr-preview" style="display: none; position: fixed; inset: 0; background: rgba(2, 6, 23, 0.92); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center; padding: 1.5rem;">
+    <div style="background: var(--bg-card); border: 1px solid var(--accent-gold); border-radius: 20px; padding: 2.25rem; max-width: 440px; width: 100%; box-shadow: 0 25px 60px rgba(0,0,0,0.8); text-align: center;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
+        <span style="font-size: 0.85rem; font-weight: 700; color: #fbbf24; letter-spacing: 0.05em; text-transform: uppercase;">Attendee Phone Access</span>
+        <button id="btn-close-qr-modal" style="background: none; border: none; color: #94a3b8; font-size: 1.6rem; cursor: pointer; line-height: 1;">✕</button>
+      </div>
+
+      <h3 id="qr-modal-mosque-name" style="font-size: 1.35rem; font-weight: 800; color: #fff; margin-bottom: 0.25rem;">Mosque Session</h3>
+      <p style="font-size: 0.84rem; color: var(--text-secondary); margin-bottom: 1.5rem;">
+        Point your phone camera at this QR code to join and listen in your language:
+      </p>
+
+      <div style="background: #ffffff; padding: 1.25rem; border-radius: 16px; display: inline-block; box-shadow: 0 10px 30px rgba(0,0,0,0.3); margin-bottom: 1.25rem;">
+        <img id="qr-modal-img" src="" alt="Session Join QR Code" style="width: 220px; height: 220px; display: block; image-rendering: pixelated;" />
+      </div>
+
+      <div style="font-size: 0.78rem; color: #94a3b8; font-family: monospace; word-break: break-all; margin-bottom: 1.25rem; background: rgba(15, 23, 42, 0.7); padding: 0.6rem 0.8rem; border-radius: 8px; border: 1px solid rgba(148, 163, 184, 0.2);" id="qr-modal-link-text">
+      </div>
+
+      <div style="display: flex; gap: 0.65rem; justify-content: center; flex-wrap: wrap;">
+        <button id="btn-copy-qr-modal-link" class="btn btn-secondary" style="font-size: 0.85rem; padding: 0.5rem 1rem;">
+          📋 Copy Link
+        </button>
+        <a id="btn-open-qr-modal-link" href="#" target="_blank" class="btn btn-primary" style="font-size: 0.85rem; padding: 0.5rem 1rem;">
+          Open on This Device ↗
+        </a>
+      </div>
     </div>
   </div>
 

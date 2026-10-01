@@ -370,13 +370,14 @@
 
     <!-- Center: Mosque / Center Branding -->
     <div class="center-brand">
-      <div class="brand-icon">T</div>
+      <div class="brand-icon">🕌</div>
       <div id="mosque-name">MYO YOUTH CENTER</div>
+      <span id="session-status-badge" style="font-size: 0.72rem; font-weight: 800; padding: 0.2rem 0.6rem; border-radius: 999px; letter-spacing: 0.05em; background: rgba(148, 163, 184, 0.15); border: 1px solid rgba(148, 163, 184, 0.3); color: #94a3b8;">IDLE</span>
     </div>
 
     <!-- Right: Translation Language Dropdown -->
     <div class="lang-dropdown-wrapper">
-      <span class="live-dot"></span>
+      <span class="live-dot" id="live-dot-indicator"></span>
       <select id="target-lang-select" class="lang-select-dropdown" aria-label="Select TV Translation Language">
         <option value="en">English</option>
         <option value="uz">Uzbek (O‘zbekcha)</option>
@@ -392,6 +393,11 @@
 
   <!-- Fullscreen Button -->
   <button id="btn-fullscreen" onclick="toggleFullscreen()">⛶ Fullscreen</button>
+
+  <!-- Floating Status Banner (Paused / Ended state) -->
+  <div id="stage-status-banner" style="display: none; position: fixed; top: 76px; left: 50%; transform: translateX(-50%); z-index: 95; padding: 0.35rem 1.25rem; border-radius: 999px; font-size: 0.84rem; font-weight: 700; letter-spacing: 0.04em; backdrop-filter: blur(12px); box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
+    <span id="stage-status-text">Translation Paused</span>
+  </div>
 
   <!-- Split Screen Stage -->
   <main id="stage">

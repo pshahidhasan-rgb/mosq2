@@ -632,11 +632,16 @@
       </div>
     </div>
 
+    <!-- Status Banner (Paused / Ended) -->
+    <div id="mobile-session-banner" style="display: none; padding: 0.35rem 1rem; background: rgba(245, 158, 11, 0.2); border-bottom: 1px solid rgba(245, 158, 11, 0.35); color: #fde68a; font-size: 0.74rem; font-weight: 700; text-align: center;">
+      <span id="mobile-session-banner-text">Live Sermon Paused</span>
+    </div>
+
     <!-- Scrollable Feed of Sermon Cards -->
     <main id="mobile-cards-feed">
       <!-- Active Listening Pulse Card -->
       <div id="active-listening-card">
-        <div class="comp-logo-glyph">T</div>
+        <div class="comp-logo-glyph">🎙️</div>
         <div class="listening-title">Listening...</div>
         <div class="pulse-wave-dots">
           <div class="wave-dot"></div>
@@ -646,13 +651,13 @@
       </div>
     </main>
 
-    <!-- Fixed Bottom Audio Player Bar -->
+    <!-- Fixed Bottom Audio Player Bar (Initially OFF) -->
     <footer class="comp-player-bar">
       <button class="btn-circle-play" id="btn-toggle-audio" title="Play or Pause Audio">
-        <span id="play-pause-icon">⏸</span>
+        <span id="play-pause-icon">▶</span>
       </button>
 
-      <div class="freq-bars" id="audio-freq-bars">
+      <div class="freq-bars idle" id="audio-freq-bars">
         <div class="freq-bar"></div>
         <div class="freq-bar"></div>
         <div class="freq-bar"></div>
@@ -661,8 +666,8 @@
       </div>
 
       <div class="player-text-block">
-        <div class="player-top-title" id="player-title">Translating live</div>
-        <div class="player-sub-title" id="player-subtitle">Tap to mute audio</div>
+        <div class="player-top-title" id="player-title">Audio off</div>
+        <div class="player-sub-title" id="player-subtitle">Tap play to stream audio to earbuds</div>
       </div>
     </footer>
   </div>
