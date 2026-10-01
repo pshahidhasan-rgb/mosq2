@@ -354,6 +354,27 @@
       letter-spacing: -0.01em;
     }
 
+    .sermon-card .card-translated-text.streaming::after {
+      content: ' ▍';
+      color: #10b981;
+      font-size: 0.8em;
+      display: inline-block;
+      animation: mobileBlinkCursor 0.75s infinite ease-in-out;
+    }
+    @keyframes mobileBlinkCursor {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    .sermon-card .stream-word {
+      display: inline;
+      animation: mobileWordFade 0.18s ease-out forwards;
+    }
+    @keyframes mobileWordFade {
+      from { opacity: 0; transform: translateY(3px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
     /* Arabic Source Text (Proportional, Not Huge) */
     .sermon-card .card-arabic-text {
       font-family: 'Amiri', serif;

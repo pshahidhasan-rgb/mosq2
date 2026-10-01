@@ -217,10 +217,49 @@ async function toggleAudio() {
   }
 }
 
-if (btnToggleAudio) btnToggleAudio.addEventListener('click', toggleAudio);
+let activeMobileStreamCleanups = [];
 
-// ─── RENDERING SERMON CARDS ───
-function renderSermonCard({ arabic, translations, translated, ayah, timestamp }) {
+function clearActiveMobileStreams() {
+  activeMobileStreamCleanups.forEach(fn => {
+    try { fn(); } catch (e) {}
+  });
+  activeMobileStreamCleanups = [];
+}
+
+function streamWordsToMobileCard(element, fullText, delayMs = 85, onComplete = null) {
+  const words = fullText.split(/\s+/).filter(Boolean);
+  element.textContent = '';
+  element.classList.add('streaming');
+  let idx = 0;
+
+  const timer = setInterval(() => {
+    if (idx < words.length) {
+      const span = document.createElement('span');
+      span.className = 'stream-word';
+      span.textContent = (idx === 0 ? '' : ' ') + words[idx];
+      element.appendChild(span);
+      idx++;
+      if (mobileCardsFeed) {
+        mobileCardsFeed.scrollTop = mobileCardsFeed.scrollHeight;
+      }
+    } else {
+      clearInterval(timer);
+      element.classList.remove('streaming');
+      if (onComplete) onComplete();
+    }
+  }, delayMs);
+
+  const cleanup = () => {
+    clearInterval(timer);
+    element.classList.remove('streaming');
+    element.textContent = fullText;
+  };
+  activeMobileStreamCleanups.push(cleanup);
+  return cleanup;
+}
+
+// ─── RENDERING SERMON CARDS (Word-by-Word Live Streaming) ───
+function renderSermonCard({ arabic, translations, translated, ayah, timestamp }, isLive = false) {
   if (!arabic && !translated) return;
 
   let displayText = '';
@@ -247,11 +286,18 @@ function renderSermonCard({ arabic, translations, translated, ayah, timestamp })
   }
 
   card.innerHTML = `
-    <div class="card-brand-glyph">T</div>
-    <div class="card-translated-text">${displayText}</div>
+    <div class="card-brand-glyph">🎙️</div>
+    <div class="card-translated-text"></div>
     ${arabic ? `<div class="card-arabic-text" dir="rtl">${ayah && ayah.arabicUthmani ? ayah.arabicUthmani : arabic}</div>` : ''}
     ${tagHtml}
   `;
+
+  const transContainer = card.querySelector('.card-translated-text');
+  if (isLive && displayText) {
+    streamWordsToMobileCard(transContainer, displayText, 85);
+  } else {
+    transContainer.textContent = displayText;
+  }
 
   mobileCardsFeed.insertBefore(card, activeListeningCard);
   mobileCardsFeed.scrollTop = mobileCardsFeed.scrollHeight;
@@ -298,7 +344,7 @@ function connectWebSocket() {
         const key = data.timestamp || `${data.arabic}_${Date.now()}`;
         if (!renderedTimestamps.has(key)) {
           renderedTimestamps.add(key);
-          renderSermonCard(data);
+          renderSermonCard(data, true);
         }
       }
     } catch (e) {}
@@ -330,7 +376,7 @@ function startFeedSync() {
               translated: (item.translations && item.translations[currentLanguage]) || (item.translations && item.translations.en) || item.arabic,
               ayah: item.ayah,
               timestamp: item.timestamp
-            });
+            }, true);
           }
         });
       }

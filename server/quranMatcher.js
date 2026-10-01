@@ -227,7 +227,7 @@ const QURAN_VERSES = [
       tr: 'Allah Samed\'dir (her şey O\'na muhtaçtır).'
     }
   },
-  // Surah Al-Fatihah
+  // Surah Al-Fatihah (Complete 7 Ayahs)
   {
     surahNumber: 1,
     surahNameArabic: 'الفاتحة',
@@ -256,6 +256,113 @@ const QURAN_VERSES = [
       fr: 'Louange à Allah, Seigneur de l\'univers.',
       zh: '一切赞颂，全归真主，众世界的主。',
       tr: 'Hamd, âlemlerin Rabbi olan Allah\'a mahsustur.'
+    }
+  },
+  {
+    surahNumber: 1,
+    surahNameArabic: 'الفاتحة',
+    surahNameEnglish: 'Al-Fatihah',
+    ayahNumber: 3,
+    arabicUthmani: 'الرَّحْمَٰنِ الرَّحِيمِ',
+    translations: {
+      en: 'The Entirely Merciful, the Especially Merciful,',
+      bn: 'যিনি পরম করুণাময় ও পরম দয়ালু,',
+      ur: 'جو بڑا مہربان اور نہایت رحم والا ہے۔',
+      fr: 'Le Tout Miséricordieux, le Très Miséricordieux,',
+      zh: '至仁至慈的主，',
+      tr: 'O, Rahmân ve Rahîm’dir.'
+    }
+  },
+  {
+    surahNumber: 1,
+    surahNameArabic: 'الفاتحة',
+    surahNameEnglish: 'Al-Fatihah',
+    ayahNumber: 4,
+    arabicUthmani: 'مَالِكِ يَوْمِ الدِّينِ',
+    translations: {
+      en: 'Sovereign of the Day of Recompense.',
+      bn: 'যিনি বিচার দিবসের মালিক।',
+      ur: 'روز جزا کا مالک و مختار ہے۔',
+      fr: 'Maître du Jour de la rétribution.',
+      zh: '报应日的主。',
+      tr: 'Ceza (hesap) gününün sahibidir.'
+    }
+  },
+  {
+    surahNumber: 1,
+    surahNameArabic: 'الفاتحة',
+    surahNameEnglish: 'Al-Fatihah',
+    ayahNumber: 5,
+    arabicUthmani: 'إِيَّاكَ نَعْبُدُ وَإِيَّاكَ نَسْتَعِينُ',
+    translations: {
+      en: 'It is You we worship and You we ask for help.',
+      bn: 'আমরা কেবল আপনারই ইবাদত করি এবং কেবল আপনারই সাহায্য চাই।',
+      ur: 'ہم تیری ہی عبادت کرتے ہیں اور تجھ ہی سے مدد مانگتے ہیں۔',
+      fr: 'C\'est Toi [Seul] que nous adorons, et c\'est Toi [Seul] dont nous implorons secours.',
+      zh: '我们只崇拜你，只求你佑助。',
+      tr: '(Rabbimiz!) Ancak sana kulluk eder ve yalnız senden yardım dileriz.'
+    }
+  },
+  {
+    surahNumber: 1,
+    surahNameArabic: 'الفاتحة',
+    surahNameEnglish: 'Al-Fatihah',
+    ayahNumber: 6,
+    arabicUthmani: 'اهْدِنَا الصِّرَاطَ الْمُسْتَقِيمَ',
+    translations: {
+      en: 'Guide us to the straight path -',
+      bn: 'আমাদের সরল-সঠিক পথ প্রদর্শন করুন -',
+      ur: 'ہمیں سیدھے راستے کی ہدایت فرما -',
+      fr: 'Guide-nous dans le droit chemin,',
+      zh: '求你引领我们走上正路，',
+      tr: 'Bizi doğru yola ilet;'
+    }
+  },
+  {
+    surahNumber: 1,
+    surahNameArabic: 'الفاتحة',
+    surahNameEnglish: 'Al-Fatihah',
+    ayahNumber: 7,
+    arabicUthmani: 'صِرَاطَ الَّذِينَ أَنْعَمْتَ عَلَيْهِمْ غَيْرِ الْمَغْضُوبِ عَلَيْهِمْ وَلَا الضَّالِّينَ',
+    translations: {
+      en: 'The path of those upon whom You have bestowed favor, not of those who have evoked [Your] anger or of those who are astray.',
+      bn: 'তাদের পথ যাদের আপনি অনুগ্রহ করেছেন, যাদের উপর আপনার ক্রোধ আপতিত হয়নি এবং যারা পথভ্রষ্টও নয়।',
+      ur: 'ان لوگوں کا راستہ جن پر تو نے انعام فرمایا، نہ ان کا راستہ جن پر غضب نازل ہوا اور نہ گمراہوں کا۔',
+      fr: 'Le chemin de ceux que Tu as comblés de faveurs, non pas de ceux qui ont encouru Ta colère, ni des égarés.',
+      zh: '引导我们走你所赐福者的路，不是受谴怒者的路，也不是迷误者的路。',
+      tr: 'Kendilerine lütuf ve ikramda bulunduğun kimselerin yoluna; gazaba uğramışların ve sapmışların yoluna değil.'
+    }
+  },
+  // Ayat Al-Kursi (2:255)
+  {
+    surahNumber: 2,
+    surahNameArabic: 'البقرة',
+    surahNameEnglish: 'Al-Baqarah',
+    ayahNumber: 255,
+    arabicUthmani: 'اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ ۚ لَا تَأْخُذُهُ سِنَةٌ وَلَا نَوْمٌ',
+    translations: {
+      en: 'Allah - there is no deity except Him, the Ever-Living, the Sustainer of all existence. Neither drowsiness overtakes Him nor sleep.',
+      bn: 'আল্লাহ, তিনি ছাড়া অন্য কোন সত্য উপাস্য নেই; তিনি চিরঞ্জীব, সবকিছুর ধারক। তন্দ্রা বা ঘুম তাঁকে স্পর্শ করে না।',
+      ur: 'اللہ وہ ہے جس کے سوا کوئی معبود نہیں، وہ زندہ ہے اور سب کو سنبھالنے والا ہے۔ اسے نہ اونگھ آتی ہے نہ نیند۔',
+      fr: 'Allah! Point de divinité à part Lui, le Vivant, Celui qui subsiste par Lui-même "Al-Qayyoum". Ni somnolence ni sommeil ne Le saisissent.',
+      zh: '真主，除他外绝无应受崇拜的；他是永生不灭的，是维护万物的；瞌睡不能犯他，睡眠不能克服他。',
+      tr: 'Allah, kendisinden başka hiçbir ilâh bulunmayandır. O, Hayy\'dır, Kayyûm\'dur. O\'nu ne bir uyuklama tutabilir, ne de bir uyku.'
+    }
+  },
+  // Surah Al-Ikhlas (112:1-4)
+  {
+    surahNumber: 112,
+    surahNameArabic: 'الإخلاص',
+    surahNameEnglish: 'Al-Ikhlas',
+    ayahNumber: 1,
+    arabicUthmani: 'قُلْ هُوَ اللَّهُ أَحَدٌ ۞ اللَّهُ الصَّمَدُ ۞ لَمْ يَلِدْ وَلَمْ يُولَدْ ۞ وَلَمْ يَكُن لَّهُ كُفُوًا أَحَدٌ',
+    translations: {
+      en: 'Say, "He is Allah, [who is] One, Allah, the Eternal Refuge. He neither begets nor is born, Nor is there to Him any equivalent."',
+      bn: 'বলুন, তিনিই আল্লাহ, এক-অদ্বিতীয়। আল্লাহ কারো মুখাপেক্ষী নন। তিনি কাউকে জন্ম দেননি এবং তাঁকেও কেউ জন্ম দেয়নি। এবং তাঁর সমকক্ষ কেউই নেই।',
+      ur: 'کہہ دیجیے کہ وہ اللہ ایک ہے۔ اللہ بے نیاز ہے۔ نہ اس کی کوئی اولاد ہے اور نہ وہ کسی کی اولاد ہے۔ اور نہ کوئی اس کا ہمسر ہے۔',
+      fr: 'Dis: "Il est Allah, Unique. Allah, Le Seul à être imploré pour ce que nous désirons. Il n\'a jamais engendré, n\'a pas été engendré non plus. Et nul n\'est égal à Lui".',
+      zh: '你说：他是真主，是独一的主；真主是万物所仰赖的；他没有生产，也没有被生产；没有任何物可以做他的匹敌。',
+      tr: 'De ki: O Allah birdir. Allah Samed\'dir. O doğurmamış ve doğmamıştır. O\'nun hiçbir dengi yoktur.'
     }
   }
 ];

@@ -284,12 +284,32 @@ if (btnCancelCreate) btnCancelCreate.addEventListener('click', () => modalCreate
 
 if (newMosqueNameInput) {
   newMosqueNameInput.addEventListener('input', () => {
-    // Auto-slugify mosque name
+    // Auto-slugify mosque name with secure random suffix
     const slug = newMosqueNameInput.value
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)+/g, '');
-    newSessionIdInput.value = slug;
+    if (slug) {
+      if (!newSessionIdInput.dataset.token) {
+        newSessionIdInput.dataset.token = Math.random().toString(36).substring(2, 8);
+      }
+      newSessionIdInput.value = `${slug}-${newSessionIdInput.dataset.token}`;
+    } else {
+      newSessionIdInput.value = '';
+      delete newSessionIdInput.dataset.token;
+    }
+  });
+}
+
+if (btnOpenCreateModal) {
+  btnOpenCreateModal.addEventListener('click', () => {
+    modalCreateSession.style.display = 'flex';
+    newMosqueNameInput.value = '';
+    if (newSessionIdInput) {
+      delete newSessionIdInput.dataset.token;
+      newSessionIdInput.value = '';
+    }
+    newMosqueNameInput.focus();
   });
 }
 
@@ -313,8 +333,9 @@ if (btnSubmitCreate) {
         body: JSON.stringify({ sessionId, mosqueName, primaryLanguage })
       });
       if (res.ok) {
+        const createdSession = await res.json();
         modalCreateSession.style.display = 'none';
-        window.location.href = `/admin.html?session=${encodeURIComponent(sessionId)}`;
+        window.location.href = `/admin.html?session=${encodeURIComponent(createdSession.id || sessionId)}`;
       } else {
         const err = await res.json();
         alert('Error creating session: ' + (err.error || 'Failed'));
@@ -537,23 +558,56 @@ async function startMicrophone() {
     speechRecognition.lang = 'ar-SA';
     speechRecognition.maxAlternatives = 1;
 
+    let lastProcessedIndex = -1;
+    let isRestarting = false;
+
     speechRecognition.onresult = async (evt) => {
-      const transcript = evt.results[evt.results.length - 1][0].transcript.trim();
-      if (!transcript) return;
       if (sessionStatus !== 'active') return;
 
-      try {
-        await fetch(`/api/session/${currentSessionId}/inject-text`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: transcript })
-        });
-      } catch (err) {}
+      for (let i = evt.resultIndex; i < evt.results.length; ++i) {
+        if (evt.results[i].isFinal && i > lastProcessedIndex) {
+          lastProcessedIndex = i;
+          const transcript = evt.results[i][0].transcript.trim();
+          if (!transcript) continue;
+
+          console.log('[Live Mic Recognized]:', transcript);
+          try {
+            await fetch(`/api/session/${currentSessionId}/inject-text`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text: transcript })
+            });
+          } catch (err) {
+            console.warn('[Live Mic] Inject error:', err.message);
+          }
+        }
+      }
+    };
+
+    speechRecognition.onerror = (e) => {
+      console.warn('[Live Mic] Speech recognition event:', e.error);
+      if (e.error === 'no-speech') {
+        // Natural pause between verses or sentences - keep mic alive!
+        return;
+      }
+      if (e.error === 'not-allowed') {
+        alert('Microphone permission was denied. Please allow microphone access.');
+        stopMicrophone();
+      }
     };
 
     speechRecognition.onend = () => {
-      if (micActive && sessionStatus === 'active') {
-        try { speechRecognition.start(); } catch (e) {}
+      // Auto-restart recognition seamlessly when mic is active so Imam pauses don't stop the session
+      if (micActive && sessionStatus === 'active' && !isRestarting) {
+        isRestarting = true;
+        setTimeout(() => {
+          isRestarting = false;
+          if (micActive && sessionStatus === 'active') {
+            try {
+              speechRecognition.start();
+            } catch (e) {}
+          }
+        }, 250);
       }
     };
 
@@ -681,7 +735,6 @@ function addTranscriptEntry({ arabic, translations, ayah }) {
 
   const item = document.createElement('div');
   item.style.cssText = 'padding: 0.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-family: var(--font-arabic); font-size: 1.15rem; direction: rtl; text-align: right; color: #f8fafc;';
-  item.textContent = arabic;
 
   if (ayah) {
     const badge = document.createElement('span');
@@ -690,10 +743,24 @@ function addTranscriptEntry({ arabic, translations, ayah }) {
     item.appendChild(badge);
   }
 
+  const textSpan = document.createElement('span');
+  item.appendChild(textSpan);
+
   if (transcriptFeed.children[0] && transcriptFeed.children[0].textContent.includes('Spoken Arabic')) {
     transcriptFeed.innerHTML = '';
   }
   transcriptFeed.prepend(item);
+
+  const words = arabic.split(/\s+/).filter(Boolean);
+  let wIdx = 0;
+  const timer = setInterval(() => {
+    if (wIdx < words.length) {
+      textSpan.textContent += (wIdx === 0 ? '' : ' ') + words[wIdx];
+      wIdx++;
+    } else {
+      clearInterval(timer);
+    }
+  }, 75);
 }
 
 // ─── CUSTOM KHUTBAH STREAMER (Preserved) ───

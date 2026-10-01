@@ -39,23 +39,23 @@ const sttService = new STTService(process.env.GLADIA_API_KEY, process.env.DEEPGR
 const quranAiDetector = new QuranAIDetector(openrouterKey, openrouterModel);
 
 // Active session tracking for STT distribution
-let activeLiveSessionId = 'jumuah-live';
+let activeLiveSessionId = 'jumuah-live-4b2c1d';
 
-// Pre-create initial default sessions
+// Pre-create initial default sessions with secure unique IDs
 (async () => {
   await sessionManager.createSession({
-    sessionId: 'myo-youth',
+    sessionId: 'myo-youth-8f3a9e',
     mosqueName: 'MYO Youth Center',
     primaryLanguage: 'uz',
     hostUrl: `http://localhost:${PORT}`
   });
   await sessionManager.createSession({
-    sessionId: 'jumuah-live',
+    sessionId: 'jumuah-live-4b2c1d',
     mosqueName: process.env.DEFAULT_MASJID_NAME || 'Masjid Al-Noor',
     primaryLanguage: process.env.DEFAULT_PRIMARY_LANGUAGE || 'en',
     hostUrl: `http://localhost:${PORT}`
   });
-  console.log(`[MosqAI] Ready with sessions: myo-youth, jumuah-live`);
+  console.log(`[MosqAI] Ready with secure mosque sessions: myo-youth-8f3a9e, jumuah-live-4b2c1d`);
 })();
 
 // Initialize STT engine (Deepgram Nova-3 / Gladia / Simulator)
@@ -250,14 +250,26 @@ app.get('/api/sessions', (req, res) => {
   res.json(sessionManager.getAllActiveSessions());
 });
 
-// Create custom session
+// Create custom session with secure unique ID
 app.post('/api/session/create', async (req, res) => {
   const { sessionId, mosqueName, primaryLanguage } = req.body;
-  const newId = sessionId || `khutbah-${Date.now()}`;
-  activeLiveSessionId = newId;
+  
+  let cleanId = (sessionId || mosqueName || 'mosque')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)+/g, '');
+
+  if (!cleanId) cleanId = 'mosque';
+  // Ensure secure random token is attached (e.g. east-london-8f3a9e)
+  if (!/-[a-z0-9]{5,8}$/.test(cleanId)) {
+    const token = Math.random().toString(36).substring(2, 8);
+    cleanId = `${cleanId}-${token}`;
+  }
+
+  activeLiveSessionId = cleanId;
 
   const session = await sessionManager.createSession({
-    sessionId: newId,
+    sessionId: cleanId,
     mosqueName: mosqueName || 'Masjid Al-Noor',
     primaryLanguage: primaryLanguage || 'en',
     hostUrl: `${req.protocol}://${req.get('host')}`

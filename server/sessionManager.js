@@ -88,7 +88,17 @@ class SessionManager {
   }
 
   getSession(sessionId) {
-    return this.sessions.get(sessionId) || null;
+    if (!sessionId) return null;
+    if (this.sessions.has(sessionId)) {
+      return this.sessions.get(sessionId);
+    }
+    // Prefix / base slug match support: e.g. 'myo-youth' matches 'myo-youth-8f3a9e'
+    for (const [key, sess] of this.sessions.entries()) {
+      if (key.startsWith(sessionId) || sessionId.startsWith(key)) {
+        return sess;
+      }
+    }
+    return null;
   }
 
   async updateHostUrl(sessionId, hostUrl) {
