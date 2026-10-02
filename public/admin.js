@@ -560,15 +560,26 @@ async function startMicrophone() {
 
     let lastProcessedIndex = -1;
     let isRestarting = false;
+    let lastSentText = '';
+    let lastSentTime = 0;
 
     speechRecognition.onresult = async (evt) => {
       if (sessionStatus !== 'active') return;
 
       for (let i = evt.resultIndex; i < evt.results.length; ++i) {
-        if (evt.results[i].isFinal && i > lastProcessedIndex) {
-          lastProcessedIndex = i;
+        if (evt.results[i].isFinal) {
           const transcript = evt.results[i][0].transcript.trim();
           if (!transcript) continue;
+
+          // Prevent duplicate firing within 1 second of exact same text
+          const now = Date.now();
+          if (transcript === lastSentText && now - lastSentTime < 1200) {
+            continue;
+          }
+
+          lastSentText = transcript;
+          lastSentTime = now;
+          lastProcessedIndex = i;
 
           console.log('[Live Mic Recognized]:', transcript);
           try {
@@ -597,6 +608,9 @@ async function startMicrophone() {
     };
 
     speechRecognition.onend = () => {
+      // CRITICAL: Reset index because a newly started SpeechRecognition instance resets results to index 0
+      lastProcessedIndex = -1;
+
       // Auto-restart recognition seamlessly when mic is active so Imam pauses don't stop the session
       if (micActive && sessionStatus === 'active' && !isRestarting) {
         isRestarting = true;
@@ -607,7 +621,7 @@ async function startMicrophone() {
               speechRecognition.start();
             } catch (e) {}
           }
-        }, 250);
+        }, 200);
       }
     };
 

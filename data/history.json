@@ -2,6 +2,75 @@
   {
     "id": "test-session-live",
     "mosqueName": "Test Masjid",
+    "startedAt": "2026-10-02T09:15:33.897Z",
+    "endedAt": "2026-10-02T09:15:33.932Z",
+    "durationSeconds": 0,
+    "totalTranscripts": 3,
+    "totalAyahsDetected": 1,
+    "peakListeners": 1,
+    "transcripts": [
+      {
+        "arabic": "إن الحمد لله نحمده ونستعينه ونستغفره",
+        "translations": {
+          "en": "All praise is due to Allah; we praise Him, seek His help, and ask for His forgiveness.",
+          "bn": "নিশ্চয় সমস্ত প্রশংসা আল্লাহর জন্য, আমরা তাঁরই প্রশংসা করি, তাঁরই কাছে সাহায্য চাই এবং তাঁরই কাছে ক্ষমা প্রার্থনা করি।",
+          "ur": "تمام تعریفیں اللہ کے لیے ہیں، ہم اسی کی تعریف کرتے ہیں، اسی سے مدد مانگتے ہیں اور اسی سے بخشش چاہتے ہیں۔"
+        },
+        "ayah": null,
+        "timestamp": "2026-10-02T09:15:33.919Z"
+      },
+      {
+        "arabic": "فإن مع العسر يسرا",
+        "translations": {
+          "en": "For indeed, with hardship [will be] ease.",
+          "bn": "নিশ্চয় কষ্টের সাথেই স্বস্তি আছে।",
+          "ur": "بے شک مشکل کے ساتھ آسانی ہے۔",
+          "fr": "Après la difficulté vient certes la facilité!",
+          "zh": "与艰难相伴的，确是容易。",
+          "tr": "Şüphesiz güçlükle beraber bir kolaylık vardır."
+        },
+        "ayah": {
+          "isAyah": true,
+          "confidence": 99,
+          "surahNumber": 94,
+          "surahNameArabic": "الشرح",
+          "surahNameEnglish": "Ash-Sharh",
+          "ayahNumber": 5,
+          "reference": "Ash-Sharh 94:5",
+          "arabicUthmani": "فَإِنَّ مَعَ الْعُسْرِ يُسْرًا",
+          "translations": {
+            "en": "For indeed, with hardship [will be] ease.",
+            "bn": "নিশ্চয় কষ্টের সাথেই স্বস্তি আছে।",
+            "ur": "بے شک مشکل کے ساتھ آسانی ہے۔",
+            "fr": "Après la difficulté vient certes la facilité!",
+            "zh": "与艰难相伴的，确是容易。",
+            "tr": "Şüphesiz güçlükle beraber bir kolaylık vardır."
+          }
+        },
+        "timestamp": "2026-10-02T09:15:33.924Z"
+      },
+      {
+        "arabic": "إن الحمد لله نحمده ونستعينه ونستغفره",
+        "translations": {
+          "en": "All praise is due to Allah; we praise Him, seek His help, and ask for His forgiveness.",
+          "bn": "নিশ্চয় সমস্ত প্রশংসা আল্লাহর জন্য, আমরা তাঁরই প্রশংসা করি, তাঁরই কাছে সাহায্য চাই এবং তাঁরই কাছে ক্ষমা প্রার্থনা করি।",
+          "ur": "تمام تعریفیں اللہ کے لیے ہیں، ہم اسی کی تعریف کرتے ہیں، اسی سے مدد مانگتے ہیں اور اسی سے بخشش چاہتے ہیں۔"
+        },
+        "ayah": null,
+        "timestamp": "2026-10-02T09:15:33.931Z"
+      }
+    ],
+    "detectedAyahs": [
+      {
+        "reference": "Ash-Sharh 94:5",
+        "arabicUthmani": "فَإِنَّ مَعَ الْعُسْرِ يُسْرًا",
+        "timestamp": "2026-10-02T09:15:33.924Z"
+      }
+    ]
+  },
+  {
+    "id": "test-session-live",
+    "mosqueName": "Test Masjid",
     "startedAt": "2026-10-02T07:29:12.043Z",
     "endedAt": "2026-10-02T07:29:12.100Z",
     "durationSeconds": 0,

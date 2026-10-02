@@ -349,20 +349,65 @@ const QURAN_VERSES = [
       tr: 'Allah, kendisinden başka hiçbir ilâh bulunmayandır. O, Hayy\'dır, Kayyûm\'dur. O\'nu ne bir uyuklama tutabilir, ne de bir uyku.'
     }
   },
-  // Surah Al-Ikhlas (112:1-4)
+  // Surah Al-Ikhlas (112:1-4) Individual Ayahs
   {
     surahNumber: 112,
     surahNameArabic: 'الإخلاص',
     surahNameEnglish: 'Al-Ikhlas',
     ayahNumber: 1,
-    arabicUthmani: 'قُلْ هُوَ اللَّهُ أَحَدٌ ۞ اللَّهُ الصَّمَدُ ۞ لَمْ يَلِدْ وَلَمْ يُولَدْ ۞ وَلَمْ يَكُن لَّهُ كُفُوًا أَحَدٌ',
+    arabicUthmani: 'قُلْ هُوَ اللَّهُ أَحَدٌ',
     translations: {
-      en: 'Say, "He is Allah, [who is] One, Allah, the Eternal Refuge. He neither begets nor is born, Nor is there to Him any equivalent."',
-      bn: 'বলুন, তিনিই আল্লাহ, এক-অদ্বিতীয়। আল্লাহ কারো মুখাপেক্ষী নন। তিনি কাউকে জন্ম দেননি এবং তাঁকেও কেউ জন্ম দেয়নি। এবং তাঁর সমকক্ষ কেউই নেই।',
-      ur: 'کہہ دیجیے کہ وہ اللہ ایک ہے۔ اللہ بے نیاز ہے۔ نہ اس کی کوئی اولاد ہے اور نہ وہ کسی کی اولاد ہے۔ اور نہ کوئی اس کا ہمسر ہے۔',
-      fr: 'Dis: "Il est Allah, Unique. Allah, Le Seul à être imploré pour ce que nous désirons. Il n\'a jamais engendré, n\'a pas été engendré non plus. Et nul n\'est égal à Lui".',
-      zh: '你说：他是真主，是独一的主；真主是万物所仰赖的；他没有生产，也没有被生产；没有任何物可以做他的匹敌。',
-      tr: 'De ki: O Allah birdir. Allah Samed\'dir. O doğurmamış ve doğmamıştır. O\'nun hiçbir dengi yoktur.'
+      en: 'Say, "He is Allah, [who is] One,',
+      bn: 'বলুন, তিনিই আল্লাহ, এক-অদ্বিতীয়।',
+      ur: 'کہہ دیجیے کہ وہ اللہ ایک ہے۔',
+      fr: 'Dis: "Il est Allah, Unique.',
+      zh: '你说：他是真主，是独一的主；',
+      tr: 'De ki: O Allah birdir.'
+    }
+  },
+  {
+    surahNumber: 112,
+    surahNameArabic: 'الإخلاص',
+    surahNameEnglish: 'Al-Ikhlas',
+    ayahNumber: 2,
+    arabicUthmani: 'اللَّهُ الصَّمَدُ',
+    translations: {
+      en: 'Allah, the Eternal Refuge.',
+      bn: 'আল্লাহ কারো মুখাপেক্ষী নন।',
+      ur: 'اللہ بے نیاز ہے۔',
+      fr: 'Allah, Le Seul à être imploré pour ce que nous désirons.',
+      zh: '真主是万物所仰赖的；',
+      tr: 'Allah Samed\'dir.'
+    }
+  },
+  {
+    surahNumber: 112,
+    surahNameArabic: 'الإخلاص',
+    surahNameEnglish: 'Al-Ikhlas',
+    ayahNumber: 3,
+    arabicUthmani: 'لَمْ يَلِدْ وَلَمْ يُولَدْ',
+    translations: {
+      en: 'He neither begets nor is born,',
+      bn: 'তিনি কাউকে জন্ম দেননি এবং তাঁকেও কেউ জন্ম দেয়নি।',
+      ur: 'نہ اس کی کوئی اولاد ہے اور نہ وہ کسی کی اولاد ہے۔',
+      fr: 'Il n\'a jamais engendré, n\'a pas été engendré non plus.',
+      zh: '他没有生产，也没有被生产；',
+      tr: 'O doğurmamış ve doğmamıştır.'
+    }
+  },
+  {
+    surahNumber: 112,
+    surahNameArabic: 'الإخلاص',
+    surahNameEnglish: 'Al-Ikhlas',
+    ayahNumber: 4,
+    arabicUthmani: 'وَلَمْ يَكُن لَّهُ كُفُوًا أَحَدٌ',
+    translations: {
+      en: 'Nor is there to Him any equivalent."',
+      bn: 'এবং তাঁর সমকক্ষ কেউই নেই।',
+      ur: 'اور نہ کوئی اس کا ہمسر ہے۔',
+      fr: 'Et nul n\'est égal à Lui".',
+      zh: '没有任何物可以做他的匹敌。',
+      tr: 'O\'nun hiçbir dengi yoktur.'
     }
   }
 ];

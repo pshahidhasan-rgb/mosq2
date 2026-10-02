@@ -8,6 +8,15 @@
 
 // Fallback dictionary for common sermon phrases in 6 languages
 const SERMON_DICTIONARY = {
+  'أعوذ بالله من الشيطان الرجيم': {
+    en: 'I seek refuge in Allah from Satan, the accursed.',
+    bn: 'আমি বিতাড়িত শয়তান থেকে আল্লাহর আশ্রয় প্রার্থনা করছি।',
+    ur: 'میں شیطان مردود سے اللہ کی پناہ مانگتا ہوں۔',
+    fr: 'Je cherche refuge auprès d\'Allah contre Satan le maudit.',
+    zh: '我求真主护佑，免遭被驱逐的恶魔的伤害。',
+    tr: 'Kovulmuş şeytandan Allah\'a sığınırım.',
+    uz: 'Quvilgan shaytondan Allohdan panoh so‘rayman.'
+  },
   'إن الحمد لله نحمده ونستعينه ونستغفره': {
     en: 'All praise is due to Allah; we praise Him, seek His help, and ask for His forgiveness.',
     bn: 'নিশ্চয় সমস্ত প্রশংসা আল্লাহর জন্য, আমরা তাঁরই প্রশংসা করি, তাঁরই কাছে সাহায্য চাই এবং তাঁরই কাছে ক্ষমা প্রার্থনা করি।',

@@ -39,7 +39,7 @@ if (targetLangSelect) {
   targetLangSelect.addEventListener('change', () => {
     targetLang = targetLangSelect.value;
     initQRCode();
-    renderFeed();
+    initSession();
   });
 }
 
@@ -155,57 +155,73 @@ function streamWordsIntoElement(element, fullText, delayMs = 85, onComplete = nu
 }
 
 /**
- * Render Split Screen Feed with Dimmed History & Live Word-by-Word Streaming
+ * Append New Sentence to Live Split Screen without Wiping History
  */
-function renderFeed(animateLatest = false) {
-  if (arabicHistory.length === 0) return;
+function appendToFeed(arabicText, transObj, isLive = true) {
+  if (!arabicText && !transObj) return;
 
-  clearActiveStreams();
-  arabicFeed.innerHTML = '';
-  transFeed.innerHTML = '';
+  let displayTrans = '';
+  if (typeof transObj === 'object' && transObj !== null) {
+    displayTrans = transObj[targetLang] || transObj['en'] || Object.values(transObj)[0] || '';
+  } else {
+    displayTrans = transObj || '';
+  }
 
-  const totalArabic = arabicHistory.length;
-  const totalTrans = transHistory.length;
+  // 1. Arabic Column
+  if (arabicText) {
+    const existingCurrent = arabicFeed.querySelectorAll('.para-item.current');
+    existingCurrent.forEach(el => {
+      el.classList.remove('current');
+      el.classList.add('history');
+    });
 
-  // Render Arabic Paragraphs
-  arabicHistory.forEach((text, idx) => {
-    const isLatest = idx === totalArabic - 1;
-    const p = document.createElement('div');
-    p.className = `para-item ${isLatest ? 'current' : 'history'}`;
+    const pArabic = document.createElement('div');
+    pArabic.className = 'para-item current';
+    arabicFeed.appendChild(pArabic);
 
-    if (isLatest && animateLatest) {
-      arabicFeed.appendChild(p);
-      streamWordsIntoElement(p, text, 80);
+    if (isLive) {
+      streamWordsIntoElement(pArabic, arabicText, 70);
     } else {
-      p.textContent = text;
-      arabicFeed.appendChild(p);
-    }
-  });
-
-  // Render Translation Paragraphs
-  transHistory.forEach((item, idx) => {
-    const isLatest = idx === totalTrans - 1;
-    const p = document.createElement('div');
-    p.className = `para-item ${isLatest ? 'current' : 'history'}`;
-
-    let displayTrans = '';
-    if (typeof item === 'object' && item !== null) {
-      displayTrans = item[targetLang] || item['en'] || Object.values(item)[0] || '';
-    } else {
-      displayTrans = item;
+      pArabic.textContent = arabicText;
     }
 
-    if (isLatest && animateLatest) {
-      transFeed.appendChild(p);
-      streamWordsIntoElement(p, displayTrans, 85);
-    } else {
-      p.textContent = displayTrans;
-      transFeed.appendChild(p);
+    while (arabicFeed.children.length > MAX_HISTORY) {
+      arabicFeed.firstElementChild.remove();
     }
-  });
+  }
 
-  arabicFeed.parentElement.scrollTop = arabicFeed.parentElement.scrollHeight;
-  transFeed.parentElement.scrollTop = transFeed.parentElement.scrollHeight;
+  // 2. Translation Column
+  if (displayTrans) {
+    const existingTrans = transFeed.querySelectorAll('.para-item.current');
+    existingTrans.forEach(el => {
+      el.classList.remove('current');
+      el.classList.add('history');
+    });
+
+    const pTrans = document.createElement('div');
+    pTrans.className = 'para-item current';
+    transFeed.appendChild(pTrans);
+
+    if (isLive) {
+      streamWordsIntoElement(pTrans, displayTrans, 75);
+    } else {
+      pTrans.textContent = displayTrans;
+    }
+
+    while (transFeed.children.length > MAX_HISTORY) {
+      transFeed.firstElementChild.remove();
+    }
+  }
+
+  // Smooth auto-scroll
+  setTimeout(() => {
+    if (arabicFeed.parentElement) {
+      arabicFeed.parentElement.scrollTo({ top: arabicFeed.parentElement.scrollHeight, behavior: 'smooth' });
+    }
+    if (transFeed.parentElement) {
+      transFeed.parentElement.scrollTo({ top: transFeed.parentElement.scrollHeight, behavior: 'smooth' });
+    }
+  }, 50);
 }
 
 /**
@@ -214,28 +230,17 @@ function renderFeed(animateLatest = false) {
 function handleIncomingSpeech({ arabic, translations, translated, ayah, timestamp }, isLive = true) {
   if (!arabic && !translated) return;
 
+  const transObj = translations || (typeof translated === 'string' ? { [targetLang]: translated } : translated);
+
   // 1. Quran Ayah Overlay
   if (ayah) {
-    showAyahOverlay(ayah, arabic, translations || translated, isLive);
+    showAyahOverlay(ayah, arabic, transObj, isLive);
   } else {
     hideAyahOverlay();
   }
 
-  // 2. Append to History
-  if (arabic) {
-    if (arabicHistory.length === 0 || arabicHistory[arabicHistory.length - 1] !== arabic) {
-      arabicHistory.push(arabic);
-      if (arabicHistory.length > MAX_HISTORY) arabicHistory.shift();
-    }
-  }
-
-  const transObj = translations || (typeof translated === 'string' ? { [targetLang]: translated } : translated);
-  if (transObj) {
-    transHistory.push(transObj);
-    if (transHistory.length > MAX_HISTORY) transHistory.shift();
-  }
-
-  renderFeed(isLive);
+  // 2. Append directly to live feeds
+  appendToFeed(arabic, transObj, isLive);
 }
 
 /**
@@ -245,15 +250,13 @@ function showAyahOverlay(ayah, fallbackArabic, fallbackTrans, isLive = true) {
   if (!ayahOverlay) return;
   const ref = ayah.reference || (ayah.surahNumber ? `Surah ${ayah.surahNameEnglish || ''} (${ayah.surahNumber}:${ayah.ayahNumber})` : 'Holy Quran');
   ayahRefEl.textContent = ref;
-  ayahArabicEl.textContent = ayah.arabicUthmani || fallbackArabic || '';
 
+  const arabicVerse = ayah.arabicUthmani || fallbackArabic || '';
   let transText = '';
-  if (ayah.translations && ayah.translations[targetLang]) {
-    transText = ayah.translations[targetLang];
-  } else if (ayah.translations && ayah.translations['en']) {
-    transText = ayah.translations['en'];
-  } else if (ayah.translation) {
-    transText = ayah.translation;
+  if (ayah.translations) {
+    transText = ayah.translations[targetLang] || ayah.translations.en || Object.values(ayah.translations)[0];
+  } else if (typeof fallbackTrans === 'object' && fallbackTrans !== null) {
+    transText = fallbackTrans[targetLang] || fallbackTrans.en || Object.values(fallbackTrans)[0];
   } else if (typeof fallbackTrans === 'string') {
     transText = fallbackTrans;
   }
@@ -261,15 +264,17 @@ function showAyahOverlay(ayah, fallbackArabic, fallbackTrans, isLive = true) {
   ayahOverlay.classList.add('active');
 
   if (isLive) {
+    streamWordsIntoElement(ayahArabicEl, arabicVerse, 65);
     streamWordsIntoElement(ayahTransEl, `"${transText}"`, 70);
   } else {
+    ayahArabicEl.textContent = arabicVerse;
     ayahTransEl.textContent = `"${transText}"`;
   }
 
   clearTimeout(ayahTimer);
   ayahTimer = setTimeout(() => {
     hideAyahOverlay();
-  }, 10000);
+  }, 6000);
 }
 
 function hideAyahOverlay() {
@@ -300,15 +305,13 @@ async function initSession() {
       // ─── RESTORE HISTORY ON PAGE REFRESH ───
       if (data.transcripts && data.transcripts.length > 0) {
         const recent = data.transcripts.slice(-MAX_HISTORY);
-        arabicHistory.length = 0;
-        transHistory.length = 0;
+        arabicFeed.innerHTML = '';
+        transFeed.innerHTML = '';
         recent.forEach(item => {
-          if (item.arabic) arabicHistory.push(item.arabic);
           const transObj = item.translations || (typeof item.translated === 'string' ? { [targetLang]: item.translated } : item.translated);
-          if (transObj) transHistory.push(transObj);
+          appendToFeed(item.arabic, transObj, false);
         });
         lastDisplayTimestamp = data.transcripts[data.transcripts.length - 1].timestamp;
-        renderFeed(false);
       }
     }
   } catch (err) {}
