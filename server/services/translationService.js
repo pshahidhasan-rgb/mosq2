@@ -239,6 +239,22 @@ class TranslationService {
       }
     }
 
+    // Priority 3: Dynamic Real-Time Neural Translation Engine (Translates ANY arbitrary dynamic speech)
+    try {
+      const googleLang = targetLang === 'zh' ? 'zh-CN' : targetLang;
+      const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=ar&tl=${googleLang}&dt=t&q=${encodeURIComponent(cleanText)}`);
+      if (res.ok) {
+        const data = await res.json();
+        const translated = data[0]?.map(item => item[0]).join('').trim();
+        if (translated) {
+          this.cache.set(cacheKey, translated);
+          return translated;
+        }
+      }
+    } catch (err) {
+      console.warn(`[Dynamic Translation] Engine failed for ${targetLang}:`, err.message);
+    }
+
     // Dynamic fallback for any other text
     const fallbackText = `[${targetLang.toUpperCase()}] ${cleanText}`;
     this.cache.set(cacheKey, fallbackText);
