@@ -35,7 +35,7 @@ const openrouterModel = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70
 
 const translationService = new TranslationService(openrouterKey, process.env.DEEPL_API_KEY, openrouterModel);
 const ttsService = new TTSService(process.env.CARTESIA_API_KEY);
-const sttService = new STTService(process.env.GLADIA_API_KEY, process.env.DEEPGRAM_API_KEY);
+const sttService = new STTService(process.env.GLADIA_API_KEYS || process.env.GLADIA_API_KEY);
 const quranAiDetector = new QuranAIDetector(openrouterKey, openrouterModel);
 
 // Active session tracking for STT distribution
@@ -142,7 +142,48 @@ sttService.on('transcript', (data) => {
   processTranscript(data).catch(err => console.error('[STT] Processing error:', err.message));
 });
 
-// REST API Endpoints
+/**
+ * Gladia end-to-end translation event:
+ * When Gladia returns translated text directly, bypass the OpenRouter translation step
+ * and broadcast immediately. This is the primary fast path for the live display.
+ */
+sttService.on('translation', async (data) => {
+  const { arabic, translations, sessionLabel } = data;
+  if (!arabic && (!translations || Object.keys(translations).length === 0)) return;
+
+  const targetSessionId = activeLiveSessionId;
+  const session = sessionManager.getSession(targetSessionId);
+  if (!session) return;
+
+  if (session.status !== 'active') {
+    console.log(`[Gladia Translation] Ignored — session "${targetSessionId}" is not active.`);
+    return;
+  }
+
+  // Optionally run Quran detection on the Arabic text
+  let ayahMatch = null;
+  if (arabic && arabic.trim().length > 0) {
+    try {
+      ayahMatch = await quranAiDetector.detect(arabic.trim());
+      if (ayahMatch) {
+        console.log(`[Quran Detection] Matched: ${ayahMatch.reference} (${ayahMatch.confidence}%)`);
+        // Prefer canonical Quran translations over Gladia output
+        Object.assign(translations, ayahMatch.translations);
+      }
+    } catch (_) {}
+  }
+
+  console.log(`[Gladia -> Display] Arabic: "${arabic}" | Langs: ${Object.keys(translations).join(', ')}`);
+
+  sessionManager.broadcastTranslations(targetSessionId, {
+    arabicText: arabic || '',
+    translations,
+    ayahData: ayahMatch,
+    audioByLanguage: {},
+    timestamp: new Date().toISOString()
+  });
+});
+
 
 // Admin / Imam Authentication System
 const ADMIN_PIN = process.env.ADMIN_PIN || 'mosq2026';
@@ -180,11 +221,12 @@ app.get('/api/auth/verify', (req, res) => {
 const isKeyActive = (k) => Boolean(k && !k.includes('your_') && !k.includes('placeholder') && k.trim() !== '');
 
 app.get('/api/status', (req, res) => {
+  const sttStatus = sttService.getStatus ? sttService.getStatus() : {};
   res.json({
     status: 'online',
     providers: {
-      deepgramSTT: isKeyActive(process.env.DEEPGRAM_API_KEY),
-      gladiaSTT: isKeyActive(process.env.GLADIA_API_KEY),
+      gladiaSTT: (sttStatus.keyPool && sttStatus.keyPool.total > 0),
+      gladiaKeyPool: sttStatus.keyPool || {},
       openrouterTranslation: isKeyActive(openrouterKey),
       openrouterModel,
       deeplTranslation: isKeyActive(process.env.DEEPL_API_KEY),
