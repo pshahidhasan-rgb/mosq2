@@ -2,17 +2,39 @@
 const urlParams = new URLSearchParams(window.location.search);
 const sessionId = urlParams.get('session') || 'myo-youth';
 
-let targetLang = urlParams.get('lang') || 'en';
+const VALID_LANGS = ['en', 'uz', 'tr', 'ur', 'bn', 'fr', 'id', 'so'];
+let userExplicitlySelectedLang = false;
+
+// Determine initial language:
+// 1. URL param (?lang=)
+// 2. Saved preference in localStorage ('mosq_tv_lang')
+// 3. Default fallback: 'en'
+let targetLang = 'en';
+if (urlParams.get('lang') && VALID_LANGS.includes(urlParams.get('lang'))) {
+  targetLang = urlParams.get('lang');
+  userExplicitlySelectedLang = true;
+} else {
+  try {
+    const saved = localStorage.getItem('mosq_tv_lang');
+    if (saved && VALID_LANGS.includes(saved)) {
+      targetLang = saved;
+      userExplicitlySelectedLang = true;
+    }
+  } catch (e) {}
+}
+
 let currentMosqueName = 'MYO YOUTH CENTER';
 let ws = null;
 // Track all timestamps we have already rendered — prevents skipping consecutive ayahs
 const seenTimestamps = new Set();
 let ayahTimer = null;
+let feedSyncInterval = null;
 
-// History queues for Arabic and Translation
+// History queue for re-rendering when user switches language
 const MAX_HISTORY = 4;
-const arabicHistory = [];
-const transHistory = [];
+const recentFeedItems = [];
+let activeAyahData = null;
+let activeAyahFallbackTrans = null;
 
 // DOM Elements
 const mosqueNameEl = document.getElementById('mosque-name');
@@ -29,18 +51,25 @@ const ayahRefEl = document.getElementById('ayah-reference');
 const ayahArabicEl = document.getElementById('ayah-arabic');
 const ayahTransEl = document.getElementById('ayah-trans');
 
-// Initialize Dropdown Selection
+// Initialize Dropdown Selection & Change Handler
 if (targetLangSelect) {
-  if (['en', 'uz', 'tr', 'ur', 'bn', 'fr', 'id', 'so'].includes(targetLang)) {
-    targetLangSelect.value = targetLang;
-  } else {
-    targetLang = targetLangSelect.value;
-  }
+  targetLangSelect.value = targetLang;
 
   targetLangSelect.addEventListener('change', () => {
     targetLang = targetLangSelect.value;
+    userExplicitlySelectedLang = true;
+    try {
+      localStorage.setItem('mosq_tv_lang', targetLang);
+    } catch (e) {}
     initQRCode();
-    initSession();
+
+    // Inform WebSocket of new TV language
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'CHANGE_LANGUAGE', language: targetLang }));
+    }
+
+    // Instantly re-render translations on TV screen in new language
+    reRenderTranslationFeed();
   });
 }
 
@@ -156,16 +185,60 @@ function streamWordsIntoElement(element, fullText, delayMs = 85, onComplete = nu
 }
 
 /**
+ * Re-render Translation Column in the newly selected targetLang
+ */
+function reRenderTranslationFeed() {
+  clearActiveStreams();
+  transFeed.innerHTML = '';
+  if (recentFeedItems.length === 0) {
+    transFeed.innerHTML = '<div class="idle-placeholder">Waiting for sermon to begin...</div>';
+  } else {
+    recentFeedItems.forEach((item, idx) => {
+      const isCurrent = (idx === recentFeedItems.length - 1);
+      const pTrans = document.createElement('div');
+      pTrans.className = `para-item ${isCurrent ? 'current' : 'history'}`;
+      let text = '';
+      if (item.transObj && typeof item.transObj === 'object') {
+        text = item.transObj[targetLang] || item.transObj.en || Object.values(item.transObj)[0] || '';
+      } else {
+        text = item.transObj || '';
+      }
+      pTrans.textContent = text;
+      transFeed.appendChild(pTrans);
+    });
+    if (transFeed.parentElement) {
+      transFeed.parentElement.scrollTo({ top: transFeed.parentElement.scrollHeight, behavior: 'smooth' });
+    }
+  }
+
+  // Update active Ayah overlay if visible
+  if (activeAyahData && ayahOverlay && ayahOverlay.classList.contains('active')) {
+    let transText = '';
+    if (activeAyahData.translations) {
+      transText = activeAyahData.translations[targetLang] || activeAyahData.translations.en || Object.values(activeAyahData.translations)[0];
+    } else if (activeAyahFallbackTrans) {
+      if (typeof activeAyahFallbackTrans === 'object' && activeAyahFallbackTrans !== null) {
+        transText = activeAyahFallbackTrans[targetLang] || activeAyahFallbackTrans.en || Object.values(activeAyahFallbackTrans)[0];
+      } else {
+        transText = activeAyahFallbackTrans;
+      }
+    }
+    if (transText) {
+      ayahTransEl.textContent = `"${transText}"`;
+    }
+  }
+}
+
+/**
  * Append New Sentence to Live Split Screen without Wiping History
  */
 function appendToFeed(arabicText, transObj, isLive = true) {
   if (!arabicText && !transObj) return;
 
-  let displayTrans = '';
-  if (typeof transObj === 'object' && transObj !== null) {
-    displayTrans = transObj[targetLang] || transObj['en'] || Object.values(transObj)[0] || '';
-  } else {
-    displayTrans = transObj || '';
+  // Track in recentFeedItems for re-rendering on language switch
+  recentFeedItems.push({ arabicText, transObj });
+  while (recentFeedItems.length > MAX_HISTORY) {
+    recentFeedItems.shift();
   }
 
   // 1. Arabic Column
@@ -192,6 +265,13 @@ function appendToFeed(arabicText, transObj, isLive = true) {
   }
 
   // 2. Translation Column
+  let displayTrans = '';
+  if (typeof transObj === 'object' && transObj !== null) {
+    displayTrans = transObj[targetLang] || transObj.en || Object.values(transObj)[0] || '';
+  } else {
+    displayTrans = transObj || '';
+  }
+
   if (displayTrans) {
     const existingTrans = transFeed.querySelectorAll('.para-item.current');
     existingTrans.forEach(el => {
@@ -229,9 +309,12 @@ function appendToFeed(arabicText, transObj, isLive = true) {
  * Handle Incoming Transcript & Translation (Live Real-Time Stream)
  */
 function handleIncomingSpeech({ arabic, translations, translated, ayah, timestamp }, isLive = true) {
-  if (!arabic && !translated) return;
+  if (!arabic && !translated && !translations) return;
 
-  const transObj = translations || (typeof translated === 'string' ? { [targetLang]: translated } : translated);
+  let transObj = translations;
+  if (!transObj && translated) {
+    transObj = { [targetLang]: translated };
+  }
 
   // 1. Quran Ayah Overlay (shown in addition to, not instead of, the feed)
   if (ayah) {
@@ -247,6 +330,9 @@ function handleIncomingSpeech({ arabic, translations, translated, ayah, timestam
  */
 function showAyahOverlay(ayah, fallbackArabic, fallbackTrans, isLive = true) {
   if (!ayahOverlay) return;
+  activeAyahData = ayah;
+  activeAyahFallbackTrans = fallbackTrans;
+
   const ref = ayah.reference || (ayah.surahNumber ? `Surah ${ayah.surahNameEnglish || ''} (${ayah.surahNumber}:${ayah.ayahNumber})` : 'Holy Quran');
   ayahRefEl.textContent = ref;
 
@@ -282,6 +368,8 @@ function hideAyahOverlay() {
   if (ayahOverlay && ayahOverlay.classList.contains('active')) {
     ayahOverlay.classList.remove('active');
   }
+  activeAyahData = null;
+  activeAyahFallbackTrans = null;
 }
 
 /**
@@ -297,9 +385,10 @@ async function initSession() {
       if (data.mosqueName) currentMosqueName = data.mosqueName;
       updateTVStatusUI(data.status, data.mosqueName);
 
-      if (data.primaryLanguage && targetLangSelect && !urlParams.has('lang')) {
+      // Only adopt session primaryLanguage on initial load IF user has NOT explicitly chosen a language
+      if (!userExplicitlySelectedLang && data.primaryLanguage && VALID_LANGS.includes(data.primaryLanguage)) {
         targetLang = data.primaryLanguage;
-        targetLangSelect.value = targetLang;
+        if (targetLangSelect) targetLangSelect.value = targetLang;
         initQRCode();
       }
 
@@ -308,11 +397,12 @@ async function initSession() {
         const recent = data.transcripts.slice(-MAX_HISTORY);
         arabicFeed.innerHTML = '';
         transFeed.innerHTML = '';
+        recentFeedItems.length = 0;
         recent.forEach(item => {
+          if (item.timestamp) seenTimestamps.add(item.timestamp);
           const transObj = item.translations || (typeof item.translated === 'string' ? { [targetLang]: item.translated } : item.translated);
           appendToFeed(item.arabic, transObj, false);
         });
-        lastDisplayTimestamp = data.transcripts[data.transcripts.length - 1].timestamp;
       }
     }
   } catch (err) {}
@@ -325,11 +415,14 @@ async function initSession() {
  * WebSocket Connection with auto-reconnect
  */
 function connectWebSocket() {
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+    return;
+  }
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
 
   ws.onopen = () => {
-    ws.send(JSON.stringify({ type: 'JOIN_ROOM', sessionId, role: 'tv' }));
+    ws.send(JSON.stringify({ type: 'JOIN_ROOM', sessionId, role: 'tv', language: targetLang }));
   };
 
   ws.onmessage = (event) => {
@@ -355,7 +448,8 @@ function connectWebSocket() {
  * HTTP Feed Polling Fallback
  */
 function startFeedSync() {
-  setInterval(async () => {
+  if (feedSyncInterval) clearInterval(feedSyncInterval);
+  feedSyncInterval = setInterval(async () => {
     try {
       // Always fetch the last few transcripts to catch any missed items
       const url = `/api/session/${sessionId}/feed`;
@@ -388,6 +482,11 @@ function startFeedSync() {
   }, 2000);
 }
 
+// Aliases for compatibility
+function startDisplayFeedSync() { startFeedSync(); }
+function renderSubtitle(data) { handleIncomingSpeech(data, true); }
+function setTvLiveStatus(s, m) { updateTVStatusUI(s, m); }
+
 function toggleFullscreen() {
   const btn = document.getElementById('btn-fullscreen');
   if (!document.fullscreenElement) {
@@ -404,3 +503,4 @@ if (document.readyState === 'loading') {
 } else {
   initSession();
 }
+

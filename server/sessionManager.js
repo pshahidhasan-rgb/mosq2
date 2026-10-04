@@ -317,12 +317,13 @@ class SessionManager {
       if (sub.ws.readyState !== 1) continue;
 
       if (sub.role === 'tv') {
-        // TV display gets Arabic + primary mosque language
-        const tvLang = session ? session.primaryLanguage : 'en';
+        // TV display gets Arabic + full multi-language translations map so client can display any selected language
+        const tvLang = sub.language || (session ? session.primaryLanguage : 'en');
         sub.ws.send(JSON.stringify({
           type: 'LIVE_SUBTITLE',
           arabic: arabicText,
-          translated: translations[tvLang] || translations.en || arabicText,
+          translations,
+          translated: (translations && translations[tvLang]) || (translations && translations.en) || arabicText,
           language: tvLang,
           ayah: ayahData || null,
           timestamp
@@ -330,12 +331,13 @@ class SessionManager {
       } else if (sub.role === 'attendee') {
         // Attendee receives their chosen language + audio buffer
         const attendeeLang = sub.language || 'en';
-        const translatedText = translations[attendeeLang] || translations.en || arabicText;
+        const translatedText = (translations && translations[attendeeLang]) || (translations && translations.en) || arabicText;
         const audio = audioByLanguage[attendeeLang] || null;
 
         sub.ws.send(JSON.stringify({
           type: 'LIVE_SUBTITLE',
           arabic: arabicText,
+          translations,
           translated: translatedText,
           language: attendeeLang,
           ayah: ayahData ? {

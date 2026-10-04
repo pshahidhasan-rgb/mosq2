@@ -46,7 +46,7 @@ let activeLiveSessionId = 'jumuah-live-4b2c1d';
   await sessionManager.createSession({
     sessionId: 'myo-youth-8f3a9e',
     mosqueName: 'MYO Youth Center',
-    primaryLanguage: 'uz',
+    primaryLanguage: process.env.DEFAULT_PRIMARY_LANGUAGE || 'en',
     hostUrl: `http://localhost:${PORT}`
   });
   await sessionManager.createSession({
