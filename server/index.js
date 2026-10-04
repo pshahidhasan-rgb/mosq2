@@ -378,6 +378,18 @@ app.post('/api/session/:id/inject-text', async (req, res) => {
   res.json({ success: true, result });
 });
 
+// TV Screen Font Size & Capacity Settings
+app.post('/api/session/:id/tv-settings', (req, res) => {
+  const { fontSize, capacity } = req.body;
+  const session = sessionManager.updateTvSettings(req.params.id, { fontSize, capacity });
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+  res.json({
+    success: true,
+    tvFontSize: session.tvFontSize,
+    tvCapacity: session.tvCapacity
+  });
+});
+
 // Khutbah Archives History
 app.get('/api/history', (req, res) => {
   res.json(sessionManager.history);
@@ -402,6 +414,8 @@ app.get('/api/session/:id/feed', (req, res) => {
     status: session.status,
     startedAt: session.startedAt,
     latestAyah: session.detectedAyahs.length > 0 ? session.detectedAyahs[session.detectedAyahs.length - 1] : null,
+    tvFontSize: session.tvFontSize,
+    tvCapacity: session.tvCapacity,
     transcripts,
     stats,
     serverTime: new Date().toISOString()
@@ -456,6 +470,12 @@ wss.on('connection', (ws) => {
       if (msg.type === 'CHANGE_LANGUAGE') {
         userLanguage = msg.language || 'en';
         sessionManager.updateSubscriberLanguage(userSessionId, ws, userLanguage);
+      }
+
+      if (msg.type === 'UPDATE_TV_SETTINGS') {
+        const { fontSize, capacity, sessionId } = msg;
+        const targetSessionId = sessionId || userSessionId;
+        sessionManager.updateTvSettings(targetSessionId, { fontSize, capacity });
       }
 
       if (msg.type === 'AUDIO_DATA') {

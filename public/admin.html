@@ -278,6 +278,54 @@
             </div>
           </div>
 
+          <!-- TV Display Font Size & Reading Capacity Control -->
+          <div class="card" style="border: 1px solid rgba(16, 185, 129, 0.35); background: rgba(15, 23, 42, 0.7);">
+            <div class="card-title" style="margin-bottom: 0.45rem;">
+              <span style="display: flex; align-items: center; gap: 0.45rem;">
+                <span>📺 TV Display Text Size</span>
+              </span>
+              <span id="tv-capacity-badge" class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-size: 0.72rem; font-weight: 700;">
+                12 Lines (3X Capacity)
+              </span>
+            </div>
+            <p style="font-size: 0.81rem; color: var(--text-secondary); margin-bottom: 0.85rem; line-height: 1.4;">
+              Control TV font size in real time. Adjusting size directly sets how many speech lines fit on screen.
+            </p>
+
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4rem; margin-bottom: 0.85rem;">
+              <button type="button" class="btn-tv-preset" data-size="small" id="btn-tv-small" style="padding: 0.5rem 0.2rem; text-align: center; border: 1px solid rgba(148, 163, 184, 0.2); background: rgba(30, 41, 59, 0.7); color: #f1f5f9; border-radius: 8px; cursor: pointer; transition: all 0.2s;">
+                <div style="font-weight: 700; font-size: 0.78rem;">Compact</div>
+                <div style="font-size: 0.67rem; color: #94a3b8; margin-top: 2px;">~18 lines</div>
+              </button>
+              <button type="button" class="btn-tv-preset active" data-size="medium" id="btn-tv-medium" style="padding: 0.5rem 0.2rem; text-align: center; border: 1px solid #10b981; background: rgba(16, 185, 129, 0.2); color: #34d399; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-weight: 700;">
+                <div style="font-weight: 700; font-size: 0.78rem;">Standard</div>
+                <div style="font-size: 0.67rem; color: #6ee7b7; margin-top: 2px;">12 lines (3X)</div>
+              </button>
+              <button type="button" class="btn-tv-preset" data-size="large" id="btn-tv-large" style="padding: 0.5rem 0.2rem; text-align: center; border: 1px solid rgba(148, 163, 184, 0.2); background: rgba(30, 41, 59, 0.7); color: #f1f5f9; border-radius: 8px; cursor: pointer; transition: all 0.2s;">
+                <div style="font-weight: 700; font-size: 0.78rem;">Large</div>
+                <div style="font-size: 0.67rem; color: #94a3b8; margin-top: 2px;">~8 lines</div>
+              </button>
+              <button type="button" class="btn-tv-preset" data-size="xlarge" id="btn-tv-xlarge" style="padding: 0.5rem 0.2rem; text-align: center; border: 1px solid rgba(148, 163, 184, 0.2); background: rgba(30, 41, 59, 0.7); color: #f1f5f9; border-radius: 8px; cursor: pointer; transition: all 0.2s;">
+                <div style="font-weight: 700; font-size: 0.78rem;">Extra Lg</div>
+                <div style="font-size: 0.67rem; color: #94a3b8; margin-top: 2px;">~5 lines</div>
+              </button>
+            </div>
+
+            <!-- Fine-Tuning Slider -->
+            <div style="background: rgba(15, 23, 42, 0.6); padding: 0.65rem 0.75rem; border-radius: 8px; border: 1px solid rgba(148, 163, 184, 0.15);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                <span style="font-size: 0.78rem; color: var(--text-secondary);">Font Scale Slider:</span>
+                <span id="tv-scale-display" style="font-size: 0.8rem; font-weight: 700; color: #34d399; font-family: monospace;">100% (Default)</span>
+              </div>
+              <input type="range" id="tv-font-slider" min="70" max="150" step="5" value="100" style="width: 100%; accent-color: #10b981; cursor: pointer;" />
+              <div style="display: flex; justify-content: space-between; font-size: 0.67rem; color: #64748b; margin-top: 3px;">
+                <span>70% (Compact)</span>
+                <span>100% (3X Standard)</span>
+                <span>150% (Max Size)</span>
+              </div>
+            </div>
+          </div>
+
           <!-- Attendee Join QR Code Card -->
           <div class="card">
             <div class="card-title">

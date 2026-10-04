@@ -663,6 +663,7 @@ async function initConsoleSession(sessionId) {
       else updateControlLockState();
 
       if (data.stats) updateStatsDisplay(data.stats);
+      if (data.tvFontSize) syncTvFontSizeUI(data.tvFontSize, data.tvCapacity);
 
       // Update dynamic links with session primary language
       const joinUrl = `${window.location.origin}/join.html?session=${encodeURIComponent(sessionId)}&lang=${encodeURIComponent(data.primaryLanguage || 'en')}`;
@@ -733,6 +734,7 @@ function connectWebSocket(sessionId) {
         else if (data.status === 'ended') setSessionEnded();
       }
       if (data.type === 'SESSION_STATS') updateStatsDisplay(data.stats);
+      if (data.type === 'TV_SETTINGS_UPDATE') syncTvFontSizeUI(data.tvFontSize, data.tvCapacity);
       if (data.type === 'LIVE_SUBTITLE') addTranscriptEntry(data);
     } catch (e) {}
   };
@@ -854,8 +856,124 @@ async function deliverNextSentence() {
   deliveryTimer = setTimeout(deliverNextSentence, 4500);
 }
 
+// ─── TV DISPLAY FONT SIZE & CAPACITY CONTROLS ───
+const TV_PRESETS_INFO = {
+  small: { scale: 80, capacity: 18, label: '18 Lines (High Capacity)', name: 'Compact' },
+  medium: { scale: 100, capacity: 12, label: '12 Lines (3X Capacity)', name: 'Standard' },
+  large: { scale: 125, capacity: 8, label: '8 Lines (Large Font)', name: 'Large' },
+  xlarge: { scale: 150, capacity: 5, label: '5 Lines (Extra Large)', name: 'Extra Lg' }
+};
+
+let activeTvFontSize = 'medium';
+let activeTvCapacity = 12;
+
+function getTvCapacityBadge() { return document.getElementById('tv-capacity-badge'); }
+function getTvScaleDisplay() { return document.getElementById('tv-scale-display'); }
+function getTvFontSlider() { return document.getElementById('tv-font-slider'); }
+
+function syncTvFontSizeUI(fontSize, capacity) {
+  if (!fontSize) return;
+  activeTvFontSize = fontSize;
+  if (capacity) activeTvCapacity = Number(capacity);
+
+  const tvPresetBtns = document.querySelectorAll('.btn-tv-preset');
+  tvPresetBtns.forEach(btn => {
+    const isMatch = btn.getAttribute('data-size') === String(fontSize);
+    if (isMatch) {
+      btn.classList.add('active');
+      btn.style.borderColor = '#10b981';
+      btn.style.background = 'rgba(16, 185, 129, 0.2)';
+      btn.style.color = '#34d399';
+      btn.style.fontWeight = '700';
+    } else {
+      btn.classList.remove('active');
+      btn.style.borderColor = 'rgba(148, 163, 184, 0.2)';
+      btn.style.background = 'rgba(30, 41, 59, 0.7)';
+      btn.style.color = '#f1f5f9';
+      btn.style.fontWeight = 'normal';
+    }
+  });
+
+  let scaleNum = 100;
+  let capacityText = `${activeTvCapacity} Lines (3X Capacity)`;
+
+  if (TV_PRESETS_INFO[fontSize]) {
+    scaleNum = TV_PRESETS_INFO[fontSize].scale;
+    activeTvCapacity = TV_PRESETS_INFO[fontSize].capacity;
+    capacityText = TV_PRESETS_INFO[fontSize].label;
+  } else if (!isNaN(Number(fontSize))) {
+    scaleNum = Number(fontSize);
+    activeTvCapacity = capacity || Math.max(4, Math.round(12 / (scaleNum / 100)));
+    capacityText = `${activeTvCapacity} Lines (~${scaleNum}%)`;
+  }
+
+  const slider = getTvFontSlider();
+  const scaleDisplay = getTvScaleDisplay();
+  const capacityBadge = getTvCapacityBadge();
+
+  if (slider) slider.value = scaleNum;
+  if (scaleDisplay) scaleDisplay.textContent = `${scaleNum}%`;
+  if (capacityBadge) capacityBadge.textContent = capacityText;
+}
+
+async function setTvFontSize(fontSize, capacity = null) {
+  activeTvFontSize = fontSize;
+  let targetCap = capacity;
+  if (!targetCap && TV_PRESETS_INFO[fontSize]) {
+    targetCap = TV_PRESETS_INFO[fontSize].capacity;
+  }
+  syncTvFontSizeUI(fontSize, targetCap);
+
+  if (!currentSessionId) return;
+
+  // 1. Instant WebSocket broadcast to connected TV displays
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: 'UPDATE_TV_SETTINGS',
+      sessionId: currentSessionId,
+      fontSize,
+      capacity: targetCap
+    }));
+  }
+
+  // 2. Persist to server session storage
+  try {
+    await fetch(`/api/session/${currentSessionId}/tv-settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fontSize, capacity: targetCap })
+    });
+  } catch (e) {}
+}
+
+function initTvFontControls() {
+  const tvPresetBtns = document.querySelectorAll('.btn-tv-preset');
+  tvPresetBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const size = btn.getAttribute('data-size');
+      setTvFontSize(size);
+    });
+  });
+
+  const slider = getTvFontSlider();
+  if (slider) {
+    slider.addEventListener('input', (e) => {
+      const scale = Number(e.target.value);
+      const capacity = Math.max(4, Math.round(12 / (scale / 100)));
+      syncTvFontSizeUI(scale, capacity);
+    });
+
+    slider.addEventListener('change', (e) => {
+      const scale = Number(e.target.value);
+      const capacity = Math.max(4, Math.round(12 / (scale / 100)));
+      setTvFontSize(scale, capacity);
+    });
+  }
+}
+
 // ─── INITIALIZATION ───
 async function init() {
+  initTvFontControls();
   const authed = await checkAuth();
   if (authed) {
     setupViewRouting();

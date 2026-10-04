@@ -29,8 +29,76 @@ let ws = null;
 const seenTimestamps = new Set();
 let feedSyncInterval = null;
 
+// Dynamic TV Font Size & Capacity Presets (Default is 3X previous capacity = 12 lines)
+const TV_FONT_PRESETS = {
+  small: { scale: 0.8, capacity: 18 },
+  medium: { scale: 1.0, capacity: 12 }, // 3X previous capacity (was 4, now 12)
+  large: { scale: 1.25, capacity: 8 },
+  xlarge: { scale: 1.5, capacity: 5 }
+};
+
+let MAX_HISTORY = 12; // 3X previous capacity
+let currentTvFontSize = 'medium';
+
+function applyTvFontSize(fontSize, customCapacity = null, shouldScroll = true) {
+  if (!fontSize) return;
+  currentTvFontSize = fontSize;
+
+  let scale = 1.0;
+  let capacity = 12;
+
+  if (typeof fontSize === 'string' && TV_FONT_PRESETS[fontSize]) {
+    scale = TV_FONT_PRESETS[fontSize].scale;
+    capacity = customCapacity ? Number(customCapacity) : TV_FONT_PRESETS[fontSize].capacity;
+  } else if (!isNaN(Number(fontSize))) {
+    const num = Number(fontSize);
+    scale = num > 2 ? num / 100 : num;
+    capacity = customCapacity ? Number(customCapacity) : Math.max(4, Math.round(12 / (scale || 1)));
+  }
+
+  MAX_HISTORY = capacity;
+  document.documentElement.style.setProperty('--tv-font-scale', scale);
+
+  try {
+    localStorage.setItem('mosq_tv_font_size', fontSize);
+    if (customCapacity) localStorage.setItem('mosq_tv_capacity', customCapacity);
+  } catch (e) {}
+
+  // Prune any excess history if capacity decreased
+  while (recentFeedItems.length > MAX_HISTORY) {
+    recentFeedItems.shift();
+  }
+  if (arabicFeed) {
+    while (arabicFeed.children.length > MAX_HISTORY) {
+      if (arabicFeed.firstElementChild) arabicFeed.firstElementChild.remove();
+    }
+  }
+  if (transFeed) {
+    while (transFeed.children.length > MAX_HISTORY) {
+      if (transFeed.firstElementChild) transFeed.firstElementChild.remove();
+    }
+  }
+
+  if (shouldScroll) {
+    setTimeout(() => {
+      if (arabicFeed && arabicFeed.parentElement) {
+        arabicFeed.parentElement.scrollTo({ top: arabicFeed.parentElement.scrollHeight, behavior: 'smooth' });
+      }
+      if (transFeed && transFeed.parentElement) {
+        transFeed.parentElement.scrollTo({ top: transFeed.parentElement.scrollHeight, behavior: 'smooth' });
+      }
+    }, 50);
+  }
+}
+
+// Restore saved font size from localStorage if available
+try {
+  const savedTvSize = localStorage.getItem('mosq_tv_font_size');
+  const savedTvCap = localStorage.getItem('mosq_tv_capacity');
+  if (savedTvSize) applyTvFontSize(savedTvSize, savedTvCap, false);
+} catch (e) {}
+
 // History queue for re-rendering when user switches language
-const MAX_HISTORY = 4;
 const recentFeedItems = [];
 // Ayah overlay disabled
 const activeAyahData = null;
@@ -340,6 +408,10 @@ async function initSession() {
       if (data.mosqueName) currentMosqueName = data.mosqueName;
       updateTVStatusUI(data.status, data.mosqueName);
 
+      if (data.tvFontSize) {
+        applyTvFontSize(data.tvFontSize, data.tvCapacity, false);
+      }
+
       // Only adopt session primaryLanguage on initial load IF user has NOT explicitly chosen a language
       if (!userExplicitlySelectedLang && data.primaryLanguage && VALID_LANGS.includes(data.primaryLanguage)) {
         targetLang = data.primaryLanguage;
@@ -386,6 +458,12 @@ function connectWebSocket() {
       if (data.type === 'SESSION_STATUS') {
         updateTVStatusUI(data.status, data.mosqueName);
       }
+      if (data.type === 'JOINED_SUCCESS' && data.session && data.session.tvFontSize) {
+        applyTvFontSize(data.session.tvFontSize, data.session.tvCapacity, false);
+      }
+      if (data.type === 'TV_SETTINGS_UPDATE') {
+        applyTvFontSize(data.tvFontSize, data.tvCapacity, true);
+      }
       if (data.type === 'LIVE_SUBTITLE') {
         // Mark this timestamp as seen so the HTTP fallback won't re-render it
         if (data.timestamp) seenTimestamps.add(data.timestamp);
@@ -413,6 +491,9 @@ function startFeedSync() {
       const data = await res.json();
       if (data.status) {
         updateTVStatusUI(data.status, data.mosqueName);
+      }
+      if (data.tvFontSize && data.tvFontSize !== currentTvFontSize) {
+        applyTvFontSize(data.tvFontSize, data.tvCapacity, false);
       }
       if (data.transcripts && data.transcripts.length > 0) {
         // Only process items we haven't seen yet (by timestamp)

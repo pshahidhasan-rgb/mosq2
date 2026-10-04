@@ -71,6 +71,8 @@ class SessionManager {
       id: sessionId,
       mosqueName,
       primaryLanguage,
+      tvFontSize: 'medium', // 'small' | 'medium' | 'large' | 'xlarge'
+      tvCapacity: 12, // 3X previous capacity (was 4, now 12 lines)
       status: 'idle', // idle, active, paused, ended
       startedAt: null,
       endedAt: null,
@@ -117,6 +119,23 @@ class SessionManager {
         console.warn('[Session] QR code refresh failed:', err.message);
       }
     }
+    return session;
+  }
+
+  updateTvSettings(sessionId, { fontSize, capacity } = {}) {
+    const session = this.getSession(sessionId);
+    if (!session) return null;
+    if (fontSize !== undefined && fontSize !== null) {
+      session.tvFontSize = fontSize;
+    }
+    if (capacity !== undefined && capacity !== null) {
+      session.tvCapacity = Number(capacity);
+    }
+    this.broadcastToSession(sessionId, {
+      type: 'TV_SETTINGS_UPDATE',
+      tvFontSize: session.tvFontSize,
+      tvCapacity: session.tvCapacity
+    });
     return session;
   }
 
