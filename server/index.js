@@ -63,7 +63,8 @@ sttService.initSession();
 
 /**
  * Main Real-time Processing Pipeline:
- * Arabic Speech Transcript -> AI Quran Ayah Detection -> Multi-Language Translation -> Low-Latency Audio -> Broadcast
+ * Arabic Speech Transcript -> Multi-Language Translation -> Low-Latency Audio -> Broadcast
+ * NOTE: Quran detection is disabled — pure translation mode only.
  */
 async function processTranscript({ text, isFinal, source, sessionId }) {
   if (!text || text.trim().length === 0) return null;
@@ -86,22 +87,12 @@ async function processTranscript({ text, isFinal, source, sessionId }) {
     return null;
   }
 
-  // Step 1: Detect Quran Ayah in speech using AI Model & Canonical Corpus
-  const ayahMatch = await quranAiDetector.detect(cleanArabic);
-  if (ayahMatch) {
-    console.log(`[Quran Detection] Matched: ${ayahMatch.reference} (${ayahMatch.confidence}% confidence, source: ${ayahMatch.source || 'canonical'})`);
-  }
+  // Quran detection DISABLED — always use pure translation pipeline
+  const ayahMatch = null;
 
-  // Step 2: Multi-language Translation
-  let translations = {};
-  if (ayahMatch && ayahMatch.translations) {
-    // If Quran Ayah, use canonical authenticated translations for precision
-    translations = { ...ayahMatch.translations };
-  } else {
-    // Regular sermon speech: translate via DeepL / OpenRouter Llama 3.3
-    const targetLanguages = ['en', 'uz', 'bn', 'ur', 'fr', 'zh', 'tr', 'id', 'so'];
-    translations = await translationService.translateMultiple(cleanArabic, targetLanguages);
-  }
+  // Step 2: Multi-language Translation — always runs
+  const targetLanguages = ['en', 'uz', 'bn', 'ur', 'fr', 'zh', 'tr', 'id', 'so'];
+  const translations = await translationService.translateMultiple(cleanArabic, targetLanguages);
 
   // Step 3: Low-Latency Spoken Audio Generation for Earbuds (Cartesia / Sonic)
   const audioByLanguage = {};
@@ -129,7 +120,7 @@ async function processTranscript({ text, isFinal, source, sessionId }) {
   const broadcastPayload = {
     arabicText: cleanArabic,
     translations,
-    ayahData: ayahMatch,
+    ayahData: null,  // Quran detection disabled
     audioByLanguage,
     timestamp: new Date().toISOString()
   };

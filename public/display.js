@@ -25,16 +25,16 @@ if (urlParams.get('lang') && VALID_LANGS.includes(urlParams.get('lang'))) {
 
 let currentMosqueName = 'MYO YOUTH CENTER';
 let ws = null;
-// Track all timestamps we have already rendered — prevents skipping consecutive ayahs
+// Track timestamps rendered
 const seenTimestamps = new Set();
-let ayahTimer = null;
 let feedSyncInterval = null;
 
 // History queue for re-rendering when user switches language
 const MAX_HISTORY = 4;
 const recentFeedItems = [];
-let activeAyahData = null;
-let activeAyahFallbackTrans = null;
+// Ayah overlay disabled
+const activeAyahData = null;
+const activeAyahFallbackTrans = null;
 
 // DOM Elements
 const mosqueNameEl = document.getElementById('mosque-name');
@@ -316,61 +316,16 @@ function handleIncomingSpeech({ arabic, translations, translated, ayah, timestam
     transObj = { [targetLang]: translated };
   }
 
-  // 1. Quran Ayah Overlay (shown in addition to, not instead of, the feed)
-  if (ayah) {
-    showAyahOverlay(ayah, arabic, transObj, isLive);
-  }
-
-  // 2. Always append to live feeds — even for Quran ayahs
+  // Quran Ayah Overlay is DISABLED — just append to feeds directly
   appendToFeed(arabic, transObj, isLive);
 }
 
 /**
- * Quran Ayah Gold Fullscreen Overlay with word-by-word streaming
+ * Quran Ayah Overlay — DISABLED (kept as no-op for compatibility)
  */
-function showAyahOverlay(ayah, fallbackArabic, fallbackTrans, isLive = true) {
-  if (!ayahOverlay) return;
-  activeAyahData = ayah;
-  activeAyahFallbackTrans = fallbackTrans;
+function showAyahOverlay() { /* disabled */ }
+function hideAyahOverlay() { /* disabled */ }
 
-  const ref = ayah.reference || (ayah.surahNumber ? `Surah ${ayah.surahNameEnglish || ''} (${ayah.surahNumber}:${ayah.ayahNumber})` : 'Holy Quran');
-  ayahRefEl.textContent = ref;
-
-  const arabicVerse = ayah.arabicUthmani || fallbackArabic || '';
-  let transText = '';
-  if (ayah.translations) {
-    transText = ayah.translations[targetLang] || ayah.translations.en || Object.values(ayah.translations)[0];
-  } else if (typeof fallbackTrans === 'object' && fallbackTrans !== null) {
-    transText = fallbackTrans[targetLang] || fallbackTrans.en || Object.values(fallbackTrans)[0];
-  } else if (typeof fallbackTrans === 'string') {
-    transText = fallbackTrans;
-  }
-
-  // Clear any pending hide timer before showing a new/same ayah
-  clearTimeout(ayahTimer);
-  ayahOverlay.classList.add('active');
-
-  if (isLive) {
-    streamWordsIntoElement(ayahArabicEl, arabicVerse, 65);
-    streamWordsIntoElement(ayahTransEl, `"${transText}"`, 70);
-  } else {
-    ayahArabicEl.textContent = arabicVerse;
-    ayahTransEl.textContent = `"${transText}"`;
-  }
-
-  // Give 10 seconds to read the ayah (up from 6s)
-  ayahTimer = setTimeout(() => {
-    hideAyahOverlay();
-  }, 10000);
-}
-
-function hideAyahOverlay() {
-  if (ayahOverlay && ayahOverlay.classList.contains('active')) {
-    ayahOverlay.classList.remove('active');
-  }
-  activeAyahData = null;
-  activeAyahFallbackTrans = null;
-}
 
 /**
  * Initialize Session details & RESTORE HISTORY ON REFRESH
