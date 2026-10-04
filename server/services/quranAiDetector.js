@@ -10,6 +10,39 @@
 
 const { detectAyah: localFastMatch, normalizeArabic } = require('../quranMatcher');
 
+/**
+ * These phrases are NOT Quranic verses — they are Islamic invocations, duas, or sermon
+ * openings that are spoken around Quran but must never be classified as Ayahs.
+ * The AI model tends to incorrectly match them to Quran references (e.g. 7:200, 16:98).
+ */
+const NEVER_QURAN_PHRASES = [
+  // Ta'awwudh — seeking refuge before recitation
+  'اعوذ بالله من الشيطان الرجيم',
+  'اعوذ بالله من الشيطان',
+  'اعوذ بالله',
+  // Bismillah — not a standalone Quran verse (though it opens surahs)
+  'بسم الله الرحمن الرحيم',
+  'بسم الله',
+  // Common sermon openings / khutbah haajah phrases
+  'ان الحمد لله نحمده ونستعينه ونستغفره',
+  'ونعوذ بالله من شرور انفسنا',
+  'من يهده الله فلا مضل له',
+  'ومن يضلل فلا هادي له',
+  'واشهد ان لا اله الا الله',
+  'واشهد ان محمدا عبده ورسوله',
+  // Common Duas (supplications)
+  'اللهم اغفر للمسلمين والمسلمات',
+  'ربنا اتنا في الدنيا حسنه',
+  'اللهم صل على محمد',
+];
+
+function isNeverQuran(normalizedText) {
+  return NEVER_QURAN_PHRASES.some(phrase => {
+    const normPhrase = normalizeArabic(phrase);
+    return normalizedText.includes(normPhrase) || normPhrase.includes(normalizedText);
+  });
+}
+
 class QuranAIDetector {
   constructor(apiKey, model) {
     const isPlaceholder = (k) => !k || k.includes('your_') || k.includes('placeholder') || k.trim() === '';
@@ -29,9 +62,15 @@ class QuranAIDetector {
    * @returns {Promise<Object|null>} Verified Ayah metadata or null
    */
   async detect(arabicText) {
-    if (!arabicText || arabicText.trim().length < 4) return null;
+    if (!arabicText || arabicText.trim().length < 8) return null;
     const cleanText = arabicText.trim();
     const cacheKey = normalizeArabic(cleanText);
+
+    // Short-circuit: known non-Quranic Islamic phrases must never be matched
+    if (isNeverQuran(cacheKey)) {
+      console.log(`[Quran AI] Skipped known non-Quran phrase: "${cleanText.substring(0, 40)}..."`);
+      return null;
+    }
 
     if (this.cache.has(cacheKey)) {
       return this.cache.get(cacheKey);

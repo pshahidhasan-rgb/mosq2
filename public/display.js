@@ -5,7 +5,8 @@ const sessionId = urlParams.get('session') || 'myo-youth';
 let targetLang = urlParams.get('lang') || 'en';
 let currentMosqueName = 'MYO YOUTH CENTER';
 let ws = null;
-let lastDisplayTimestamp = null;
+// Track all timestamps we have already rendered — prevents skipping consecutive ayahs
+const seenTimestamps = new Set();
 let ayahTimer = null;
 
 // History queues for Arabic and Translation
@@ -232,14 +233,12 @@ function handleIncomingSpeech({ arabic, translations, translated, ayah, timestam
 
   const transObj = translations || (typeof translated === 'string' ? { [targetLang]: translated } : translated);
 
-  // 1. Quran Ayah Overlay
+  // 1. Quran Ayah Overlay (shown in addition to, not instead of, the feed)
   if (ayah) {
     showAyahOverlay(ayah, arabic, transObj, isLive);
-  } else {
-    hideAyahOverlay();
   }
 
-  // 2. Append directly to live feeds
+  // 2. Always append to live feeds — even for Quran ayahs
   appendToFeed(arabic, transObj, isLive);
 }
 
@@ -261,6 +260,8 @@ function showAyahOverlay(ayah, fallbackArabic, fallbackTrans, isLive = true) {
     transText = fallbackTrans;
   }
 
+  // Clear any pending hide timer before showing a new/same ayah
+  clearTimeout(ayahTimer);
   ayahOverlay.classList.add('active');
 
   if (isLive) {
@@ -271,10 +272,10 @@ function showAyahOverlay(ayah, fallbackArabic, fallbackTrans, isLive = true) {
     ayahTransEl.textContent = `"${transText}"`;
   }
 
-  clearTimeout(ayahTimer);
+  // Give 10 seconds to read the ayah (up from 6s)
   ayahTimer = setTimeout(() => {
     hideAyahOverlay();
-  }, 6000);
+  }, 10000);
 }
 
 function hideAyahOverlay() {
@@ -338,7 +339,8 @@ function connectWebSocket() {
         updateTVStatusUI(data.status, data.mosqueName);
       }
       if (data.type === 'LIVE_SUBTITLE') {
-        lastDisplayTimestamp = data.timestamp;
+        // Mark this timestamp as seen so the HTTP fallback won't re-render it
+        if (data.timestamp) seenTimestamps.add(data.timestamp);
         handleIncomingSpeech(data, true);
       }
     } catch (e) {}
@@ -355,7 +357,8 @@ function connectWebSocket() {
 function startFeedSync() {
   setInterval(async () => {
     try {
-      const url = `/api/session/${sessionId}/feed${lastDisplayTimestamp ? `?since=${encodeURIComponent(lastDisplayTimestamp)}` : ''}`;
+      // Always fetch the last few transcripts to catch any missed items
+      const url = `/api/session/${sessionId}/feed`;
       const res = await fetch(url);
       if (!res.ok) return;
       const data = await res.json();
@@ -363,18 +366,23 @@ function startFeedSync() {
         updateTVStatusUI(data.status, data.mosqueName);
       }
       if (data.transcripts && data.transcripts.length > 0) {
-        data.transcripts.forEach(item => {
-          if (item.timestamp !== lastDisplayTimestamp) {
-            lastDisplayTimestamp = item.timestamp;
-            handleIncomingSpeech({
-              arabic: item.arabic,
-              translations: item.translations,
-              translated: (item.translations && item.translations[targetLang]) || (item.translations && item.translations.en) || item.arabic,
-              ayah: item.ayah,
-              timestamp: item.timestamp
-            }, true);
-          }
+        // Only process items we haven't seen yet (by timestamp)
+        const newItems = data.transcripts.filter(item => item.timestamp && !seenTimestamps.has(item.timestamp));
+        newItems.forEach(item => {
+          seenTimestamps.add(item.timestamp);
+          handleIncomingSpeech({
+            arabic: item.arabic,
+            translations: item.translations,
+            translated: (item.translations && item.translations[targetLang]) || (item.translations && item.translations.en) || item.arabic,
+            ayah: item.ayah,
+            timestamp: item.timestamp
+          }, true);
         });
+        // Cap the Set size to avoid memory growth in long sessions
+        if (seenTimestamps.size > 500) {
+          const iter = seenTimestamps.values();
+          for (let i = 0; i < 100; i++) seenTimestamps.delete(iter.next().value);
+        }
       }
     } catch (e) {}
   }, 2000);
