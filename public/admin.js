@@ -222,6 +222,9 @@ async function loadAllSessionsList() {
           <a href="/display.html?session=${encodeURIComponent(sess.id)}" target="_blank" class="btn btn-secondary" style="flex: 1; font-size: 0.82rem; padding: 0.45rem;">
             📺 TV Display ↗
           </a>
+          <button type="button" class="btn btn-danger btn-delete-session" data-session-id="${sess.id}" data-mosque-name="${sess.mosqueName}" style="flex: 1 1 100%; font-size: 0.8rem; padding: 0.42rem; display: flex; align-items: center; justify-content: center; gap: 0.35rem; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); color: #fca5a5; cursor: pointer; transition: all 0.2s;">
+            🗑️ Delete Session
+          </button>
         </div>
       `;
       sessionsGridContainer.appendChild(card);
@@ -234,6 +237,30 @@ async function loadAllSessionsList() {
         const mname = e.currentTarget.getAttribute('data-mosque-name');
         const lang = e.currentTarget.getAttribute('data-lang') || 'en';
         openQrModal(sid, mname, lang);
+      });
+    });
+
+    // Wire up Delete Session buttons
+    document.querySelectorAll('.btn-delete-session').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const sid = e.currentTarget.getAttribute('data-session-id');
+        const mname = e.currentTarget.getAttribute('data-mosque-name') || sid;
+        const ok = confirm(`Are you sure you want to permanently delete session "${mname}" (${sid})?\nThis cannot be undone.`);
+        if (!ok) return;
+
+        try {
+          const res = await fetch(`/api/session/${encodeURIComponent(sid)}`, {
+            method: 'DELETE'
+          });
+          if (res.ok) {
+            await loadAllSessionsList();
+          } else {
+            alert('Failed to delete session. Please try again.');
+          }
+        } catch (err) {
+          console.warn('Error deleting session:', err);
+          alert('Error deleting session: ' + err.message);
+        }
       });
     });
   } catch (err) {
@@ -462,6 +489,31 @@ btnEnd.addEventListener('click', async () => {
     } catch (e) { console.warn('End error:', e.message); }
   }
 });
+
+const btnClearScreen = document.getElementById('btn-clear-screen');
+if (btnClearScreen) {
+  btnClearScreen.addEventListener('click', async () => {
+    if (!currentSessionId) return;
+    const ok = confirm('Clear all current speech text on the TV display and attendee mobile screens for this session?');
+    if (!ok) return;
+
+    try {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'CLEAR_SESSION_TEXT',
+          sessionId: currentSessionId
+        }));
+      }
+
+      await fetch(`/api/session/${currentSessionId}/clear`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } catch (e) {
+      console.warn('Clear text error:', e.message);
+    }
+  });
+}
 
 btnSimulate.addEventListener('click', async () => {
   if (!isSimulating) {

@@ -144,6 +144,38 @@ class SessionManager {
     return session;
   }
 
+  clearSessionText(sessionId) {
+    const session = this.getSession(sessionId);
+    if (!session) return null;
+    session.transcripts = [];
+    session.detectedAyahs = [];
+    this.broadcastToSession(session.id, {
+      type: 'SESSION_CLEAR_TEXT',
+      sessionId: session.id
+    });
+    return session;
+  }
+
+  deleteSession(sessionId) {
+    const session = this.getSession(sessionId);
+    if (!session) return false;
+    const actualId = session.id;
+
+    this.broadcastToSession(actualId, {
+      type: 'SESSION_DELETED',
+      sessionId: actualId
+    });
+
+    this.subscribers.delete(actualId);
+    if (this.httpClients) this.httpClients.delete(actualId);
+    this.sessions.delete(actualId);
+
+    this.history = this.history.filter(h => h.id !== actualId);
+    this.saveHistory();
+
+    return true;
+  }
+
   getAllActiveSessions() {
     return Array.from(this.sessions.values()).map(session => {
       const stats = this.getSessionStats(session.id);

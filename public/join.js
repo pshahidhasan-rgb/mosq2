@@ -348,6 +348,19 @@ function clearActiveMobileStreams() {
   activeMobileStreamCleanups = [];
 }
 
+function clearMobileCards() {
+  clearActiveMobileStreams();
+  renderedTimestamps.clear();
+  lastSyncTime = null;
+  if ('speechSynthesis' in window) {
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+  }
+  if (mobileCardsFeed) {
+    const cards = mobileCardsFeed.querySelectorAll('.sermon-card');
+    cards.forEach(c => c.remove());
+  }
+}
+
 function streamWordsToMobileCard(element, fullText, delayMs = 85, onComplete = null) {
   const words = fullText.split(/\s+/).filter(Boolean);
   element.textContent = '';
@@ -506,6 +519,13 @@ function connectWebSocket() {
       if (data.type === 'SESSION_STATUS') {
         updateMobileStatus(data.status, data.mosqueName);
       }
+      if (data.type === 'SESSION_CLEAR_TEXT') {
+        clearMobileCards();
+      }
+      if (data.type === 'SESSION_DELETED') {
+        clearMobileCards();
+        updateMobileStatus('ended', 'Session Concluded');
+      }
       if (data.type === 'LIVE_SUBTITLE') {
         const key = data.timestamp || `${data.arabic}_${Date.now()}`;
         if (!renderedTimestamps.has(key)) {
@@ -532,6 +552,9 @@ function startFeedSync() {
         updateMobileStatus(data.status, data.mosqueName);
       }
       if (data.serverTime) lastSyncTime = data.serverTime;
+      if (data.transcripts && data.transcripts.length === 0 && renderedTimestamps.size > 0) {
+        clearMobileCards();
+      }
       if (data.transcripts && data.transcripts.length > 0) {
         data.transcripts.forEach(item => {
           if (!renderedTimestamps.has(item.timestamp)) {

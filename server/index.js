@@ -340,6 +340,26 @@ app.post('/api/session/:id/end', (req, res) => {
   res.json(session);
 });
 
+// Clear current screen text and transcripts for a session (TV and Mobile)
+app.post('/api/session/:id/clear', (req, res) => {
+  const session = sessionManager.clearSessionText(req.params.id);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+  res.json({ success: true, message: 'Screen text cleared for session' });
+});
+
+// Delete Session
+app.delete('/api/session/:id', (req, res) => {
+  const success = sessionManager.deleteSession(req.params.id);
+  if (!success) return res.status(404).json({ error: 'Session not found' });
+  res.json({ success: true, message: 'Session deleted successfully' });
+});
+
+app.post('/api/session/:id/delete', (req, res) => {
+  const success = sessionManager.deleteSession(req.params.id);
+  if (!success) return res.status(404).json({ error: 'Session not found' });
+  res.json({ success: true, message: 'Session deleted successfully' });
+});
+
 // Simulation Controls
 app.post('/api/session/:id/simulate/start', (req, res) => {
   const session = sessionManager.getSession(req.params.id);
@@ -503,6 +523,11 @@ wss.on('connection', (ws) => {
         const { fontSize, capacity, audioEnabled, sessionId } = msg;
         const targetSessionId = sessionId || userSessionId;
         sessionManager.updateTvSettings(targetSessionId, { fontSize, capacity, audioEnabled });
+      }
+
+      if (msg.type === 'CLEAR_SESSION_TEXT') {
+        const targetSessionId = msg.sessionId || userSessionId;
+        sessionManager.clearSessionText(targetSessionId);
       }
 
       if (msg.type === 'AUDIO_DATA') {

@@ -244,6 +244,20 @@ const liveDotIndicator = document.getElementById('live-dot-indicator');
 const targetLangSelect = document.getElementById('target-lang-select');
 const arabicFeed = document.getElementById('arabic-feed');
 const transFeed = document.getElementById('trans-feed');
+
+function clearTvFeeds() {
+  recentFeedItems = [];
+  seenTimestamps.clear();
+  if ('speechSynthesis' in window) {
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+  }
+  if (arabicFeed) {
+    arabicFeed.innerHTML = '<div class="idle-placeholder">في انتظار بدء الخطبة...</div>';
+  }
+  if (transFeed) {
+    transFeed.innerHTML = '<div class="idle-placeholder">Waiting for sermon to begin...</div>';
+  }
+}
 const qrImg = document.getElementById('qr-img');
 const ayahOverlay = document.getElementById('ayah-overlay');
 const ayahRefEl = document.getElementById('ayah-reference');
@@ -635,6 +649,18 @@ function connectWebSocket() {
         if (data.tvFontSize) applyTvFontSize(data.tvFontSize, data.tvCapacity, true);
         if (data.tvAudioEnabled !== undefined) setTvAudioState(data.tvAudioEnabled);
       }
+      if (data.type === 'SESSION_CLEAR_TEXT') {
+        clearTvFeeds();
+      }
+      if (data.type === 'SESSION_DELETED') {
+        clearTvFeeds();
+        if (stageStatusBanner && stageStatusText) {
+          stageStatusText.textContent = 'Session has been concluded and removed';
+          stageStatusBanner.style.display = 'block';
+          stageStatusBanner.style.background = 'rgba(239, 68, 68, 0.25)';
+          stageStatusBanner.style.color = '#fca5a5';
+        }
+      }
       if (data.type === 'LIVE_SUBTITLE') {
         // Mark this timestamp as seen so the HTTP fallback won't re-render it
         if (data.timestamp) seenTimestamps.add(data.timestamp);
@@ -668,6 +694,9 @@ function startFeedSync() {
       }
       if (data.tvAudioEnabled !== undefined && data.tvAudioEnabled !== isTvAudioEnabled) {
         setTvAudioState(data.tvAudioEnabled);
+      }
+      if (data.transcripts && data.transcripts.length === 0 && recentFeedItems.length > 0) {
+        clearTvFeeds();
       }
       if (data.transcripts && data.transcripts.length > 0) {
         // Only process items we haven't seen yet (by timestamp)

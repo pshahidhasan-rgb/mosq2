@@ -97,6 +97,7 @@
       border: 1px solid rgba(16, 185, 129, 0.35);
       border-radius: 999px;
       padding: 0.25rem 0.85rem 0.25rem 0.65rem;
+      margin-right: 7.5rem; /* Shift left to prevent overlap with Fullscreen button */
       transition: all 0.2s;
     }
     .lang-dropdown-wrapper:hover {
@@ -151,11 +152,11 @@
       display: none;
     }
 
-    /* Left Side: Arabic */
+    /* Left Side: Arabic — 13rem bottom clearance to match translation column exactly */
     #arabic-col {
       border-right: 1px solid var(--divider);
       direction: rtl;
-      padding: 2rem 3rem 4rem;
+      padding: 2rem 3rem 13rem;
       background: radial-gradient(circle at 10% 90%, rgba(16, 185, 129, 0.03) 0%, transparent 60%);
     }
 
