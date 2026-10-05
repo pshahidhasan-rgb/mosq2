@@ -256,10 +256,11 @@ function updateTVStatusUI(status, mosqueName) {
 function initQRCode() {
   const joinUrl = `${window.location.origin}/join.html?session=${encodeURIComponent(sessionId)}&lang=${encodeURIComponent(targetLang)}`;
   if (qrImg) {
-    qrImg.src = `/api/qrcode?text=${encodeURIComponent(joinUrl)}`;
-    qrImg.onerror = () => {
-      qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(joinUrl)}`;
+    qrImg.onerror = function() {
+      this.onerror = null;
+      this.src = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(joinUrl)}`;
     };
+    qrImg.src = `/api/qrcode?text=${encodeURIComponent(joinUrl)}`;
   }
 }
 
@@ -599,6 +600,9 @@ function startFeedSync() {
       if (data.transcripts && data.transcripts.length > 0) {
         // Only process items we haven't seen yet (by timestamp)
         const newItems = data.transcripts.filter(item => item.timestamp && !seenTimestamps.has(item.timestamp));
+        if (newItems.length > 0) {
+          updateTVStatusUI('active', data.mosqueName); // Force active if new speech arrives
+        }
         newItems.forEach(item => {
           seenTimestamps.add(item.timestamp);
           handleIncomingSpeech({

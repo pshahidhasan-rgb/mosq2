@@ -81,10 +81,9 @@ async function processTranscript({ text, isFinal, source, sessionId }) {
     });
   }
 
-  // STRICT SESSION CONTROL: Only broadcast when session is active!
+  // On Vercel (serverless), memory state can be lost. If we receive speech, ensure it's active.
   if (session.status !== 'active') {
-    console.log(`[Session ${targetSessionId}] Ignored speech because session status is "${session.status}". Start Khutbah first.`);
-    return null;
+    sessionManager.startSession(targetSessionId);
   }
 
   // Quran detection DISABLED — always use pure translation pipeline
@@ -147,8 +146,7 @@ sttService.on('translation', async (data) => {
   if (!session) return;
 
   if (session.status !== 'active') {
-    console.log(`[Gladia Translation] Ignored — session "${targetSessionId}" is not active.`);
-    return;
+    sessionManager.startSession(targetSessionId);
   }
 
   // Quran detection disabled — pure live translation mode
@@ -357,10 +355,9 @@ app.post('/api/session/:id/inject-text', async (req, res) => {
 
   const session = sessionManager.getSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
+  // If session is idle but we receive text, auto-start it to bypass serverless state loss
   if (session.status !== 'active') {
-    return res.status(400).json({
-      error: 'Session is not active. Click "Start" or "Resume" first to enable live translation.'
-    });
+    sessionManager.startSession(req.params.id);
   }
 
   const result = await processTranscript({
@@ -450,13 +447,15 @@ wss.on('connection', (ws, req) => {
           }
         }
 
-        if (!sessionManager.getSession(userSessionId)) {
-          await sessionManager.createSession({
+        let targetSession = sessionManager.getSession(userSessionId);
+        if (!targetSession) {
+          targetSession = await sessionManager.createSession({
             sessionId: userSessionId,
             mosqueName: process.env.DEFAULT_MASJID_NAME || 'Masjid Al-Noor',
             primaryLanguage: process.env.DEFAULT_PRIMARY_LANGUAGE || 'en'
           });
         }
+        userSessionId = targetSession.id;
 
         sessionManager.addSubscriber(userSessionId, ws, {
           role: userRole,
