@@ -81,9 +81,10 @@ async function processTranscript({ text, isFinal, source, sessionId }) {
     });
   }
 
-  // On Vercel (serverless), memory state can be lost. If we receive speech, ensure it's active.
+  // STRICT SESSION CONTROL: Only broadcast when session is active!
   if (session.status !== 'active') {
-    sessionManager.startSession(targetSessionId);
+    console.log(`[Session ${targetSessionId}] Ignored speech because session status is "${session.status}". Start Khutbah first.`);
+    return null;
   }
 
   // Quran detection DISABLED — always use pure translation pipeline
@@ -146,15 +147,21 @@ sttService.on('translation', async (data) => {
   if (!session) return;
 
   if (session.status !== 'active') {
-    sessionManager.startSession(targetSessionId);
+    console.log(`[Gladia Translation] Ignored — session "${targetSessionId}" is not active.`);
+    return;
   }
 
-  // Quran detection disabled — pure live translation mode
-  const ayahMatch = null;
-
-  // Ensure Traditional Chinese (zh-tw) is populated if zh is available
-  if (translations && translations.zh && !translations['zh-tw']) {
-    translations['zh-tw'] = translations.zh;
+  // Optionally run Quran detection on the Arabic text
+  let ayahMatch = null;
+  if (arabic && arabic.trim().length > 0) {
+    try {
+      ayahMatch = await quranAiDetector.detect(arabic.trim());
+      if (ayahMatch) {
+        console.log(`[Quran Detection] Matched: ${ayahMatch.reference} (${ayahMatch.confidence}%)`);
+        // Prefer canonical Quran translations over Gladia output
+        Object.assign(translations, ayahMatch.translations);
+      }
+    } catch (_) {}
   }
 
   console.log(`[Gladia -> Display] Arabic: "${arabic}" | Langs: ${Object.keys(translations).join(', ')}`);
@@ -355,9 +362,10 @@ app.post('/api/session/:id/inject-text', async (req, res) => {
 
   const session = sessionManager.getSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
-  // If session is idle but we receive text, auto-start it to bypass serverless state loss
   if (session.status !== 'active') {
-    sessionManager.startSession(req.params.id);
+    return res.status(400).json({
+      error: 'Session is not active. Click "Start" or "Resume" first to enable live translation.'
+    });
   }
 
   const result = await processTranscript({
@@ -415,15 +423,15 @@ app.get('/api/session/:id/feed', (req, res) => {
 });
 
 // WebSocket Connection Handler
-wss.on('connection', (ws, req) => {
+wss.on('connection', (ws) => {
   let userSessionId = activeLiveSessionId;
   let userRole = 'attendee';
   let userLanguage = 'en';
 
-  ws.on('message', async (raw, isBinary) => {
+  ws.on('message', async (raw) => {
     try {
       // Check if message is binary audio chunk from microphone
-      if (isBinary) {
+      if (Buffer.isBuffer(raw)) {
         sttService.sendAudioChunk(raw);
         return;
       }
@@ -435,33 +443,18 @@ wss.on('connection', (ws, req) => {
         userRole = msg.role || 'attendee';
         userLanguage = msg.language || 'en';
 
-        // Detect device category: Mobile/Pad vs Desktop/PC/TV
-        const ua = (req && req.headers && req.headers['user-agent']) || '';
-        const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet/i.test(ua);
-        let deviceType = msg.deviceType;
-        if (!deviceType) {
-          if (userRole === 'tv' || userRole === 'admin') {
-            deviceType = 'desktop';
-          } else {
-            deviceType = isMobileUA ? 'mobile' : 'desktop';
-          }
-        }
-
-        let targetSession = sessionManager.getSession(userSessionId);
-        if (!targetSession) {
-          targetSession = await sessionManager.createSession({
+        if (!sessionManager.getSession(userSessionId)) {
+          await sessionManager.createSession({
             sessionId: userSessionId,
             mosqueName: process.env.DEFAULT_MASJID_NAME || 'Masjid Al-Noor',
             primaryLanguage: process.env.DEFAULT_PRIMARY_LANGUAGE || 'en'
           });
         }
-        userSessionId = targetSession.id;
 
         sessionManager.addSubscriber(userSessionId, ws, {
           role: userRole,
           language: userLanguage,
-          clientId: msg.clientId,
-          deviceType
+          clientId: msg.clientId
         });
 
         // Send confirmation and current session info

@@ -6,8 +6,6 @@ let currentMosqueName = 'Live Sermon';
 
 const LANGUAGES = [
   { code: 'en', name: 'English', native: 'English', flag: '🇬🇧' },
-  { code: 'zh', name: 'Mandarin Chinese', native: '简体中文', flag: '🇨🇳' },
-  { code: 'zh-tw', name: 'Traditional Chinese', native: '繁體中文', flag: '🇹🇼' },
   { code: 'uz', name: 'Uzbek', native: 'O‘zbekcha', flag: '🇺🇿' },
   { code: 'tr', name: 'Turkish', native: 'Türkçe', flag: '🇹🇷' },
   { code: 'ur', name: 'Urdu', native: 'اردو', flag: '🇵🇰' },
@@ -16,12 +14,6 @@ const LANGUAGES = [
   { code: 'id', name: 'Indonesian', native: 'Bahasa', flag: '🇮🇩' },
   { code: 'so', name: 'Somali', native: 'Soomaali', flag: '🇸🇴' }
 ];
-
-function getDeviceType() {
-  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet/i.test(navigator.userAgent) ||
-    (navigator.maxTouchPoints > 1 && window.innerWidth <= 1024);
-  return isMobile ? 'mobile' : 'desktop';
-}
 
 let ws = null;
 let isAudioEnabled = false; // INITIALLY COMPLETELY OFF!
@@ -178,8 +170,7 @@ function renderModalLangs() {
           type: 'JOIN_ROOM',
           sessionId,
           role: 'attendee',
-          language: currentLanguage,
-          deviceType: getDeviceType()
+          language: currentLanguage
         }));
       }
     });
@@ -339,8 +330,7 @@ function connectWebSocket() {
       type: 'JOIN_ROOM',
       sessionId,
       role: 'attendee',
-      language: currentLanguage,
-      deviceType: getDeviceType()
+      language: currentLanguage
     }));
   };
 

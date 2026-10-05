@@ -245,11 +245,10 @@ function openQrModal(sessionId, mosqueName, lang = 'en') {
   const joinUrl = `${window.location.origin}/join.html?session=${encodeURIComponent(sessionId)}&lang=${encodeURIComponent(lang)}`;
   if (qrModalMosqueName) qrModalMosqueName.textContent = mosqueName || sessionId;
   if (qrModalImg) {
-    qrModalImg.onerror = function() {
-      this.onerror = null;
-      this.src = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(joinUrl)}`;
-    };
     qrModalImg.src = `/api/qrcode?text=${encodeURIComponent(joinUrl)}`;
+    qrModalImg.onerror = () => {
+      qrModalImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(joinUrl)}`;
+    };
   }
   if (qrModalLinkText) qrModalLinkText.textContent = joinUrl;
   if (btnOpenQrModalLink) btnOpenQrModalLink.href = joinUrl;
@@ -674,10 +673,6 @@ async function initConsoleSession(sessionId) {
       if (headerBtnTv) headerBtnTv.href = tvUrl;
 
       if (qrCodeImg) {
-        qrCodeImg.onerror = function() {
-          this.onerror = null;
-          this.src = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(joinUrl)}`;
-        };
         qrCodeImg.src = `/api/qrcode?text=${encodeURIComponent(joinUrl)}`;
       }
 
@@ -697,20 +692,8 @@ async function initConsoleSession(sessionId) {
 
 function updateStatsDisplay(stats) {
   if (!stats) return;
-
-  const mobileCount = stats.mobileAttendees !== undefined ? stats.mobileAttendees : (stats.totalAttendees || 0);
-  const desktopCount = stats.desktopDisplays !== undefined ? stats.desktopDisplays : (stats.tvDisplays || stats.totalTVDisplays || 0);
-  const totalCount = stats.totalViewers !== undefined ? stats.totalViewers : (mobileCount + desktopCount);
-
-  const statMobile = document.getElementById('stat-mobile');
-  const statDisplays = document.getElementById('stat-displays');
-  const statTotalBadge = document.getElementById('stat-total-badge');
-  const statAttendees = document.getElementById('stat-attendees');
-
-  if (statMobile) statMobile.textContent = mobileCount;
-  if (statDisplays) statDisplays.textContent = desktopCount;
-  if (statTotalBadge) statTotalBadge.textContent = `${totalCount} total`;
-  if (statAttendees) statAttendees.textContent = mobileCount;
+  if (statAttendees) statAttendees.textContent = stats.totalAttendees || 0;
+  if (statDisplays) statDisplays.textContent = stats.totalTVDisplays || 0;
 
   if (languagesBreakdown) {
     languagesBreakdown.innerHTML = '';
@@ -721,7 +704,7 @@ function updateStatsDisplay(stats) {
     } else {
       entries.forEach(([lang, num]) => {
         const tag = document.createElement('span');
-        tag.style.cssText = 'background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); color: #34d399; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700;';
+        tag.style.cssText = 'background: #334155; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;';
         tag.textContent = `${lang.toUpperCase()}: ${num}`;
         languagesBreakdown.appendChild(tag);
       });
@@ -738,8 +721,7 @@ function connectWebSocket(sessionId) {
     ws.send(JSON.stringify({
       type: 'JOIN_ROOM',
       sessionId,
-      role: 'admin',
-      deviceType: 'desktop'
+      role: 'admin'
     }));
   };
 
@@ -751,12 +733,7 @@ function connectWebSocket(sessionId) {
         else if (data.status === 'paused') setSessionPaused();
         else if (data.status === 'ended') setSessionEnded();
       }
-      if (data.type === 'STATS_UPDATE' || data.type === 'SESSION_STATS') {
-        updateStatsDisplay(data.stats);
-      }
-      if (data.type === 'JOINED_SUCCESS' && data.stats) {
-        updateStatsDisplay(data.stats);
-      }
+      if (data.type === 'SESSION_STATS') updateStatsDisplay(data.stats);
       if (data.type === 'TV_SETTINGS_UPDATE') syncTvFontSizeUI(data.tvFontSize, data.tvCapacity);
       if (data.type === 'LIVE_SUBTITLE') addTranscriptEntry(data);
     } catch (e) {}
@@ -785,12 +762,10 @@ function addTranscriptEntry({ arabic, translations, ayah }) {
   const textSpan = document.createElement('span');
   item.appendChild(textSpan);
 
-  if (transcriptFeed) {
-    if (transcriptFeed.children[0] && transcriptFeed.children[0].textContent.includes('Spoken Arabic')) {
-      transcriptFeed.innerHTML = '';
-    }
-    transcriptFeed.prepend(item);
+  if (transcriptFeed.children[0] && transcriptFeed.children[0].textContent.includes('Spoken Arabic')) {
+    transcriptFeed.innerHTML = '';
   }
+  transcriptFeed.prepend(item);
 
   const words = arabic.split(/\s+/).filter(Boolean);
   let wIdx = 0;
