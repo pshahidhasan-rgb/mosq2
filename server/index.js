@@ -151,17 +151,12 @@ sttService.on('translation', async (data) => {
     return;
   }
 
-  // Optionally run Quran detection on the Arabic text
-  let ayahMatch = null;
-  if (arabic && arabic.trim().length > 0) {
-    try {
-      ayahMatch = await quranAiDetector.detect(arabic.trim());
-      if (ayahMatch) {
-        console.log(`[Quran Detection] Matched: ${ayahMatch.reference} (${ayahMatch.confidence}%)`);
-        // Prefer canonical Quran translations over Gladia output
-        Object.assign(translations, ayahMatch.translations);
-      }
-    } catch (_) {}
+  // Quran detection disabled — pure live translation mode
+  const ayahMatch = null;
+
+  // Ensure Traditional Chinese (zh-tw) is populated if zh is available
+  if (translations && translations.zh && !translations['zh-tw']) {
+    translations['zh-tw'] = translations.zh;
   }
 
   console.log(`[Gladia -> Display] Arabic: "${arabic}" | Langs: ${Object.keys(translations).join(', ')}`);
@@ -423,7 +418,7 @@ app.get('/api/session/:id/feed', (req, res) => {
 });
 
 // WebSocket Connection Handler
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
   let userSessionId = activeLiveSessionId;
   let userRole = 'attendee';
   let userLanguage = 'en';
@@ -443,6 +438,18 @@ wss.on('connection', (ws) => {
         userRole = msg.role || 'attendee';
         userLanguage = msg.language || 'en';
 
+        // Detect device category: Mobile/Pad vs Desktop/PC/TV
+        const ua = (req && req.headers && req.headers['user-agent']) || '';
+        const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet/i.test(ua);
+        let deviceType = msg.deviceType;
+        if (!deviceType) {
+          if (userRole === 'tv' || userRole === 'admin') {
+            deviceType = 'desktop';
+          } else {
+            deviceType = isMobileUA ? 'mobile' : 'desktop';
+          }
+        }
+
         if (!sessionManager.getSession(userSessionId)) {
           await sessionManager.createSession({
             sessionId: userSessionId,
@@ -454,7 +461,8 @@ wss.on('connection', (ws) => {
         sessionManager.addSubscriber(userSessionId, ws, {
           role: userRole,
           language: userLanguage,
-          clientId: msg.clientId
+          clientId: msg.clientId,
+          deviceType
         });
 
         // Send confirmation and current session info

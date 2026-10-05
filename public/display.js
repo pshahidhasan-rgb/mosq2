@@ -2,7 +2,7 @@
 const urlParams = new URLSearchParams(window.location.search);
 const sessionId = urlParams.get('session') || 'myo-youth';
 
-const VALID_LANGS = ['en', 'uz', 'tr', 'ur', 'bn', 'fr', 'id', 'so'];
+const VALID_LANGS = ['en', 'uz', 'tr', 'ur', 'bn', 'fr', 'id', 'so', 'zh', 'zh-tw', 'de', 'es', 'ru'];
 let userExplicitlySelectedLang = false;
 
 // Determine initial language:
@@ -111,6 +111,8 @@ const stageStatusBanner = document.getElementById('stage-status-banner');
 const stageStatusText = document.getElementById('stage-status-text');
 const liveDotIndicator = document.getElementById('live-dot-indicator');
 const targetLangSelect = document.getElementById('target-lang-select');
+const sourceLangSelect = document.getElementById('source-lang-select');
+const arabicCol = document.getElementById('arabic-col');
 const arabicFeed = document.getElementById('arabic-feed');
 const transFeed = document.getElementById('trans-feed');
 const qrImg = document.getElementById('qr-img');
@@ -119,7 +121,57 @@ const ayahRefEl = document.getElementById('ayah-reference');
 const ayahArabicEl = document.getElementById('ayah-arabic');
 const ayahTransEl = document.getElementById('ayah-trans');
 
-// Initialize Dropdown Selection & Change Handler
+// Source Language Selection (Left Column)
+const VALID_SOURCE_LANGS = ['ar', 'ar-modern', 'en', 'zh', 'zh-tw', 'ur', 'tr', 'ms', 'id'];
+let sourceLang = 'ar';
+try {
+  const savedSource = localStorage.getItem('mosq_tv_source_lang');
+  if (savedSource && VALID_SOURCE_LANGS.includes(savedSource)) {
+    sourceLang = savedSource;
+  }
+} catch (e) {}
+
+function applySourceLanguage(lang) {
+  if (!lang) return;
+  sourceLang = lang;
+  if (sourceLangSelect) sourceLangSelect.value = lang;
+  try {
+    localStorage.setItem('mosq_tv_source_lang', lang);
+  } catch (e) {}
+
+  const isRTL = ['ar', 'ar-modern', 'ur'].includes(lang);
+  if (arabicCol) {
+    arabicCol.style.direction = isRTL ? 'rtl' : 'ltr';
+    arabicCol.style.textAlign = isRTL ? 'right' : 'left';
+  }
+
+  // Update idle placeholder text
+  const placeholder = arabicFeed ? arabicFeed.querySelector('.idle-placeholder') : null;
+  if (placeholder) {
+    if (lang === 'zh' || lang === 'zh-tw') {
+      placeholder.textContent = '等待演讲开始...';
+    } else if (lang === 'en') {
+      placeholder.textContent = 'Waiting for speech to begin...';
+    } else if (lang === 'ur') {
+      placeholder.textContent = 'خطبے کے آغاز کا انتظار ہے...';
+    } else if (lang === 'tr') {
+      placeholder.textContent = 'Hutbenin başlaması bekleniyor...';
+    } else {
+      placeholder.textContent = 'في انتظار بدء الخطبة...';
+    }
+  }
+
+  reRenderSourceFeed();
+}
+
+if (sourceLangSelect) {
+  sourceLangSelect.value = sourceLang;
+  sourceLangSelect.addEventListener('change', () => {
+    applySourceLanguage(sourceLangSelect.value);
+  });
+}
+
+// Initialize Target Dropdown Selection & Change Handler (Right Column)
 if (targetLangSelect) {
   targetLangSelect.value = targetLang;
 
@@ -140,6 +192,9 @@ if (targetLangSelect) {
     reRenderTranslationFeed();
   });
 }
+
+// Apply initial source language configuration
+applySourceLanguage(sourceLang);
 
 function updateTVStatusUI(status, mosqueName) {
   if (mosqueName) currentMosqueName = mosqueName;
@@ -252,6 +307,63 @@ function streamWordsIntoElement(element, fullText, delayMs = 85, onComplete = nu
   return cleanup;
 }
 
+function getSourceTextForFeed(arabicText, transObj) {
+  if (sourceLang === 'ar' || sourceLang === 'ar-modern') {
+    return arabicText || '';
+  }
+  if (transObj && typeof transObj === 'object') {
+    if (sourceLang === 'zh-tw') {
+      return transObj['zh-tw'] || transObj['zh'] || arabicText || '';
+    }
+    if (sourceLang === 'zh') {
+      return transObj['zh'] || transObj['zh-tw'] || arabicText || '';
+    }
+    return transObj[sourceLang] || transObj['en'] || arabicText || '';
+  }
+  return arabicText || '';
+}
+
+function getTransTextForFeed(transObj) {
+  if (!transObj) return '';
+  if (typeof transObj === 'object') {
+    if (targetLang === 'zh-tw') {
+      return transObj['zh-tw'] || transObj['zh'] || transObj.en || Object.values(transObj)[0] || '';
+    }
+    if (targetLang === 'zh') {
+      return transObj['zh'] || transObj['zh-tw'] || transObj.en || Object.values(transObj)[0] || '';
+    }
+    return transObj[targetLang] || transObj.en || Object.values(transObj)[0] || '';
+  }
+  return String(transObj);
+}
+
+/**
+ * Re-render Source (Left) Column in the newly selected sourceLang
+ */
+function reRenderSourceFeed() {
+  clearActiveStreams();
+  arabicFeed.innerHTML = '';
+  if (recentFeedItems.length === 0) {
+    let placeholderText = 'في انتظار بدء الخطبة...';
+    if (sourceLang === 'zh' || sourceLang === 'zh-tw') placeholderText = '等待演讲开始...';
+    else if (sourceLang === 'en') placeholderText = 'Waiting for speech to begin...';
+    else if (sourceLang === 'ur') placeholderText = 'خطبے کے آغاز کا انتظار ہے...';
+    else if (sourceLang === 'tr') placeholderText = 'Hutbenin başlaması bekleniyor...';
+    arabicFeed.innerHTML = `<div class="idle-placeholder">${placeholderText}</div>`;
+  } else {
+    recentFeedItems.forEach((item, idx) => {
+      const isCurrent = (idx === recentFeedItems.length - 1);
+      const pSource = document.createElement('div');
+      pSource.className = `para-item ${isCurrent ? 'current' : 'history'}`;
+      pSource.textContent = getSourceTextForFeed(item.arabicText, item.transObj);
+      arabicFeed.appendChild(pSource);
+    });
+    if (arabicFeed.parentElement) {
+      arabicFeed.parentElement.scrollTo({ top: arabicFeed.parentElement.scrollHeight, behavior: 'smooth' });
+    }
+  }
+}
+
 /**
  * Re-render Translation Column in the newly selected targetLang
  */
@@ -265,13 +377,7 @@ function reRenderTranslationFeed() {
       const isCurrent = (idx === recentFeedItems.length - 1);
       const pTrans = document.createElement('div');
       pTrans.className = `para-item ${isCurrent ? 'current' : 'history'}`;
-      let text = '';
-      if (item.transObj && typeof item.transObj === 'object') {
-        text = item.transObj[targetLang] || item.transObj.en || Object.values(item.transObj)[0] || '';
-      } else {
-        text = item.transObj || '';
-      }
-      pTrans.textContent = text;
+      pTrans.textContent = getTransTextForFeed(item.transObj);
       transFeed.appendChild(pTrans);
     });
     if (transFeed.parentElement) {
@@ -309,8 +415,9 @@ function appendToFeed(arabicText, transObj, isLive = true) {
     recentFeedItems.shift();
   }
 
-  // 1. Arabic Column
-  if (arabicText) {
+  // 1. Source (Left) Column
+  const sourceDisplayText = getSourceTextForFeed(arabicText, transObj);
+  if (sourceDisplayText) {
     const existingCurrent = arabicFeed.querySelectorAll('.para-item.current');
     existingCurrent.forEach(el => {
       el.classList.remove('current');
@@ -322,9 +429,9 @@ function appendToFeed(arabicText, transObj, isLive = true) {
     arabicFeed.appendChild(pArabic);
 
     if (isLive) {
-      streamWordsIntoElement(pArabic, arabicText, 70);
+      streamWordsIntoElement(pArabic, sourceDisplayText, 70);
     } else {
-      pArabic.textContent = arabicText;
+      pArabic.textContent = sourceDisplayText;
     }
 
     while (arabicFeed.children.length > MAX_HISTORY) {
@@ -332,14 +439,8 @@ function appendToFeed(arabicText, transObj, isLive = true) {
     }
   }
 
-  // 2. Translation Column
-  let displayTrans = '';
-  if (typeof transObj === 'object' && transObj !== null) {
-    displayTrans = transObj[targetLang] || transObj.en || Object.values(transObj)[0] || '';
-  } else {
-    displayTrans = transObj || '';
-  }
-
+  // 2. Translation (Right) Column
+  const displayTrans = getTransTextForFeed(transObj);
   if (displayTrans) {
     const existingTrans = transFeed.querySelectorAll('.para-item.current');
     existingTrans.forEach(el => {
@@ -370,7 +471,7 @@ function appendToFeed(arabicText, transObj, isLive = true) {
     if (transFeed.parentElement) {
       transFeed.parentElement.scrollTo({ top: transFeed.parentElement.scrollHeight, behavior: 'smooth' });
     }
-  }, 50);
+  }, 100);
 }
 
 /**
@@ -449,7 +550,7 @@ function connectWebSocket() {
   ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
 
   ws.onopen = () => {
-    ws.send(JSON.stringify({ type: 'JOIN_ROOM', sessionId, role: 'tv', language: targetLang }));
+    ws.send(JSON.stringify({ type: 'JOIN_ROOM', sessionId, role: 'tv', language: targetLang, deviceType: 'desktop' }));
   };
 
   ws.onmessage = (event) => {

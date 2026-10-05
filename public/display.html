@@ -44,16 +44,39 @@
       z-index: 100;
     }
 
-    /* Left Language Pill */
-    .pill-source {
+    /* Left Source Language Dropdown */
+    .source-lang-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
       background: rgba(255, 255, 255, 0.06);
       border: 1px solid rgba(255, 255, 255, 0.12);
-      color: rgba(255, 255, 255, 0.8);
-      font-size: 0.85rem;
-      font-weight: 600;
-      padding: 0.35rem 1rem;
       border-radius: 999px;
-      letter-spacing: 0.04em;
+      padding: 0.25rem 0.85rem 0.25rem 0.65rem;
+      transition: all 0.2s;
+    }
+    .source-lang-wrapper:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+    .source-lang-icon {
+      font-size: 0.82rem;
+      opacity: 0.75;
+    }
+    .source-select-dropdown {
+      background: transparent;
+      border: none;
+      color: rgba(255, 255, 255, 0.85);
+      font-family: inherit;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      outline: none;
+    }
+    .source-select-dropdown option {
+      background: #0a1223;
+      color: #f1f5f9;
+      font-size: 0.9rem;
     }
 
     /* Center Mosque Brand */
@@ -151,15 +174,15 @@
       display: none;
     }
 
-    /* Left Side: Arabic */
+    /* Left Side: Arabic — same bottom padding as trans-col so both text feeds align at same baseline */
     #arabic-col {
       border-right: 1px solid var(--divider);
       direction: rtl;
-      padding: 2rem 3rem 4rem;
+      padding: 2rem 3rem 13rem;
       background: radial-gradient(circle at 10% 90%, rgba(16, 185, 129, 0.03) 0%, transparent 60%);
     }
 
-    /* Right Side: Translation — Protected with 13rem (~208px) bottom clearance so text NEVER collides with QR code */
+    /* Right Side: Translation — 13rem bottom clearance avoids QR code collision */
     #trans-col {
       direction: ltr;
       padding: 2rem 3rem 13rem;
@@ -366,17 +389,17 @@
       line-height: 1.5;
     }
 
-    /* Fullscreen Toggle */
+    /* Fullscreen Toggle — pushed left enough not to overlap language dropdown */
     #btn-fullscreen {
       position: fixed;
       top: 16px;
-      right: 1.25rem;
+      right: 1rem;
       z-index: 250;
       background: rgba(255, 255, 255, 0.08);
       border: 1px solid rgba(255, 255, 255, 0.15);
       color: rgba(255, 255, 255, 0.7);
-      font-size: 0.78rem;
-      padding: 0.3rem 0.65rem;
+      font-size: 0.75rem;
+      padding: 0.28rem 0.6rem;
       border-radius: 8px;
       cursor: pointer;
       font-family: inherit;
@@ -386,14 +409,35 @@
       background: rgba(255, 255, 255, 0.15);
       color: #fff;
     }
+
+    /* Right topbar group: leave gap for fullscreen btn */
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-right: 4.5rem;
+    }
   </style>
 </head>
 <body>
 
   <!-- Top Bar -->
   <header id="topbar">
-    <!-- Left: Source Language Indicator -->
-    <div class="pill-source">Arabic</div>
+    <!-- Left: Source Language Dropdown -->
+    <div class="source-lang-wrapper">
+      <span class="source-lang-icon">🎤</span>
+      <select id="source-lang-select" class="source-select-dropdown" aria-label="Select Source Language">
+        <option value="ar">Arabic (العربية)</option>
+        <option value="ar-modern">Arabic (Modern Standard)</option>
+        <option value="en">English</option>
+        <option value="zh">Mandarin Chinese (简体中文)</option>
+        <option value="zh-tw">Traditional Chinese (繁體中文)</option>
+        <option value="ur">Urdu (اردو)</option>
+        <option value="tr">Turkish (Türkçe)</option>
+        <option value="ms">Malay (Bahasa Melayu)</option>
+        <option value="id">Indonesian (Bahasa)</option>
+      </select>
+    </div>
 
     <!-- Center: Mosque / Center Branding -->
     <div class="center-brand">
@@ -402,19 +446,26 @@
       <span id="session-status-badge" style="font-size: 0.72rem; font-weight: 800; padding: 0.2rem 0.6rem; border-radius: 999px; letter-spacing: 0.05em; background: rgba(148, 163, 184, 0.15); border: 1px solid rgba(148, 163, 184, 0.3); color: #94a3b8;">IDLE</span>
     </div>
 
-    <!-- Right: Translation Language Dropdown -->
-    <div class="lang-dropdown-wrapper">
-      <span class="live-dot" id="live-dot-indicator"></span>
-      <select id="target-lang-select" class="lang-select-dropdown" aria-label="Select TV Translation Language">
-        <option value="en">English</option>
-        <option value="uz">Uzbek (O‘zbekcha)</option>
-        <option value="tr">Turkish (Türkçe)</option>
-        <option value="ur">Urdu (اردو)</option>
-        <option value="bn">Bengali (বাংলা)</option>
-        <option value="fr">French (Français)</option>
-        <option value="id">Indonesian (Bahasa)</option>
-        <option value="so">Somali (Soomaali)</option>
-      </select>
+    <!-- Right: Translation Language Dropdown + Fullscreen (grouped, margin right avoids btn-fullscreen overlap) -->
+    <div class="topbar-right">
+      <div class="lang-dropdown-wrapper">
+        <span class="live-dot" id="live-dot-indicator"></span>
+        <select id="target-lang-select" class="lang-select-dropdown" aria-label="Select TV Translation Language">
+          <option value="en">English</option>
+          <option value="zh">Mandarin Chinese (简体中文)</option>
+          <option value="zh-tw">Traditional Chinese (繁體中文)</option>
+          <option value="uz">Uzbek (O'zbekcha)</option>
+          <option value="tr">Turkish (Türkçe)</option>
+          <option value="ur">Urdu (اردو)</option>
+          <option value="bn">Bengali (বাংলা)</option>
+          <option value="fr">French (Français)</option>
+          <option value="id">Indonesian (Bahasa)</option>
+          <option value="so">Somali (Soomaali)</option>
+          <option value="de">German (Deutsch)</option>
+          <option value="es">Spanish (Español)</option>
+          <option value="ru">Russian (Русский)</option>
+        </select>
+      </div>
     </div>
   </header>
 

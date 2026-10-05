@@ -14,6 +14,7 @@ const SERMON_DICTIONARY = {
     ur: 'میں شیطان مردود سے اللہ کی پناہ مانگتا ہوں۔',
     fr: 'Je cherche refuge auprès d\'Allah contre Satan le maudit.',
     zh: '我求真主护佑，免遭被驱逐的恶魔的伤害。',
+    'zh-tw': '我求真主護佑，免遭被驅逐的惡魔的傷害。',
     tr: 'Kovulmuş şeytandan Allah\'a sığınırım.',
     uz: 'Quvilgan shaytondan Allohdan panoh so‘rayman.'
   },
@@ -23,6 +24,7 @@ const SERMON_DICTIONARY = {
     ur: 'تمام تعریفیں اللہ کے لیے ہیں، ہم اسی کی تعریف کرتے ہیں، اسی سے مدد مانگتے ہیں اور اسی سے بخشش چاہتے ہیں۔',
     fr: 'Toutes les louanges sont à Allah, nous Le louons, nous implorons Son secours et nous Lui demandons pardon.',
     zh: '一切赞颂，全归真主，我们赞美他，求他相助，求他宽恕。',
+    'zh-tw': '一切讚頌，全歸真主，我們讚美他，求他相助，求他寬恕。',
     tr: 'Hamd yalnızca Allah\'adır; O\'na hamdeder, O\'ndan yardım diler ve O\'ndan bağışlanma dileriz.',
     uz: 'Albatta, barcha maqtovlar Allohga xosdir, Biz Unga hamd aytamiz, Undan yordam va mag‘firat so‘raymiz.'
   },
@@ -32,6 +34,7 @@ const SERMON_DICTIONARY = {
     ur: 'اور ہم اپنے نفس کے شر اور اپنے برے اعمال سے اللہ کی پناہ مانگتے ہیں۔',
     fr: 'Et nous cherchons refuge auprès d\'Allah contre la méchanceté de nos âmes et les mauvais penchants de nos actions.',
     zh: '我们求真主庇佑，免遭自身之恶和恶行的伤害。',
+    'zh-tw': '我們求真主庇佑，免遭自身之惡和惡行的傷害。',
     tr: 'Nefislerimizin şerlerinden ve amellerimizin kötülüklerinden Allah\'a sığınırız.',
     uz: 'Va o‘z nafsimiz yomonligidan va yomon amallarimizdan Allohdan panoh so‘raymiz.'
   },
@@ -41,6 +44,7 @@ const SERMON_DICTIONARY = {
     ur: 'جسے اللہ ہدایت دے اسے کوئی گمراہ نہیں کر سکتا، اور جسے وہ گمراہ کر دے اسے کوئی ہدایت دینے والا نہیں۔',
     fr: 'Celui qu\'Allah guide ne sera jamais égaré, et celui qu\'Il égare ne trouvera aucun guide.',
     zh: '真主引导谁，谁就绝不迷路；真主使谁迷途，谁就绝无引导。',
+    'zh-tw': '真主引導誰，誰就絕不迷路；真主使誰迷途，誰就絕無引導。',
     tr: 'Allah kime hidayet verirse onu saptıracak yoktur; kimi de saptırırsa ona hidayet verecek yoktur.',
     uz: 'Alloh kimni hidoyat qilsa, uni adashtiruvchi yo‘q, kimni adashtirsa, unga hidoyat qiluvchi yo‘q.'
   },
@@ -50,6 +54,7 @@ const SERMON_DICTIONARY = {
     ur: 'اور میں گواہی دیتا ہوں کہ اللہ کے سوا کوئی معبود نہیں وہ اکیلا ہے، اور محمد اس کے بندے اور رسول ہیں۔',
     fr: 'Et j\'atteste qu\'il n\'y a de divinité digne d\'adoration qu\'Allah, Seul sans associé, et que Muhammad est Son serviteur et Son messager.',
     zh: '我见证万物非主，唯有真主，独一无偶；我又见证穆罕默德是他的仆人和使者。',
+    'zh-tw': '我見證萬物非主，唯有真主，獨一無偶；我又見證穆罕默德是他的僕人和使者。',
     tr: 'Ve şehadet ederim ki Allah\'tan başka ilah yoktur, O tektir, ortağı yoktur; ve yine şehadet ederim ki Muhammed O\'nun kulu ve elçisidir.',
     uz: 'Va guvohlik beramanki, Allohdan o‘zga iloh yo‘q, U yakkadir, sherigi yo‘q; va Muhammad Uning bandasi va elchisidir.'
   },
@@ -59,6 +64,7 @@ const SERMON_DICTIONARY = {
     ur: 'معزز بھائیو! اللہ تعالیٰ کا تقویٰ اختیار کرو اور جان لو کہ یہ دنیا امتحان کا گھر ہے۔',
     fr: 'Chers frères, craignez Allah le Très-Haut et sachez que la vie d\'ici-bas est une épreuve.',
     zh: '尊贵的兄弟们，应当敬畏至尊的真主，并当知道今世是考验的场所。',
+    'zh-tw': '尊貴的兄弟們，應當敬畏至尊的真主，並當知道今世是考驗的場所。',
     tr: 'Ey aziz kardeşler! Yüce Allah\'tan sakının ve bilin ki bu dünya hayatı bir imtihan yurdudur.',
     uz: 'Ey aziz birodarlar! Alloh taolodan qo‘rqing va bilingki, bu dunyo hayoti bir imtihan maskanidir.'
   },
@@ -68,6 +74,7 @@ const SERMON_DICTIONARY = {
     ur: 'یقیناً اطاعت پر صبر اور گناہ سے رکنا ہی کشادگی اور خوشنودی کی چابی ہے۔',
     fr: 'Certes, la patience dans l\'obéissance et l\'abstinence du péché sont la clé du soulagement et du contentement.',
     zh: '确切地，服从中的坚忍与摒弃罪恶，是得解脱与喜悦的关键。',
+    'zh-tw': '確切地，服從中的堅忍與摒棄罪惡，是得解脫與喜悅的關鍵。',
     tr: 'Şüphesiz itaatte sabır ve günahtan kaçınmak, kurtuluş ve rızanın anahtarıdır.',
     uz: 'Albatta, toatda sabr qilish va gunohlardan tiyilish najot va rizolik kalitidir.'
   },
@@ -77,6 +84,7 @@ const SERMON_DICTIONARY = {
     ur: 'پس تم اللہ سے مغفرت طلب کرو وہ تمہیں معاف فرما دے گا، بیشک وہی معاف فرمانے والا، نہایت رحم کرنے والا ہے۔',
     fr: 'Demandez donc pardon à Allah, Il vous pardonnera; car Il est le Pardonneur, le Très Miséricordieux.',
     zh: '你们当向真主求饶，他必饶恕你们；他确是至赦的，至慈的。',
+    'zh-tw': '你們當向真主求饒，他必饒恕你們；他確是至赦的，至慈的。',
     tr: 'Öyleyse Allah\'tan bağışlanma dileyin ki sizi bağışlasın; şüphesiz O, çok bağışlayan ve çok merhamet edendir.',
     uz: 'Bas, Allohdan mag‘firat so‘rang, U sizlarni kechiradi; albatta, U kechiruvchi va mehribondir.'
   },
@@ -86,6 +94,7 @@ const SERMON_DICTIONARY = {
     ur: 'اے اللہ! تمام مسلمان مردوں اور عورتوں کو معاف فرما، ان میں سے جو زندہ ہیں اور جو وفات پا چکے ہیں۔',
     fr: 'Ô Allah, pardonne aux croyants et aux croyantes, vivants comme morts.',
     zh: '主啊！求你宽恕所有穆斯林男女，无论生者还是亡人。',
+    'zh-tw': '主啊！求你寬恕所有穆斯林男女，無論生者還是亡人。',
     tr: 'Allah\'ım! Mümin erkekleri ve mümin kadınları, yaşayanlarını ve vefat etmiş olanlarını bağışla.',
     uz: 'Yo Alloh, barcha musulmon erkak va ayollarni, ularning tiriklari va vafot etganlarini mag‘firat qil.'
   }
@@ -98,9 +107,13 @@ const LANGUAGE_NAMES = {
   ur: 'Urdu',
   bn: 'Bengali',
   fr: 'French',
-  zh: 'Simplified Chinese',
+  zh: 'Mandarin / Simplified Chinese',
+  'zh-tw': 'Traditional Chinese',
   id: 'Indonesian',
-  so: 'Somali'
+  so: 'Somali',
+  de: 'German',
+  es: 'Spanish',
+  ru: 'Russian'
 };
 
 class TranslationService {

@@ -692,8 +692,20 @@ async function initConsoleSession(sessionId) {
 
 function updateStatsDisplay(stats) {
   if (!stats) return;
-  if (statAttendees) statAttendees.textContent = stats.totalAttendees || 0;
-  if (statDisplays) statDisplays.textContent = stats.totalTVDisplays || 0;
+
+  const mobileCount = stats.mobileAttendees !== undefined ? stats.mobileAttendees : (stats.totalAttendees || 0);
+  const desktopCount = stats.desktopDisplays !== undefined ? stats.desktopDisplays : (stats.tvDisplays || stats.totalTVDisplays || 0);
+  const totalCount = stats.totalViewers !== undefined ? stats.totalViewers : (mobileCount + desktopCount);
+
+  const statMobile = document.getElementById('stat-mobile');
+  const statDisplays = document.getElementById('stat-displays');
+  const statTotalBadge = document.getElementById('stat-total-badge');
+  const statAttendees = document.getElementById('stat-attendees');
+
+  if (statMobile) statMobile.textContent = mobileCount;
+  if (statDisplays) statDisplays.textContent = desktopCount;
+  if (statTotalBadge) statTotalBadge.textContent = `${totalCount} total`;
+  if (statAttendees) statAttendees.textContent = mobileCount;
 
   if (languagesBreakdown) {
     languagesBreakdown.innerHTML = '';
@@ -704,7 +716,7 @@ function updateStatsDisplay(stats) {
     } else {
       entries.forEach(([lang, num]) => {
         const tag = document.createElement('span');
-        tag.style.cssText = 'background: #334155; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;';
+        tag.style.cssText = 'background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); color: #34d399; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700;';
         tag.textContent = `${lang.toUpperCase()}: ${num}`;
         languagesBreakdown.appendChild(tag);
       });
@@ -721,7 +733,8 @@ function connectWebSocket(sessionId) {
     ws.send(JSON.stringify({
       type: 'JOIN_ROOM',
       sessionId,
-      role: 'admin'
+      role: 'admin',
+      deviceType: 'desktop'
     }));
   };
 
@@ -733,7 +746,12 @@ function connectWebSocket(sessionId) {
         else if (data.status === 'paused') setSessionPaused();
         else if (data.status === 'ended') setSessionEnded();
       }
-      if (data.type === 'SESSION_STATS') updateStatsDisplay(data.stats);
+      if (data.type === 'STATS_UPDATE' || data.type === 'SESSION_STATS') {
+        updateStatsDisplay(data.stats);
+      }
+      if (data.type === 'JOINED_SUCCESS' && data.stats) {
+        updateStatsDisplay(data.stats);
+      }
       if (data.type === 'TV_SETTINGS_UPDATE') syncTvFontSizeUI(data.tvFontSize, data.tvCapacity);
       if (data.type === 'LIVE_SUBTITLE') addTranscriptEntry(data);
     } catch (e) {}
@@ -762,10 +780,12 @@ function addTranscriptEntry({ arabic, translations, ayah }) {
   const textSpan = document.createElement('span');
   item.appendChild(textSpan);
 
-  if (transcriptFeed.children[0] && transcriptFeed.children[0].textContent.includes('Spoken Arabic')) {
-    transcriptFeed.innerHTML = '';
+  if (transcriptFeed) {
+    if (transcriptFeed.children[0] && transcriptFeed.children[0].textContent.includes('Spoken Arabic')) {
+      transcriptFeed.innerHTML = '';
+    }
+    transcriptFeed.prepend(item);
   }
-  transcriptFeed.prepend(item);
 
   const words = arabic.split(/\s+/).filter(Boolean);
   let wIdx = 0;

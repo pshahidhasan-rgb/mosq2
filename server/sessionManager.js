@@ -217,11 +217,11 @@ class SessionManager {
   /**
    * Adds a WebSocket connection to the session room
    */
-  addSubscriber(sessionId, ws, { role = 'attendee', language = 'en', clientId = '' } = {}) {
+  addSubscriber(sessionId, ws, { role = 'attendee', language = 'en', clientId = '', deviceType = 'desktop' } = {}) {
     if (!this.subscribers.has(sessionId)) {
       this.subscribers.set(sessionId, new Set());
     }
-    const subscriber = { ws, role, language, clientId };
+    const subscriber = { ws, role, language, clientId, deviceType };
     this.subscribers.get(sessionId).add(subscriber);
 
     // Update attendee counts
@@ -258,22 +258,40 @@ class SessionManager {
 
   getSessionStats(sessionId) {
     const subs = this.subscribers.get(sessionId) || new Set();
+    let mobileCount = 0;
+    let desktopCount = 0;
     let totalAttendees = 0;
     let tvDisplays = 0;
     const languageCounts = {};
 
     for (const sub of subs) {
+      // Exclude admin pulpit console from viewer counts
+      if (sub.role === 'admin') continue;
+
+      const isMobile = sub.deviceType === 'mobile' || sub.deviceType === 'tablet' || sub.deviceType === 'pad';
+      if (isMobile) {
+        mobileCount++;
+      } else {
+        desktopCount++;
+      }
+
       if (sub.role === 'attendee') {
         totalAttendees++;
-        languageCounts[sub.language] = (languageCounts[sub.language] || 0) + 1;
+        if (sub.language) {
+          languageCounts[sub.language] = (languageCounts[sub.language] || 0) + 1;
+        }
       } else if (sub.role === 'tv') {
         tvDisplays++;
       }
     }
 
     return {
+      mobileAttendees: mobileCount,
+      desktopDisplays: desktopCount,
       totalAttendees,
       tvDisplays,
+      totalTVDisplays: desktopCount,
+      totalViewers: mobileCount + desktopCount,
       languageCounts
     };
   }

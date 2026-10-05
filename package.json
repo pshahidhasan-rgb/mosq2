@@ -27,5 +27,8 @@
     "realtime-tts"
   ],
   "author": "MosqAI",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "vercel": "^62.2.0"
+  }
 }

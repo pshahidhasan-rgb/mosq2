@@ -236,41 +236,40 @@
             </div>
           </div>
 
-          <!-- Live Arabic Transcript Monitor -->
-          <div class="card">
-            <div class="card-title">
-              <span>📜 Live Arabic Speech Monitor</span>
-              <span id="trans-count" class="badge" style="background: #334155; color: #94a3b8; font-size: 0.75rem;">0 lines</span>
-            </div>
-            <div id="transcript-feed" class="transcript-box" style="height: 180px;">
-              <div style="color: var(--text-muted); text-align: center; margin-top: 3.5rem; font-style: italic;">
-                Spoken Arabic sentences will appear here in real time...
-              </div>
-            </div>
-          </div>
         </div>
 
         <!-- Right Column: Stats, QR Code & Links -->
         <div>
-          <!-- Live Audience Card -->
+          <!-- Live Audience & Viewer Counts Card -->
           <div class="card">
             <div class="card-title">
-              <span>👥 Live Audience & Screens</span>
+              <span>👥 Live Viewers & Screens</span>
+              <span id="stat-total-badge" class="badge" style="background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.35); color: #34d399; font-size: 0.72rem; font-weight: 700;">0 total</span>
             </div>
-            <div class="stats-row">
-              <div class="stat-badge">
-                <span class="stat-value" id="stat-attendees">0</span>
-                <span class="stat-label">Phone Attendees</span>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
+              <!-- Mobile / Tablet category -->
+              <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 10px; padding: 0.85rem 1rem; text-align: center;">
+                <div style="font-size: 1.75rem; margin-bottom: 0.2rem;">📱</div>
+                <div id="stat-mobile" style="font-size: 2rem; font-weight: 800; color: #60a5fa; line-height: 1.1;">0</div>
+                <div style="font-size: 0.72rem; color: #64748b; font-weight: 600; margin-top: 0.2rem; text-transform: uppercase; letter-spacing: 0.05em;">Mobile / Tablet</div>
+                <div style="font-size: 0.68rem; color: #475569; margin-top: 0.1rem;">Phone attendees</div>
               </div>
-              <div class="stat-badge">
-                <span class="stat-value" id="stat-displays">0</span>
-                <span class="stat-label">TV Screens</span>
+              <!-- Desktop / TV / PC category -->
+              <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 0.85rem 1rem; text-align: center;">
+                <div style="font-size: 1.75rem; margin-bottom: 0.2rem;">🖥️</div>
+                <div id="stat-displays" style="font-size: 2rem; font-weight: 800; color: #34d399; line-height: 1.1;">0</div>
+                <div style="font-size: 0.72rem; color: #64748b; font-weight: 600; margin-top: 0.2rem; text-transform: uppercase; letter-spacing: 0.05em;">Desktop / TV</div>
+                <div style="font-size: 0.68rem; color: #475569; margin-top: 0.1rem;">Screens & browsers</div>
               </div>
             </div>
 
-            <div style="margin-top: 1rem;">
+            <!-- Hidden compat element (used by old code) -->
+            <span id="stat-attendees" style="display:none;">0</span>
+
+            <div style="margin-top: 0.25rem;">
               <span style="font-size: 0.8rem; color: var(--text-secondary); display: block; margin-bottom: 0.4rem;">
-                Languages Requested by Attendees:
+                Languages Active:
               </span>
               <div id="languages-breakdown" style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
                 <span style="font-size: 0.8rem; color: var(--text-muted);">None active yet</span>
