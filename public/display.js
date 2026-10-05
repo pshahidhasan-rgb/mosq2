@@ -248,7 +248,6 @@ const activeAyahFallbackTrans = null;
 
 // DOM Elements
 const mosqueNameEl = document.getElementById('mosque-name');
-const sessionStatusBadge = document.getElementById('session-status-badge');
 const stageStatusBanner = document.getElementById('stage-status-banner');
 const stageStatusText = document.getElementById('stage-status-text');
 const liveDotIndicator = document.getElementById('live-dot-indicator');
@@ -257,7 +256,7 @@ const arabicFeed = document.getElementById('arabic-feed');
 const transFeed = document.getElementById('trans-feed');
 
 function clearTvFeeds() {
-  recentFeedItems = [];
+  recentFeedItems.length = 0;
   seenTimestamps.clear();
   if ('speechSynthesis' in window) {
     try { window.speechSynthesis.cancel(); } catch (e) {}
@@ -302,10 +301,6 @@ function updateTVStatusUI(status, mosqueName) {
   if (mosqueNameEl) mosqueNameEl.textContent = currentMosqueName;
 
   if (status === 'active') {
-    if (sessionStatusBadge) {
-      sessionStatusBadge.style.cssText = 'font-size: 0.72rem; font-weight: 800; padding: 0.2rem 0.6rem; border-radius: 999px; letter-spacing: 0.05em; background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.4); color: #34d399;';
-      sessionStatusBadge.textContent = 'LIVE';
-    }
     if (liveDotIndicator) liveDotIndicator.style.display = 'block';
     if (stageStatusBanner) {
       stageStatusBanner.style.display = 'block';
@@ -315,10 +310,6 @@ function updateTVStatusUI(status, mosqueName) {
       stageStatusText.textContent = `${currentMosqueName} — LIVE`;
     }
   } else if (status === 'paused') {
-    if (sessionStatusBadge) {
-      sessionStatusBadge.style.cssText = 'font-size: 0.72rem; font-weight: 800; padding: 0.2rem 0.6rem; border-radius: 999px; letter-spacing: 0.05em; background: rgba(245, 158, 11, 0.2); border: 1px solid rgba(245, 158, 11, 0.4); color: #fbbf24;';
-      sessionStatusBadge.textContent = 'PAUSED';
-    }
     if (liveDotIndicator) liveDotIndicator.style.display = 'none';
     if (stageStatusBanner) {
       stageStatusBanner.style.display = 'block';
@@ -328,10 +319,6 @@ function updateTVStatusUI(status, mosqueName) {
       stageStatusText.textContent = `${currentMosqueName} — Live Translation Paused`;
     }
   } else if (status === 'ended') {
-    if (sessionStatusBadge) {
-      sessionStatusBadge.style.cssText = 'font-size: 0.72rem; font-weight: 800; padding: 0.2rem 0.6rem; border-radius: 999px; letter-spacing: 0.05em; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171;';
-      sessionStatusBadge.textContent = 'ENDED';
-    }
     if (liveDotIndicator) liveDotIndicator.style.display = 'none';
     if (stageStatusBanner) {
       stageStatusBanner.style.display = 'block';
@@ -342,10 +329,6 @@ function updateTVStatusUI(status, mosqueName) {
     }
   } else {
     // idle
-    if (sessionStatusBadge) {
-      sessionStatusBadge.style.cssText = 'font-size: 0.72rem; font-weight: 800; padding: 0.2rem 0.6rem; border-radius: 999px; letter-spacing: 0.05em; background: rgba(148, 163, 184, 0.15); border: 1px solid rgba(148, 163, 184, 0.3); color: #94a3b8;';
-      sessionStatusBadge.textContent = 'IDLE';
-    }
     if (liveDotIndicator) liveDotIndicator.style.display = 'none';
     if (stageStatusBanner) stageStatusBanner.style.display = 'none';
   }
