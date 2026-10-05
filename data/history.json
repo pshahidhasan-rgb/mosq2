@@ -1,5 +1,297 @@
 [
   {
+    "id": "hist_test-session-live_1791223844809",
+    "sessionId": "test-session-live",
+    "mosqueName": "Test Masjid",
+    "startedAt": "2026-10-05T18:10:44.767Z",
+    "endedAt": "2026-10-05T18:10:44.797Z",
+    "dateDisplay": "Oct 6, 2026",
+    "timeDisplay": "12:10 AM",
+    "durationSeconds": 0,
+    "durationDisplay": "0s",
+    "totalTranscripts": 3,
+    "totalAyahsDetected": 1,
+    "attendance": {
+      "total": 1,
+      "phoneAttendees": 1,
+      "computerDisplays": 1
+    },
+    "speakerLanguage": "auto",
+    "tvLanguage": "en",
+    "transcripts": [
+      {
+        "original": "إن الحمد لله نحمده ونستعينه ونستغفره",
+        "translation": "All praise is due to Allah; we praise Him, seek His help, and ask for His forgiveness.",
+        "timestamp": "2026-10-05T18:10:44.786Z"
+      },
+      {
+        "original": "فإن مع العسر يسرا",
+        "translation": "For indeed, with hardship [will be] ease.",
+        "timestamp": "2026-10-05T18:10:44.790Z"
+      },
+      {
+        "original": "إن الحمد لله نحمده ونستعينه ونستغفره",
+        "translation": "All praise is due to Allah; we praise Him, seek His help, and ask for His forgiveness.",
+        "timestamp": "2026-10-05T18:10:44.796Z"
+      }
+    ]
+  },
+  {
+    "id": "hist_test-multiday-mosque_1791223811281",
+    "sessionId": "test-multiday-mosque",
+    "mosqueName": "Masjid Multi-Day",
+    "startedAt": "2026-10-05T18:10:11.281Z",
+    "endedAt": "2026-10-05T18:10:11.281Z",
+    "dateDisplay": "Oct 6, 2026",
+    "timeDisplay": "12:10 AM",
+    "durationSeconds": 0,
+    "durationDisplay": "0s",
+    "totalTranscripts": 1,
+    "totalAyahsDetected": 0,
+    "attendance": {
+      "total": 0,
+      "phoneAttendees": 0,
+      "computerDisplays": 0
+    },
+    "speakerLanguage": "auto",
+    "tvLanguage": "tr",
+    "transcripts": [
+      {
+        "original": "الحمد لله رب العالمين",
+        "translation": "Hamd, âlemlerin Rabbi olan Allah’a mahsustur.",
+        "timestamp": "2026-10-05T18:10:11.281Z"
+      }
+    ]
+  },
+  {
+    "id": "hist_test-multiday-mosque_1791223811280",
+    "sessionId": "test-multiday-mosque",
+    "mosqueName": "Masjid Multi-Day",
+    "startedAt": "2026-10-05T18:10:11.263Z",
+    "endedAt": "2026-10-05T18:10:11.279Z",
+    "dateDisplay": "Oct 6, 2026",
+    "timeDisplay": "12:10 AM",
+    "durationSeconds": 0,
+    "durationDisplay": "0s",
+    "totalTranscripts": 2,
+    "totalAyahsDetected": 0,
+    "attendance": {
+      "total": 0,
+      "phoneAttendees": 0,
+      "computerDisplays": 0
+    },
+    "speakerLanguage": "auto",
+    "tvLanguage": "tr",
+    "transcripts": [
+      {
+        "original": "إن مع العسر يسرا",
+        "translation": "Şüphesiz zorlukla beraber bir kolaylık vardır.",
+        "timestamp": "2026-10-05T18:10:11.263Z"
+      },
+      {
+        "original": "واتقوا الله",
+        "translation": "Ve Allah’tan korkun.",
+        "timestamp": "2026-10-05T18:10:11.263Z"
+      }
+    ]
+  },
+  {
+    "id": "hist_test-multiday-mosque_1791223811279",
+    "sessionId": "test-multiday-mosque",
+    "mosqueName": "Masjid Multi-Day",
+    "startedAt": "2026-10-05T18:10:11.263Z",
+    "endedAt": "2026-10-05T18:10:11.263Z",
+    "dateDisplay": "Oct 6, 2026",
+    "timeDisplay": "12:10 AM",
+    "durationSeconds": 0,
+    "durationDisplay": "0s",
+    "totalTranscripts": 2,
+    "totalAyahsDetected": 0,
+    "attendance": {
+      "total": 0,
+      "phoneAttendees": 0,
+      "computerDisplays": 0
+    },
+    "speakerLanguage": "auto",
+    "tvLanguage": "en",
+    "transcripts": [
+      {
+        "original": "إن مع العسر يسرا",
+        "translation": "Indeed, with hardship comes ease.",
+        "timestamp": "2026-10-05T18:10:11.263Z"
+      },
+      {
+        "original": "واتقوا الله",
+        "translation": "And fear Allah.",
+        "timestamp": "2026-10-05T18:10:11.263Z"
+      }
+    ]
+  },
+  {
+    "id": "hist_test-multiday-mosque_1791223792060",
+    "sessionId": "test-multiday-mosque",
+    "mosqueName": "Masjid Multi-Day",
+    "startedAt": "2026-10-05T18:09:52.060Z",
+    "endedAt": "2026-10-05T18:09:52.060Z",
+    "dateDisplay": "Oct 6, 2026",
+    "timeDisplay": "12:09 AM",
+    "durationSeconds": 0,
+    "durationDisplay": "0s",
+    "totalTranscripts": 1,
+    "totalAyahsDetected": 0,
+    "attendance": {
+      "total": 0,
+      "phoneAttendees": 0,
+      "computerDisplays": 0
+    },
+    "speakerLanguage": "auto",
+    "tvLanguage": "tr",
+    "transcripts": [
+      {
+        "original": "الحمد لله رب العالمين",
+        "translation": "Hamd, âlemlerin Rabbi olan Allah’a mahsustur.",
+        "timestamp": "2026-10-05T18:09:52.060Z"
+      }
+    ]
+  },
+  {
+    "id": "hist_test-multiday-mosque_1791223792059",
+    "sessionId": "test-multiday-mosque",
+    "mosqueName": "Masjid Multi-Day",
+    "startedAt": "2026-10-05T18:09:52.042Z",
+    "endedAt": "2026-10-05T18:09:52.059Z",
+    "dateDisplay": "Oct 6, 2026",
+    "timeDisplay": "12:09 AM",
+    "durationSeconds": 0,
+    "durationDisplay": "0s",
+    "totalTranscripts": 2,
+    "totalAyahsDetected": 0,
+    "attendance": {
+      "total": 0,
+      "phoneAttendees": 0,
+      "computerDisplays": 0
+    },
+    "speakerLanguage": "auto",
+    "tvLanguage": "tr",
+    "transcripts": [
+      {
+        "original": "إن مع العسر يسرا",
+        "translation": "Şüphesiz zorlukla beraber bir kolaylık vardır.",
+        "timestamp": "2026-10-05T18:09:52.043Z"
+      },
+      {
+        "original": "واتقوا الله",
+        "translation": "Ve Allah’tan korkun.",
+        "timestamp": "2026-10-05T18:09:52.043Z"
+      }
+    ]
+  },
+  {
+    "id": "hist_test-multiday-mosque_1791223792058",
+    "sessionId": "test-multiday-mosque",
+    "mosqueName": "Masjid Multi-Day",
+    "startedAt": "2026-10-05T18:09:52.042Z",
+    "endedAt": "2026-10-05T18:09:52.043Z",
+    "dateDisplay": "Oct 6, 2026",
+    "timeDisplay": "12:09 AM",
+    "durationSeconds": 0,
+    "durationDisplay": "0s",
+    "totalTranscripts": 2,
+    "totalAyahsDetected": 0,
+    "attendance": {
+      "total": 0,
+      "phoneAttendees": 0,
+      "computerDisplays": 0
+    },
+    "speakerLanguage": "auto",
+    "tvLanguage": "en",
+    "transcripts": [
+      {
+        "original": "إن مع العسر يسرا",
+        "translation": "Indeed, with hardship comes ease.",
+        "timestamp": "2026-10-05T18:09:52.043Z"
+      },
+      {
+        "original": "واتقوا الله",
+        "translation": "And fear Allah.",
+        "timestamp": "2026-10-05T18:09:52.043Z"
+      }
+    ]
+  },
+  {
+    "id": "hist_test-session-live_1791223751662",
+    "sessionId": "test-session-live",
+    "mosqueName": "Test Masjid",
+    "startedAt": "2026-10-05T18:09:11.621Z",
+    "endedAt": "2026-10-05T18:09:11.651Z",
+    "dateDisplay": "Oct 6, 2026",
+    "timeDisplay": "12:09 AM",
+    "durationSeconds": 0,
+    "durationDisplay": "0s",
+    "totalTranscripts": 3,
+    "totalAyahsDetected": 1,
+    "attendance": {
+      "total": 1,
+      "phoneAttendees": 1,
+      "computerDisplays": 1
+    },
+    "speakerLanguage": "auto",
+    "tvLanguage": "en",
+    "transcripts": [
+      {
+        "original": "إن الحمد لله نحمده ونستعينه ونستغفره",
+        "translation": "All praise is due to Allah; we praise Him, seek His help, and ask for His forgiveness.",
+        "timestamp": "2026-10-05T18:09:11.639Z"
+      },
+      {
+        "original": "فإن مع العسر يسرا",
+        "translation": "For indeed, with hardship [will be] ease.",
+        "timestamp": "2026-10-05T18:09:11.644Z"
+      },
+      {
+        "original": "إن الحمد لله نحمده ونستعينه ونستغفره",
+        "translation": "All praise is due to Allah; we praise Him, seek His help, and ask for His forgiveness.",
+        "timestamp": "2026-10-05T18:09:11.650Z"
+      }
+    ]
+  },
+  {
+    "id": "hist_test-session-live_1791223721001",
+    "sessionId": "test-session-live",
+    "mosqueName": "Test Masjid",
+    "startedAt": "2026-10-05T18:08:40.941Z",
+    "endedAt": "2026-10-05T18:08:40.973Z",
+    "dateDisplay": "Oct 6, 2026",
+    "timeDisplay": "12:08 AM",
+    "durationSeconds": 0,
+    "durationDisplay": "0s",
+    "totalTranscripts": 3,
+    "attendance": {
+      "total": 1,
+      "phoneAttendees": 1,
+      "computerDisplays": 1
+    },
+    "speakerLanguage": "auto",
+    "tvLanguage": "en",
+    "transcripts": [
+      {
+        "original": "إن الحمد لله نحمده ونستعينه ونستغفره",
+        "translation": "All praise is due to Allah; we praise Him, seek His help, and ask for His forgiveness.",
+        "timestamp": "2026-10-05T18:08:40.962Z"
+      },
+      {
+        "original": "فإن مع العسر يسرا",
+        "translation": "For indeed, with hardship [will be] ease.",
+        "timestamp": "2026-10-05T18:08:40.967Z"
+      },
+      {
+        "original": "إن الحمد لله نحمده ونستعينه ونستغفره",
+        "translation": "All praise is due to Allah; we praise Him, seek His help, and ask for His forgiveness.",
+        "timestamp": "2026-10-05T18:08:40.972Z"
+      }
+    ]
+  },
+  {
     "id": "test-session-live",
     "mosqueName": "Test Masjid",
     "startedAt": "2026-10-05T10:08:45.903Z",

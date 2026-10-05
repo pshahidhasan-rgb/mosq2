@@ -424,10 +424,13 @@ function renderSermonCard({ arabic, translations, translated, ayah, timestamp },
     tagHtml = `<span class="card-tag-pill">Aa SERMON</span>`;
   }
 
+  const origText = (ayah && ayah.arabicUthmani ? ayah.arabicUthmani : arabic) || '';
+  const isOrigRtl = /[\u0591-\u07FF\uFB1D-\uFDFD\uFE70-\uFEFC]/.test(origText);
+
   card.innerHTML = `
     <div class="card-brand-glyph">🎙️</div>
     <div class="card-translated-text"></div>
-    ${arabic ? `<div class="card-arabic-text" dir="rtl">${ayah && ayah.arabicUthmani ? ayah.arabicUthmani : arabic}</div>` : ''}
+    ${origText ? `<div class="card-arabic-text" dir="${isOrigRtl ? 'rtl' : 'ltr'}" style="${isOrigRtl ? '' : 'font-family: inherit; font-size: 0.88rem; text-align: left; color: #94a3b8;'}">${origText}</div>` : ''}
     ${tagHtml}
   `;
 

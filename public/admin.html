@@ -86,6 +86,9 @@
         <button id="btn-nav-sessions" class="btn btn-secondary" style="font-size: 0.82rem; padding: 0.35rem 0.75rem;">
           🏛️ All Mosques & Sessions
         </button>
+        <button id="btn-header-history" class="btn btn-secondary" style="font-size: 0.82rem; padding: 0.35rem 0.75rem;">
+          📜 Session History
+        </button>
         <span class="badge badge-idle" id="session-badge">
           <span class="pulse-dot"></span> <span id="session-status-text">IDLE</span>
         </span>
@@ -176,6 +179,27 @@
               <button id="btn-simulate" class="btn btn-accent">⚡ Simulate Demo</button>
             </div>
 
+            <!-- Speaker Input Language Selection -->
+            <div style="margin-bottom: 0.85rem; background: rgba(15, 23, 42, 0.4); padding: 0.65rem 0.85rem; border-radius: 8px; border: 1px solid rgba(16, 185, 129, 0.25);">
+              <label for="speaker-lang-select" style="font-size: 0.78rem; font-weight: 700; color: #34d399; display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.35rem;">
+                <span>🌐</span> Speaker / Microphone Language (Speak Any Language):
+              </label>
+              <select id="speaker-lang-select" class="form-select" style="padding: 0.45rem 0.65rem; font-size: 0.84rem; background: #0f172a; border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 8px; color: #f8fafc; width: 100%;">
+                <option value="auto">🌐 Auto Detect (Speak Any Language)</option>
+                <option value="ar-SA">Arabic (العربية)</option>
+                <option value="en-US">English</option>
+                <option value="bn-BD">Bengali (বাংলা)</option>
+                <option value="ur-PK">Urdu (اردو)</option>
+                <option value="tr-TR">Turkish (Türkçe)</option>
+                <option value="fr-FR">French (Français)</option>
+                <option value="zh-CN">Chinese Mandarin (中文 普通话)</option>
+                <option value="zh-TW">Traditional Chinese (中文 繁體)</option>
+                <option value="uz-UZ">Uzbek (O‘zbekcha)</option>
+                <option value="id-ID">Indonesian (Bahasa Indonesia)</option>
+                <option value="so-SO">Somali (Soomaali)</option>
+              </select>
+            </div>
+
             <!-- Microphone Streaming Section -->
             <div style="background: rgba(15, 23, 42, 0.6); padding: 0.85rem; border-radius: 8px; border: 1px solid var(--bg-card-border);">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
@@ -194,7 +218,7 @@
 
             <!-- Manual Speech / Ayah Injection for instant manual test (Guarded) -->
             <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
-              <input type="text" id="manual-input" class="form-select" disabled placeholder="Start session to enable live translation testing..." dir="rtl" style="font-family: var(--font-arabic); font-size: 1.05rem;" />
+              <input type="text" id="manual-input" class="form-select" disabled placeholder="Type speech in ANY language (Arabic, English, Bengali, etc.)..." style="font-size: 0.95rem;" />
               <button id="btn-inject" class="btn btn-secondary" disabled style="white-space: nowrap;">Send ↵</button>
             </div>
           </div>
@@ -461,6 +485,36 @@
         <a id="btn-open-qr-modal-link" href="#" target="_blank" class="btn btn-primary" style="font-size: 0.85rem; padding: 0.5rem 1rem;">
           Open on This Device ↗
         </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       MODAL: SESSION SERMON HISTORY
+  ══════════════════════════════════════════════ -->
+  <div id="modal-session-history" style="display: none; position: fixed; inset: 0; background: rgba(2, 6, 23, 0.92); backdrop-filter: blur(10px); z-index: 1000; align-items: center; justify-content: center; padding: 1.25rem;">
+    <div style="background: #0f172a; border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 16px; width: 100%; max-width: 820px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7); overflow: hidden;">
+      <!-- Header -->
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 1.25rem 1.5rem; border-bottom: 1px solid rgba(255, 255, 255, 0.1); background: rgba(15, 23, 42, 0.95);">
+        <div>
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span style="font-size: 1.3rem;">📜</span>
+            <h3 id="hist-modal-title" style="font-size: 1.25rem; font-weight: 800; color: #fff; margin: 0;">Session History</h3>
+            <span id="hist-modal-count-badge" class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-size: 0.75rem; font-weight: 700;">0 Runs</span>
+          </div>
+          <p id="hist-modal-subtitle" style="font-size: 0.8rem; color: #94a3b8; margin-top: 0.25rem; font-family: monospace;">Past recorded sermon days & translations</p>
+        </div>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <button type="button" id="btn-archive-current-now" class="btn btn-secondary" style="font-size: 0.78rem; padding: 0.35rem 0.65rem;" title="Archive current session transcripts to history now">
+            💾 Archive Current
+          </button>
+          <button type="button" id="btn-close-hist-modal" class="btn btn-secondary" style="font-size: 1.1rem; padding: 0.2rem 0.6rem; border-radius: 8px;">✕</button>
+        </div>
+      </div>
+
+      <!-- Scrollable History List -->
+      <div id="hist-modal-body" style="padding: 1.25rem 1.5rem; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 1rem;">
+        <!-- Injected via JavaScript -->
       </div>
     </div>
   </div>

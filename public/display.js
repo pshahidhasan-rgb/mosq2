@@ -262,7 +262,7 @@ function clearTvFeeds() {
     try { window.speechSynthesis.cancel(); } catch (e) {}
   }
   if (arabicFeed) {
-    arabicFeed.innerHTML = '<div class="idle-placeholder">في انتظار بدء الخطبة...</div>';
+    arabicFeed.innerHTML = '<div class="idle-placeholder">Waiting for speech... / في انتظار الخطبة...</div>';
   }
   if (transFeed) {
     transFeed.innerHTML = '<div class="idle-placeholder">Waiting for sermon to begin...</div>';
@@ -410,6 +410,10 @@ function reRenderTranslationFeed() {
       } else {
         text = item.transObj || '';
       }
+      const isRtlTrans = /[\u0591-\u07FF\uFB1D-\uFDFD\uFE70-\uFEFC]/.test(text);
+      pTrans.style.direction = isRtlTrans ? 'rtl' : 'ltr';
+      pTrans.style.textAlign = isRtlTrans ? 'right' : 'left';
+      pTrans.style.fontFamily = isRtlTrans ? "'Amiri', serif" : "'Plus Jakarta Sans', sans-serif";
       pTrans.textContent = text;
       transFeed.appendChild(pTrans);
     });
@@ -448,7 +452,7 @@ function appendToFeed(arabicText, transObj, isLive = true) {
     recentFeedItems.shift();
   }
 
-  // 1. Arabic Column
+  // 1. Spoken Speech Column (Universal Language Detection)
   if (arabicText) {
     const existingCurrent = arabicFeed.querySelectorAll('.para-item.current');
     existingCurrent.forEach(el => {
@@ -458,6 +462,10 @@ function appendToFeed(arabicText, transObj, isLive = true) {
 
     const pArabic = document.createElement('div');
     pArabic.className = 'para-item current';
+    const isRtlSpeech = /[\u0591-\u07FF\uFB1D-\uFDFD\uFE70-\uFEFC]/.test(arabicText);
+    pArabic.style.direction = isRtlSpeech ? 'rtl' : 'ltr';
+    pArabic.style.textAlign = isRtlSpeech ? 'right' : 'left';
+    pArabic.style.fontFamily = isRtlSpeech ? "'Amiri', serif" : "'Plus Jakarta Sans', sans-serif";
     arabicFeed.appendChild(pArabic);
 
     if (isLive) {
@@ -488,6 +496,10 @@ function appendToFeed(arabicText, transObj, isLive = true) {
 
     const pTrans = document.createElement('div');
     pTrans.className = 'para-item current';
+    const isRtlTrans = /[\u0591-\u07FF\uFB1D-\uFDFD\uFE70-\uFEFC]/.test(displayTrans);
+    pTrans.style.direction = isRtlTrans ? 'rtl' : 'ltr';
+    pTrans.style.textAlign = isRtlTrans ? 'right' : 'left';
+    pTrans.style.fontFamily = isRtlTrans ? "'Amiri', serif" : "'Plus Jakarta Sans', sans-serif";
     transFeed.appendChild(pTrans);
 
     if (isLive) {
@@ -560,6 +572,10 @@ async function initSession() {
         setTvQrVisibility(data.tvShowQr);
       }
 
+      if (data.speakerLanguage) {
+        updateSpeakerPill(data.speakerLanguage);
+      }
+
       // Only adopt session primaryLanguage on initial load IF user has NOT explicitly chosen a language
       if (!userExplicitlySelectedLang && data.primaryLanguage && VALID_LANGS.includes(data.primaryLanguage)) {
         targetLang = data.primaryLanguage;
@@ -584,6 +600,17 @@ async function initSession() {
 
   connectWebSocket();
   startFeedSync();
+}
+
+function updateSpeakerPill(langCode) {
+  const pill = document.getElementById('source-lang-pill');
+  if (!pill) return;
+  const names = {
+    ar: 'Arabic', en: 'English', bn: 'Bengali', ur: 'Urdu', tr: 'Turkish',
+    fr: 'French', 'zh-cn': 'Chinese', 'zh-tw': 'Chinese', id: 'Indonesian',
+    so: 'Somali', uz: 'Uzbek', auto: 'Speaker'
+  };
+  pill.textContent = names[langCode] || (langCode && langCode !== 'auto' ? langCode.toUpperCase() : 'Speaker');
 }
 
 let tvHeartbeatInterval = null;
@@ -640,6 +667,9 @@ function connectWebSocket() {
       const data = JSON.parse(event.data);
       if (data.type === 'SESSION_STATUS') {
         updateTVStatusUI(data.status, data.mosqueName);
+      }
+      if (data.type === 'SET_SPEAKER_LANGUAGE') {
+        updateSpeakerPill(data.language);
       }
       if (data.type === 'JOINED_SUCCESS' && data.session) {
         if (data.session.tvFontSize) applyTvFontSize(data.session.tvFontSize, data.session.tvCapacity, false);

@@ -87,12 +87,12 @@ async function processTranscript({ text, isFinal, source, sessionId }) {
     return null;
   }
 
-  // Quran detection DISABLED — always use pure translation pipeline
-  const ayahMatch = null;
+  const cleanText = text.trim();
+  const sourceLang = inputLang || session.speakerLanguage || 'auto';
 
-  // Step 2: Multi-language Translation — always runs
+  // Step 2: Multi-language Translation — always runs from ANY input language
   const targetLanguages = ['en', 'uz', 'bn', 'ur', 'fr', 'zh', 'zh-TW', 'tr', 'id', 'so'];
-  const translations = await translationService.translateMultiple(cleanArabic, targetLanguages);
+  const translations = await translationService.translateMultiple(cleanText, targetLanguages, sourceLang);
 
   // Step 3: Low-Latency Spoken Audio Generation for Earbuds (Cartesia / Sonic)
   const audioByLanguage = {};
@@ -104,7 +104,7 @@ async function processTranscript({ text, isFinal, source, sessionId }) {
 
   const ttsPromises = neededAudioLangs.map(async (lang) => {
     try {
-      const textToSpeak = translations[lang] || translations.en || cleanArabic;
+      const textToSpeak = translations[lang] || translations.en || cleanText;
       const audioResult = await ttsService.generateSpeech(textToSpeak, lang);
       if (audioResult) {
         audioByLanguage[lang] = audioResult;
@@ -118,7 +118,9 @@ async function processTranscript({ text, isFinal, source, sessionId }) {
 
   // Step 4: Instant Multi-Screen & Earbud Broadcast to THIS specific session room
   const broadcastPayload = {
-    arabicText: cleanArabic,
+    arabicText: cleanText, // Backwards compatible alias
+    originalText: cleanText,
+    sourceLang,
     translations,
     ayahData: null,  // Quran detection disabled
     audioByLanguage,
@@ -377,7 +379,7 @@ app.post('/api/session/:id/simulate/stop', (req, res) => {
 
 // Direct test text injection (strictly guarded: only allowed when session is active)
 app.post('/api/session/:id/inject-text', async (req, res) => {
-  const { text } = req.body;
+  const { text, inputLang } = req.body;
   if (!text) return res.status(400).json({ error: 'Text required' });
 
   const session = sessionManager.getSession(req.params.id);
@@ -392,10 +394,38 @@ app.post('/api/session/:id/inject-text', async (req, res) => {
     text,
     isFinal: true,
     source: 'manual_injection',
-    sessionId: req.params.id
+    sessionId: req.params.id,
+    inputLang
   });
 
   res.json({ success: true, result });
+});
+
+// Session History Runs (Multiple days/runs for each session)
+app.get('/api/session/:id/history', (req, res) => {
+  const history = sessionManager.getSessionHistory(req.params.id);
+  res.json(history);
+});
+
+app.delete('/api/session/:id/history/:historyId', (req, res) => {
+  const success = sessionManager.deleteSessionHistoryEntry(req.params.id, req.params.historyId);
+  if (!success) return res.status(404).json({ error: 'History record not found' });
+  res.json({ success: true, message: 'History record deleted' });
+});
+
+// Snapshot/archive current session run manually
+app.post('/api/session/:id/archive-current', (req, res) => {
+  const record = sessionManager.archiveSessionRun(req.params.id);
+  if (!record) return res.status(400).json({ error: 'No speech transcripts to archive for this session' });
+  res.json({ success: true, record });
+});
+
+// Speaker Language setting
+app.post('/api/session/:id/speaker-language', (req, res) => {
+  const { language } = req.body;
+  const session = sessionManager.setSpeakerLanguage(req.params.id, language);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+  res.json({ success: true, speakerLanguage: session.speakerLanguage });
 });
 
 // TV Screen Font Size & Capacity Settings
@@ -540,14 +570,21 @@ wss.on('connection', (ws) => {
         }
       }
 
+      if (msg.type === 'SET_SPEAKER_LANGUAGE') {
+        const targetSessionId = msg.sessionId || userSessionId;
+        sessionManager.setSpeakerLanguage(targetSessionId, msg.language);
+      }
+
       if (msg.type === 'DIRECT_SPEECH') {
         // Direct speech from browser Web Speech API
         if (msg.text) {
-          sttService.emit('transcript', {
+          processTranscript({
             text: msg.text,
             isFinal: true,
-            source: 'browser_mic'
-          });
+            source: 'browser_mic',
+            sessionId: userSessionId,
+            inputLang: msg.language || null
+          }).catch(err => console.error('[STT] Processing error:', err.message));
         }
       }
     } catch (err) {
