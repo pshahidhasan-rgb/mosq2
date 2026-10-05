@@ -235,19 +235,6 @@
               </button>
             </div>
           </div>
-
-          <!-- Live Arabic Transcript Monitor -->
-          <div class="card">
-            <div class="card-title">
-              <span>📜 Live Arabic Speech Monitor</span>
-              <span id="trans-count" class="badge" style="background: #334155; color: #94a3b8; font-size: 0.75rem;">0 lines</span>
-            </div>
-            <div id="transcript-feed" class="transcript-box" style="height: 180px;">
-              <div style="color: var(--text-muted); text-align: center; margin-top: 3.5rem; font-style: italic;">
-                Spoken Arabic sentences will appear here in real time...
-              </div>
-            </div>
-          </div>
         </div>
 
         <!-- Right Column: Stats, QR Code & Links -->
@@ -256,15 +243,18 @@
           <div class="card">
             <div class="card-title">
               <span>👥 Live Audience & Screens</span>
+              <span id="stat-total-badge" class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-size: 0.72rem; font-weight: 700;">
+                0 Active Browsers
+              </span>
             </div>
             <div class="stats-row">
               <div class="stat-badge">
                 <span class="stat-value" id="stat-attendees">0</span>
-                <span class="stat-label">Phone Attendees</span>
+                <span class="stat-label">📱 Phone Attendees</span>
               </div>
               <div class="stat-badge">
                 <span class="stat-value" id="stat-displays">0</span>
-                <span class="stat-label">TV Screens</span>
+                <span class="stat-label">💻 Computers & TVs</span>
               </div>
             </div>
 

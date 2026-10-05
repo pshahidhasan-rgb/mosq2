@@ -23,6 +23,30 @@ let isPlayingAudio = false;
 const renderedTimestamps = new Set();
 let lastSyncTime = null;
 
+function detectDeviceType() {
+  const ua = navigator.userAgent || '';
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|mobile/i.test(ua)
+    || (window.innerWidth <= 800 && (navigator.maxTouchPoints > 0 || 'ontouchstart' in window));
+  return isMobile ? 'phone' : 'computer';
+}
+
+function getClientId() {
+  let cid = '';
+  try {
+    cid = localStorage.getItem('mosq_client_id');
+    if (!cid) {
+      cid = 'att_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+      localStorage.setItem('mosq_client_id', cid);
+    }
+  } catch (e) {
+    cid = 'att_' + Math.random().toString(36).substring(2, 9);
+  }
+  return cid;
+}
+
+const myClientId = getClientId();
+const myDeviceType = detectDeviceType();
+
 // DOM Elements
 const step1 = document.getElementById('step1');
 const step2 = document.getElementById('step2');
@@ -321,6 +345,34 @@ function speakSpeech(text, lang) {
 }
 
 // ─── WEBSOCKET & SYNC ───
+let heartbeatInterval = null;
+function startAttendeeHeartbeat() {
+  if (heartbeatInterval) clearInterval(heartbeatInterval);
+  heartbeatInterval = setInterval(() => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'HEARTBEAT',
+        sessionId,
+        role: 'attendee',
+        language: currentLanguage,
+        clientId: myClientId,
+        deviceType: myDeviceType
+      }));
+    }
+    // Also ping HTTP endpoint to guarantee attendance count on all network types
+    fetch(`/api/session/${sessionId}/ping`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        clientId: myClientId,
+        role: 'attendee',
+        language: currentLanguage,
+        deviceType: myDeviceType
+      })
+    }).catch(() => {});
+  }, 10000);
+}
+
 function connectWebSocket() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
@@ -330,8 +382,11 @@ function connectWebSocket() {
       type: 'JOIN_ROOM',
       sessionId,
       role: 'attendee',
-      language: currentLanguage
+      language: currentLanguage,
+      clientId: myClientId,
+      deviceType: myDeviceType
     }));
+    startAttendeeHeartbeat();
   };
 
   ws.onmessage = (event) => {

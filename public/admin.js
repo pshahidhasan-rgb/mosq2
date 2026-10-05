@@ -688,12 +688,37 @@ async function initConsoleSession(sessionId) {
   } catch (err) {}
 
   connectWebSocket(sessionId);
+  startAdminStatsSync();
+}
+
+let adminStatsSyncInterval = null;
+function startAdminStatsSync() {
+  if (adminStatsSyncInterval) clearInterval(adminStatsSyncInterval);
+  adminStatsSyncInterval = setInterval(async () => {
+    if (!currentSessionId) return;
+    try {
+      const res = await fetch(`/api/session/${currentSessionId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.stats) updateStatsDisplay(data.stats);
+      }
+    } catch (e) {}
+  }, 3000);
 }
 
 function updateStatsDisplay(stats) {
   if (!stats) return;
-  if (statAttendees) statAttendees.textContent = stats.totalAttendees || 0;
-  if (statDisplays) statDisplays.textContent = stats.totalTVDisplays || 0;
+  const phones = stats.phoneAttendees !== undefined ? stats.phoneAttendees : (stats.totalAttendees || 0);
+  const computers = stats.computerDisplays !== undefined ? stats.computerDisplays : (stats.tvDisplays || stats.totalTVDisplays || 0);
+  const total = stats.totalBrowsers !== undefined ? stats.totalBrowsers : (phones + computers);
+
+  if (statAttendees) statAttendees.textContent = phones;
+  if (statDisplays) statDisplays.textContent = computers;
+
+  const totalBadge = document.getElementById('stat-total-badge');
+  if (totalBadge) {
+    totalBadge.textContent = `${total} Active Browser${total === 1 ? '' : 's'}`;
+  }
 
   if (languagesBreakdown) {
     languagesBreakdown.innerHTML = '';
@@ -733,7 +758,9 @@ function connectWebSocket(sessionId) {
         else if (data.status === 'paused') setSessionPaused();
         else if (data.status === 'ended') setSessionEnded();
       }
-      if (data.type === 'SESSION_STATS') updateStatsDisplay(data.stats);
+      if (data.type === 'SESSION_STATS' || data.type === 'STATS_UPDATE') {
+        updateStatsDisplay(data.stats);
+      }
       if (data.type === 'TV_SETTINGS_UPDATE') syncTvFontSizeUI(data.tvFontSize, data.tvCapacity);
       if (data.type === 'LIVE_SUBTITLE') addTranscriptEntry(data);
     } catch (e) {}

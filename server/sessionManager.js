@@ -217,17 +217,62 @@ class SessionManager {
   /**
    * Adds a WebSocket connection to the session room
    */
-  addSubscriber(sessionId, ws, { role = 'attendee', language = 'en', clientId = '' } = {}) {
+  addSubscriber(sessionId, ws, { role = 'attendee', language = 'en', clientId = '', deviceType = null } = {}) {
     if (!this.subscribers.has(sessionId)) {
       this.subscribers.set(sessionId, new Set());
     }
-    const subscriber = { ws, role, language, clientId };
+    const resolvedDevice = deviceType || (role === 'tv' ? 'computer' : 'phone');
+    const subscriber = { ws, role, language, clientId, deviceType: resolvedDevice, lastPing: Date.now() };
     this.subscribers.get(sessionId).add(subscriber);
 
     // Update attendee counts
     this.notifyStatsUpdate(sessionId);
 
     return subscriber;
+  }
+
+  touchSubscriber(sessionId, ws, { deviceType = null, language = null, clientId = null } = {}) {
+    const subs = this.subscribers.get(sessionId);
+    if (!subs) return;
+    for (const sub of subs) {
+      if (sub.ws === ws) {
+        sub.lastPing = Date.now();
+        if (deviceType) sub.deviceType = deviceType;
+        if (language) sub.language = language;
+        if (clientId) sub.clientId = clientId;
+        break;
+      }
+    }
+  }
+
+  recordHttpPing(sessionId, { clientId, role = 'attendee', deviceType = 'phone', language = 'en' }) {
+    if (!this.httpClients) this.httpClients = new Map();
+    if (!this.httpClients.has(sessionId)) {
+      this.httpClients.set(sessionId, new Map());
+    }
+    const sessionMap = this.httpClients.get(sessionId);
+    sessionMap.set(clientId, {
+      role,
+      deviceType: deviceType || 'phone',
+      language: language || 'en',
+      lastSeen: Date.now()
+    });
+    this.notifyStatsUpdate(sessionId);
+  }
+
+  getActiveHttpClients(sessionId) {
+    if (!this.httpClients || !this.httpClients.has(sessionId)) return new Map();
+    const sessionMap = this.httpClients.get(sessionId);
+    const now = Date.now();
+    const active = new Map();
+    for (const [cid, info] of sessionMap.entries()) {
+      if (now - info.lastSeen < 25000) {
+        active.set(cid, info);
+      } else {
+        sessionMap.delete(cid);
+      }
+    }
+    return active;
   }
 
   removeSubscriber(sessionId, ws) {
@@ -258,22 +303,68 @@ class SessionManager {
 
   getSessionStats(sessionId) {
     const subs = this.subscribers.get(sessionId) || new Set();
+    let phoneAttendees = 0;
+    let computerDisplays = 0;
     let totalAttendees = 0;
     let tvDisplays = 0;
     const languageCounts = {};
+    const seenClientKeys = new Set();
 
     for (const sub of subs) {
-      if (sub.role === 'attendee') {
-        totalAttendees++;
-        languageCounts[sub.language] = (languageCounts[sub.language] || 0) + 1;
-      } else if (sub.role === 'tv') {
+      // Exclude admin pulpit console from viewer counts
+      if (sub.role === 'admin') continue;
+
+      const clientKey = sub.clientId || sub.ws;
+      if (clientKey && seenClientKeys.has(clientKey)) continue;
+      if (clientKey) seenClientKeys.add(clientKey);
+
+      if (sub.role === 'tv') {
         tvDisplays++;
+        computerDisplays++;
+      } else {
+        totalAttendees++;
+        if (sub.deviceType === 'phone') {
+          phoneAttendees++;
+        } else {
+          computerDisplays++;
+        }
+      }
+
+      if (sub.language) {
+        languageCounts[sub.language] = (languageCounts[sub.language] || 0) + 1;
+      }
+    }
+
+    // Also factor in any HTTP-polling clients not connected to WebSocket
+    const activeHttp = this.getActiveHttpClients(sessionId);
+    for (const [cid, info] of activeHttp.entries()) {
+      if (info.role === 'admin') continue;
+      if (seenClientKeys.has(cid)) continue;
+      seenClientKeys.add(cid);
+
+      if (info.role === 'tv') {
+        tvDisplays++;
+        computerDisplays++;
+      } else {
+        totalAttendees++;
+        if (info.deviceType === 'phone') {
+          phoneAttendees++;
+        } else {
+          computerDisplays++;
+        }
+      }
+      if (info.language) {
+        languageCounts[info.language] = (languageCounts[info.language] || 0) + 1;
       }
     }
 
     return {
+      phoneAttendees,
+      computerDisplays,
       totalAttendees,
       tvDisplays,
+      totalTVDisplays: computerDisplays,
+      totalBrowsers: phoneAttendees + computerDisplays,
       languageCounts
     };
   }
@@ -282,6 +373,10 @@ class SessionManager {
     const stats = this.getSessionStats(sessionId);
     this.broadcastToSession(sessionId, {
       type: 'STATS_UPDATE',
+      stats
+    });
+    this.broadcastToSession(sessionId, {
+      type: 'SESSION_STATS',
       stats
     });
   }

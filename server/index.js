@@ -422,6 +422,21 @@ app.get('/api/session/:id/feed', (req, res) => {
   });
 });
 
+// Client presence heartbeat ping (tracks active browser tabs in real time)
+app.post('/api/session/:id/ping', (req, res) => {
+  const { clientId, role, deviceType, language } = req.body;
+  if (clientId) {
+    sessionManager.recordHttpPing(req.params.id, {
+      clientId,
+      role: role || 'attendee',
+      deviceType: deviceType || 'phone',
+      language: language || 'en'
+    });
+  }
+  const stats = sessionManager.getSessionStats(req.params.id);
+  res.json({ success: true, stats });
+});
+
 // WebSocket Connection Handler
 wss.on('connection', (ws) => {
   let userSessionId = activeLiveSessionId;
@@ -454,7 +469,8 @@ wss.on('connection', (ws) => {
         sessionManager.addSubscriber(userSessionId, ws, {
           role: userRole,
           language: userLanguage,
-          clientId: msg.clientId
+          clientId: msg.clientId,
+          deviceType: msg.deviceType
         });
 
         // Send confirmation and current session info
@@ -465,6 +481,15 @@ wss.on('connection', (ws) => {
           session: currentSession,
           stats: sessionManager.getSessionStats(userSessionId)
         }));
+      }
+
+      if (msg.type === 'HEARTBEAT' || msg.type === 'PING') {
+        sessionManager.touchSubscriber(userSessionId, ws, {
+          deviceType: msg.deviceType,
+          language: msg.language,
+          clientId: msg.clientId
+        });
+        ws.send(JSON.stringify({ type: 'PONG' }));
       }
 
       if (msg.type === 'CHANGE_LANGUAGE') {

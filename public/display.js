@@ -25,6 +25,22 @@ if (urlParams.get('lang') && VALID_LANGS.includes(urlParams.get('lang'))) {
 
 let currentMosqueName = 'MYO YOUTH CENTER';
 let ws = null;
+
+function getTvClientId() {
+  let cid = '';
+  try {
+    cid = localStorage.getItem('mosq_tv_client_id');
+    if (!cid) {
+      cid = 'tv_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+      localStorage.setItem('mosq_tv_client_id', cid);
+    }
+  } catch (e) {
+    cid = 'tv_' + Math.random().toString(36).substring(2, 9);
+  }
+  return cid;
+}
+const tvClientId = getTvClientId();
+
 // Track timestamps rendered
 const seenTimestamps = new Set();
 let feedSyncInterval = null;
@@ -438,6 +454,33 @@ async function initSession() {
   startFeedSync();
 }
 
+let tvHeartbeatInterval = null;
+function startTvHeartbeat() {
+  if (tvHeartbeatInterval) clearInterval(tvHeartbeatInterval);
+  tvHeartbeatInterval = setInterval(() => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'HEARTBEAT',
+        sessionId,
+        role: 'tv',
+        language: targetLang,
+        clientId: tvClientId,
+        deviceType: 'computer'
+      }));
+    }
+    fetch(`/api/session/${sessionId}/ping`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        clientId: tvClientId,
+        role: 'tv',
+        language: targetLang,
+        deviceType: 'computer'
+      })
+    }).catch(() => {});
+  }, 10000);
+}
+
 /**
  * WebSocket Connection with auto-reconnect
  */
@@ -449,7 +492,15 @@ function connectWebSocket() {
   ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
 
   ws.onopen = () => {
-    ws.send(JSON.stringify({ type: 'JOIN_ROOM', sessionId, role: 'tv', language: targetLang }));
+    ws.send(JSON.stringify({
+      type: 'JOIN_ROOM',
+      sessionId,
+      role: 'tv',
+      language: targetLang,
+      clientId: tvClientId,
+      deviceType: 'computer'
+    }));
+    startTvHeartbeat();
   };
 
   ws.onmessage = (event) => {
