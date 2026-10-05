@@ -245,10 +245,11 @@ function openQrModal(sessionId, mosqueName, lang = 'en') {
   const joinUrl = `${window.location.origin}/join.html?session=${encodeURIComponent(sessionId)}&lang=${encodeURIComponent(lang)}`;
   if (qrModalMosqueName) qrModalMosqueName.textContent = mosqueName || sessionId;
   if (qrModalImg) {
-    qrModalImg.src = `/api/qrcode?text=${encodeURIComponent(joinUrl)}`;
-    qrModalImg.onerror = () => {
-      qrModalImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(joinUrl)}`;
+    qrModalImg.onerror = function() {
+      this.onerror = null;
+      this.src = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(joinUrl)}`;
     };
+    qrModalImg.src = `/api/qrcode?text=${encodeURIComponent(joinUrl)}`;
   }
   if (qrModalLinkText) qrModalLinkText.textContent = joinUrl;
   if (btnOpenQrModalLink) btnOpenQrModalLink.href = joinUrl;
@@ -673,6 +674,10 @@ async function initConsoleSession(sessionId) {
       if (headerBtnTv) headerBtnTv.href = tvUrl;
 
       if (qrCodeImg) {
+        qrCodeImg.onerror = function() {
+          this.onerror = null;
+          this.src = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(joinUrl)}`;
+        };
         qrCodeImg.src = `/api/qrcode?text=${encodeURIComponent(joinUrl)}`;
       }
 

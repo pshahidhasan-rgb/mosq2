@@ -420,10 +420,10 @@ wss.on('connection', (ws, req) => {
   let userRole = 'attendee';
   let userLanguage = 'en';
 
-  ws.on('message', async (raw) => {
+  ws.on('message', async (raw, isBinary) => {
     try {
       // Check if message is binary audio chunk from microphone
-      if (Buffer.isBuffer(raw)) {
+      if (isBinary) {
         sttService.sendAudioChunk(raw);
         return;
       }
