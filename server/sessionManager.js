@@ -23,8 +23,30 @@ try {
 class SessionManager {
   constructor() {
     this.sessions = new Map();
+    this.sessionAliases = new Map([
+      ['myo-youth-8f3a9e', 'myo-youth'],
+      ['jumuah-live-4b2c1d', 'jumuah-live']
+    ]);
     this.subscribers = new Map(); // sessionId -> Set of { ws, role, language, clientId }
     this.history = this.loadHistory();
+  }
+
+  getCanonicalId(sessionId) {
+    if (!sessionId) return 'myo-youth';
+    const clean = String(sessionId).trim().toLowerCase();
+    if (this.sessionAliases && this.sessionAliases.has(clean)) {
+      return this.sessionAliases.get(clean);
+    }
+    if (this.sessions.has(clean)) {
+      return clean;
+    }
+    // Prefix / base slug match support: e.g. 'myo-youth' matches 'myo-youth-8f3a9e' and vice versa
+    for (const [key, sess] of this.sessions.entries()) {
+      if (key === clean || key.startsWith(clean) || clean.startsWith(key)) {
+        return sess.id;
+      }
+    }
+    return clean;
   }
 
   loadHistory() {
@@ -95,6 +117,10 @@ class SessionManager {
 
   getSession(sessionId) {
     if (!sessionId) return null;
+    const actualId = this.getCanonicalId(sessionId);
+    if (this.sessions.has(actualId)) {
+      return this.sessions.get(actualId);
+    }
     if (this.sessions.has(sessionId)) {
       return this.sessions.get(sessionId);
     }
@@ -374,12 +400,13 @@ class SessionManager {
   }
 
   startSession(sessionId) {
-    const session = this.getSession(sessionId);
+    const actualId = this.getCanonicalId(sessionId);
+    const session = this.getSession(actualId);
     if (!session) return null;
     
     // If there were already transcripts from an earlier run on a different day, archive them first
     if (session.transcripts && session.transcripts.length > 0) {
-      this.archiveSessionRun(session.id);
+      this.archiveSessionRun(actualId);
       session.transcripts = [];
       session.detectedAyahs = [];
     }
@@ -387,7 +414,7 @@ class SessionManager {
     session.status = 'active';
     session.startedAt = new Date().toISOString();
     session.endedAt = null;
-    this.broadcastToSession(sessionId, {
+    this.broadcastToSession(actualId, {
       type: 'SESSION_STATUS',
       status: 'active',
       mosqueName: session.mosqueName,
@@ -397,10 +424,11 @@ class SessionManager {
   }
 
   pauseSession(sessionId) {
-    const session = this.getSession(sessionId);
+    const actualId = this.getCanonicalId(sessionId);
+    const session = this.getSession(actualId);
     if (!session) return null;
     session.status = 'paused';
-    this.broadcastToSession(sessionId, {
+    this.broadcastToSession(actualId, {
       type: 'SESSION_STATUS',
       status: 'paused',
       mosqueName: session.mosqueName
@@ -409,17 +437,18 @@ class SessionManager {
   }
 
   endSession(sessionId) {
-    const session = this.getSession(sessionId);
+    const actualId = this.getCanonicalId(sessionId);
+    const session = this.getSession(actualId);
     if (!session) return null;
     session.status = 'ended';
     session.endedAt = new Date().toISOString();
 
     let archiveRecord = null;
     if (session.transcripts && session.transcripts.length > 0) {
-      archiveRecord = this.archiveSessionRun(sessionId);
+      archiveRecord = this.archiveSessionRun(actualId);
     }
 
-    this.broadcastToSession(sessionId, {
+    this.broadcastToSession(actualId, {
       type: 'SESSION_STATUS',
       status: 'ended',
       mosqueName: session.mosqueName,
@@ -433,26 +462,28 @@ class SessionManager {
    * Adds a WebSocket connection to the session room
    */
   addSubscriber(sessionId, ws, { role = 'attendee', language = 'en', clientId = '', deviceType = null } = {}) {
-    if (!this.subscribers.has(sessionId)) {
-      this.subscribers.set(sessionId, new Set());
+    const actualId = this.getCanonicalId(sessionId);
+    if (!this.subscribers.has(actualId)) {
+      this.subscribers.set(actualId, new Set());
     }
     const resolvedDevice = deviceType || (role === 'tv' ? 'computer' : 'phone');
     const subscriber = { ws, role, language, clientId, deviceType: resolvedDevice, lastPing: Date.now() };
-    this.subscribers.get(sessionId).add(subscriber);
+    this.subscribers.get(actualId).add(subscriber);
 
     if (role === 'tv' && language) {
-      const session = this.getSession(sessionId);
+      const session = this.getSession(actualId);
       if (session) session.tvLanguage = language;
     }
 
     // Update attendee counts
-    this.notifyStatsUpdate(sessionId);
+    this.notifyStatsUpdate(actualId);
 
     return subscriber;
   }
 
   touchSubscriber(sessionId, ws, { deviceType = null, language = null, clientId = null } = {}) {
-    const subs = this.subscribers.get(sessionId);
+    const actualId = this.getCanonicalId(sessionId);
+    const subs = this.subscribers.get(actualId);
     if (!subs) return;
     for (const sub of subs) {
       if (sub.ws === ws) {
@@ -461,7 +492,7 @@ class SessionManager {
         if (language) {
           sub.language = language;
           if (sub.role === 'tv') {
-            const session = this.getSession(sessionId);
+            const session = this.getSession(actualId);
             if (session) session.tvLanguage = language;
           }
         }
@@ -472,11 +503,12 @@ class SessionManager {
   }
 
   recordHttpPing(sessionId, { clientId, role = 'attendee', deviceType = 'phone', language = 'en' }) {
+    const actualId = this.getCanonicalId(sessionId);
     if (!this.httpClients) this.httpClients = new Map();
-    if (!this.httpClients.has(sessionId)) {
-      this.httpClients.set(sessionId, new Map());
+    if (!this.httpClients.has(actualId)) {
+      this.httpClients.set(actualId, new Map());
     }
-    const sessionMap = this.httpClients.get(sessionId);
+    const sessionMap = this.httpClients.get(actualId);
     sessionMap.set(clientId, {
       role,
       deviceType: deviceType || 'phone',
@@ -484,15 +516,16 @@ class SessionManager {
       lastSeen: Date.now()
     });
     if (role === 'tv' && language) {
-      const session = this.getSession(sessionId);
+      const session = this.getSession(actualId);
       if (session) session.tvLanguage = language;
     }
-    this.notifyStatsUpdate(sessionId);
+    this.notifyStatsUpdate(actualId);
   }
 
   getActiveHttpClients(sessionId) {
-    if (!this.httpClients || !this.httpClients.has(sessionId)) return new Map();
-    const sessionMap = this.httpClients.get(sessionId);
+    const actualId = this.getCanonicalId(sessionId);
+    if (!this.httpClients || !this.httpClients.has(actualId)) return new Map();
+    const sessionMap = this.httpClients.get(actualId);
     const now = Date.now();
     const active = new Map();
     for (const [cid, info] of sessionMap.entries()) {
@@ -506,7 +539,8 @@ class SessionManager {
   }
 
   removeSubscriber(sessionId, ws) {
-    const subs = this.subscribers.get(sessionId);
+    const actualId = this.getCanonicalId(sessionId);
+    const subs = this.subscribers.get(actualId);
     if (!subs) return;
 
     for (const sub of subs) {
@@ -516,27 +550,29 @@ class SessionManager {
       }
     }
 
-    this.notifyStatsUpdate(sessionId);
+    this.notifyStatsUpdate(actualId);
   }
 
   updateSubscriberLanguage(sessionId, ws, newLanguage) {
-    const subs = this.subscribers.get(sessionId);
+    const actualId = this.getCanonicalId(sessionId);
+    const subs = this.subscribers.get(actualId);
     if (!subs) return;
     for (const sub of subs) {
       if (sub.ws === ws) {
         sub.language = newLanguage;
         if (sub.role === 'tv') {
-          const session = this.getSession(sessionId);
+          const session = this.getSession(actualId);
           if (session) session.tvLanguage = newLanguage;
         }
         break;
       }
     }
-    this.notifyStatsUpdate(sessionId);
+    this.notifyStatsUpdate(actualId);
   }
 
   getSessionStats(sessionId) {
-    const subs = this.subscribers.get(sessionId) || new Set();
+    const actualId = this.getCanonicalId(sessionId);
+    const subs = this.subscribers.get(actualId) || new Set();
     let phoneAttendees = 0;
     let computerDisplays = 0;
     let totalAttendees = 0;
@@ -570,7 +606,7 @@ class SessionManager {
     }
 
     // Also factor in any HTTP-polling clients not connected to WebSocket
-    const activeHttp = this.getActiveHttpClients(sessionId);
+    const activeHttp = this.getActiveHttpClients(actualId);
     for (const [cid, info] of activeHttp.entries()) {
       if (info.role === 'admin') continue;
       if (seenClientKeys.has(cid)) continue;
@@ -604,12 +640,13 @@ class SessionManager {
   }
 
   notifyStatsUpdate(sessionId) {
-    const stats = this.getSessionStats(sessionId);
-    this.broadcastToSession(sessionId, {
+    const actualId = this.getCanonicalId(sessionId);
+    const stats = this.getSessionStats(actualId);
+    this.broadcastToSession(actualId, {
       type: 'STATS_UPDATE',
       stats
     });
-    this.broadcastToSession(sessionId, {
+    this.broadcastToSession(actualId, {
       type: 'SESSION_STATS',
       stats
     });
@@ -619,14 +656,24 @@ class SessionManager {
    * Broadcasts a payload to all or specific roles in the session
    */
   broadcastToSession(sessionId, payload, roleFilter = null) {
-    const subs = this.subscribers.get(sessionId);
-    if (!subs) return;
-
+    const actualId = this.getCanonicalId(sessionId);
     const message = JSON.stringify(payload);
-    for (const sub of subs) {
-      if (roleFilter && sub.role !== roleFilter) continue;
-      if (sub.ws.readyState === 1 /* OPEN */) {
-        sub.ws.send(message);
+
+    const targetSubSets = [this.subscribers.get(actualId)];
+    if (sessionId && sessionId !== actualId && this.subscribers.has(sessionId)) {
+      targetSubSets.push(this.subscribers.get(sessionId));
+    }
+
+    const seenWs = new Set();
+    for (const subs of targetSubSets) {
+      if (!subs) continue;
+      for (const sub of subs) {
+        if (seenWs.has(sub.ws)) continue;
+        seenWs.add(sub.ws);
+        if (roleFilter && sub.role !== roleFilter) continue;
+        if (sub.ws.readyState === 1 /* OPEN */) {
+          sub.ws.send(message);
+        }
       }
     }
   }
@@ -641,7 +688,8 @@ class SessionManager {
     audioByLanguage = {},
     timestamp = new Date().toISOString()
   }) {
-    const session = this.getSession(sessionId);
+    const actualId = this.getCanonicalId(sessionId);
+    const session = this.getSession(actualId);
     if (session) {
       session.transcripts.push({
         arabic: arabicText,
@@ -658,52 +706,61 @@ class SessionManager {
       }
     }
 
-    const subs = this.subscribers.get(sessionId);
-    if (!subs) return;
+    const targetSubSets = [this.subscribers.get(actualId)];
+    if (sessionId && sessionId !== actualId && this.subscribers.has(sessionId)) {
+      targetSubSets.push(this.subscribers.get(sessionId));
+    }
 
-    for (const sub of subs) {
-      if (sub.ws.readyState !== 1) continue;
+    const seenWs = new Set();
+    for (const subs of targetSubSets) {
+      if (!subs) continue;
 
-      if (sub.role === 'tv') {
-        // TV display gets Arabic + full multi-language translations map so client can display any selected language
-        const tvLang = sub.language || (session ? session.primaryLanguage : 'en');
-        sub.ws.send(JSON.stringify({
-          type: 'LIVE_SUBTITLE',
-          arabic: arabicText,
-          translations,
-          translated: (translations && translations[tvLang]) || (translations && translations.en) || arabicText,
-          language: tvLang,
-          ayah: ayahData || null,
-          timestamp
-        }));
-      } else if (sub.role === 'attendee') {
-        // Attendee receives their chosen language + audio buffer
-        const attendeeLang = sub.language || 'en';
-        const translatedText = (translations && translations[attendeeLang]) || (translations && translations.en) || arabicText;
-        const audio = audioByLanguage[attendeeLang] || null;
+      for (const sub of subs) {
+        if (seenWs.has(sub.ws)) continue;
+        seenWs.add(sub.ws);
+        if (sub.ws.readyState !== 1) continue;
 
-        sub.ws.send(JSON.stringify({
-          type: 'LIVE_SUBTITLE',
-          arabic: arabicText,
-          translations,
-          translated: translatedText,
-          language: attendeeLang,
-          ayah: ayahData ? {
-            ...ayahData,
-            translation: ayahData.translations[attendeeLang] || ayahData.translations.en
-          } : null,
-          audio,
-          timestamp
-        }));
-      } else if (sub.role === 'admin') {
-        // Admin gets the full packet with ayah detection details
-        sub.ws.send(JSON.stringify({
-          type: 'ADMIN_TRANSCRIPT',
-          arabic: arabicText,
-          translations,
-          ayah: ayahData || null,
-          timestamp
-        }));
+        if (sub.role === 'tv') {
+          // TV display gets Arabic + full multi-language translations map so client can display any selected language
+          const tvLang = sub.language || (session ? session.primaryLanguage : 'en');
+          sub.ws.send(JSON.stringify({
+            type: 'LIVE_SUBTITLE',
+            arabic: arabicText,
+            translations,
+            translated: (translations && translations[tvLang]) || (translations && translations.en) || arabicText,
+            language: tvLang,
+            ayah: ayahData || null,
+            timestamp
+          }));
+        } else if (sub.role === 'attendee') {
+          // Attendee receives their chosen language + audio buffer
+          const attendeeLang = sub.language || 'en';
+          const translatedText = (translations && translations[attendeeLang]) || (translations && translations.en) || arabicText;
+          const audio = audioByLanguage[attendeeLang] || null;
+
+          sub.ws.send(JSON.stringify({
+            type: 'LIVE_SUBTITLE',
+            arabic: arabicText,
+            translations,
+            translated: translatedText,
+            language: attendeeLang,
+            ayah: ayahData ? {
+              ...ayahData,
+              translation: ayahData.translations[attendeeLang] || ayahData.translations.en
+            } : null,
+            audio,
+            timestamp
+          }));
+        } else if (sub.role === 'admin') {
+          // Admin gets both ADMIN_TRANSCRIPT and LIVE_SUBTITLE
+          sub.ws.send(JSON.stringify({
+            type: 'LIVE_SUBTITLE',
+            arabic: arabicText,
+            translations,
+            ayah: ayahData || null,
+            timestamp
+          }));
+        }
       }
     }
   }

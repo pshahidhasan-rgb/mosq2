@@ -39,23 +39,23 @@ const sttService = new STTService(process.env.GLADIA_API_KEYS || process.env.GLA
 const quranAiDetector = new QuranAIDetector(openrouterKey, openrouterModel);
 
 // Active session tracking for STT distribution
-let activeLiveSessionId = 'jumuah-live-4b2c1d';
+let activeLiveSessionId = 'myo-youth';
 
-// Pre-create initial default sessions with secure unique IDs
+// Pre-create initial default sessions with clean canonical IDs
 (async () => {
   await sessionManager.createSession({
-    sessionId: 'myo-youth-8f3a9e',
+    sessionId: 'myo-youth',
     mosqueName: 'MYO Youth Center',
-    primaryLanguage: process.env.DEFAULT_PRIMARY_LANGUAGE || 'en',
+    primaryLanguage: 'ar',
     hostUrl: `http://localhost:${PORT}`
   });
   await sessionManager.createSession({
-    sessionId: 'jumuah-live-4b2c1d',
+    sessionId: 'jumuah-live',
     mosqueName: process.env.DEFAULT_MASJID_NAME || 'Masjid Al-Noor',
-    primaryLanguage: process.env.DEFAULT_PRIMARY_LANGUAGE || 'en',
+    primaryLanguage: 'ar',
     hostUrl: `http://localhost:${PORT}`
   });
-  console.log(`[MosqAI] Ready with secure mosque sessions: myo-youth-8f3a9e, jumuah-live-4b2c1d`);
+  console.log(`[MosqAI] Ready with canonical mosque sessions: myo-youth, jumuah-live`);
 })();
 
 // Initialize STT engine (Deepgram Nova-3 / Gladia / Simulator)
@@ -63,14 +63,14 @@ sttService.initSession();
 
 /**
  * Main Real-time Processing Pipeline:
- * Arabic Speech Transcript -> Multi-Language Translation -> Low-Latency Audio -> Broadcast
+ * Speech Transcript -> Multi-Language Translation -> Low-Latency Audio -> Broadcast
  * NOTE: Quran detection is disabled — pure translation mode only.
  */
-async function processTranscript({ text, isFinal, source, sessionId }) {
+async function processTranscript({ text, isFinal, source, sessionId, inputLang = 'auto' }) {
   if (!text || text.trim().length === 0) return null;
   const cleanArabic = text.trim();
-  const targetSessionId = sessionId || activeLiveSessionId;
-  console.log(`[STT -> ${source} -> ${targetSessionId}] Received Arabic: "${cleanArabic}"`);
+  const targetSessionId = sessionManager.getCanonicalId(sessionId || activeLiveSessionId);
+  console.log(`[STT -> ${source} -> ${targetSessionId}] Received speech: "${cleanArabic}"`);
 
   let session = sessionManager.getSession(targetSessionId);
   if (!session) {
@@ -88,7 +88,7 @@ async function processTranscript({ text, isFinal, source, sessionId }) {
   }
 
   const cleanText = text.trim();
-  const sourceLang = inputLang || session.speakerLanguage || 'auto';
+  const sourceLang = (inputLang && inputLang !== 'auto') ? inputLang : (session.speakerLanguage || 'auto');
 
   // Step 2: Multi-language Translation — always runs from ANY input language
   const targetLanguages = ['en', 'uz', 'bn', 'ur', 'fr', 'zh', 'zh-TW', 'tr', 'id', 'so'];
@@ -295,8 +295,8 @@ app.post('/api/session/create', async (req, res) => {
     .replace(/(^-|-$)+/g, '');
 
   if (!cleanId) cleanId = 'mosque';
-  // Ensure secure random token is attached (e.g. east-london-8f3a9e)
-  if (!/-[a-z0-9]{5,8}$/.test(cleanId)) {
+  // Only attach random token if user didn't specify an explicit sessionId
+  if (!sessionId && !/-[a-z0-9]{5,8}$/.test(cleanId)) {
     const token = Math.random().toString(36).substring(2, 8);
     cleanId = `${cleanId}-${token}`;
   }
@@ -508,7 +508,7 @@ wss.on('connection', (ws) => {
       const msg = JSON.parse(raw.toString());
 
       if (msg.type === 'JOIN_ROOM') {
-        userSessionId = msg.sessionId || activeLiveSessionId;
+        userSessionId = sessionManager.getCanonicalId(msg.sessionId || activeLiveSessionId);
         userRole = msg.role || 'attendee';
         userLanguage = msg.language || 'en';
 

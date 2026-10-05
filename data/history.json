@@ -1,5 +1,133 @@
 [
   {
+    "id": "hist_myo-youth_1791225509458",
+    "sessionId": "myo-youth",
+    "mosqueName": "MYO Youth Center",
+    "startedAt": "2026-10-05T18:38:28.907Z",
+    "endedAt": "2026-10-05T18:38:29.434Z",
+    "dateDisplay": "Oct 6, 2026",
+    "timeDisplay": "12:38 AM",
+    "durationSeconds": 1,
+    "durationDisplay": "1s",
+    "totalTranscripts": 1,
+    "totalAyahsDetected": 0,
+    "attendance": {
+      "total": 0,
+      "phoneAttendees": 0,
+      "computerDisplays": 1
+    },
+    "speakerLanguage": "auto",
+    "tvLanguage": "en",
+    "transcripts": [
+      {
+        "original": "إن الحمد لله نحمده ونستعينه",
+        "translation": "All praise is due to Allah; we praise Him, seek His help, and ask for His forgiveness.",
+        "timestamp": "2026-10-05T18:38:29.129Z"
+      }
+    ]
+  },
+  {
+    "id": "hist_test-session-live_1791225508680",
+    "sessionId": "test-session-live",
+    "mosqueName": "Test Masjid",
+    "startedAt": "2026-10-05T18:38:28.638Z",
+    "endedAt": "2026-10-05T18:38:28.669Z",
+    "dateDisplay": "Oct 6, 2026",
+    "timeDisplay": "12:38 AM",
+    "durationSeconds": 0,
+    "durationDisplay": "0s",
+    "totalTranscripts": 3,
+    "totalAyahsDetected": 1,
+    "attendance": {
+      "total": 1,
+      "phoneAttendees": 1,
+      "computerDisplays": 1
+    },
+    "speakerLanguage": "auto",
+    "tvLanguage": "en",
+    "transcripts": [
+      {
+        "original": "إن الحمد لله نحمده ونستعينه ونستغفره",
+        "translation": "All praise is due to Allah; we praise Him, seek His help, and ask for His forgiveness.",
+        "timestamp": "2026-10-05T18:38:28.657Z"
+      },
+      {
+        "original": "فإن مع العسر يسرا",
+        "translation": "For indeed, with hardship [will be] ease.",
+        "timestamp": "2026-10-05T18:38:28.661Z"
+      },
+      {
+        "original": "إن الحمد لله نحمده ونستعينه ونستغفره",
+        "translation": "All praise is due to Allah; we praise Him, seek His help, and ask for His forgiveness.",
+        "timestamp": "2026-10-05T18:38:28.668Z"
+      }
+    ]
+  },
+  {
+    "id": "hist_myo-youth_1791225472248",
+    "sessionId": "myo-youth",
+    "mosqueName": "MYO Youth Center",
+    "startedAt": "2026-10-05T18:37:51.692Z",
+    "endedAt": "2026-10-05T18:37:52.222Z",
+    "dateDisplay": "Oct 6, 2026",
+    "timeDisplay": "12:37 AM",
+    "durationSeconds": 1,
+    "durationDisplay": "1s",
+    "totalTranscripts": 1,
+    "totalAyahsDetected": 0,
+    "attendance": {
+      "total": 0,
+      "phoneAttendees": 0,
+      "computerDisplays": 1
+    },
+    "speakerLanguage": "auto",
+    "tvLanguage": "en",
+    "transcripts": [
+      {
+        "original": "إن الحمد لله نحمده ونستعينه",
+        "translation": "All praise is due to Allah; we praise Him, seek His help, and ask for His forgiveness.",
+        "timestamp": "2026-10-05T18:37:51.915Z"
+      }
+    ]
+  },
+  {
+    "id": "hist_test-session-live_1791225452879",
+    "sessionId": "test-session-live",
+    "mosqueName": "Test Masjid",
+    "startedAt": "2026-10-05T18:37:32.804Z",
+    "endedAt": "2026-10-05T18:37:32.839Z",
+    "dateDisplay": "Oct 6, 2026",
+    "timeDisplay": "12:37 AM",
+    "durationSeconds": 0,
+    "durationDisplay": "0s",
+    "totalTranscripts": 3,
+    "totalAyahsDetected": 1,
+    "attendance": {
+      "total": 1,
+      "phoneAttendees": 1,
+      "computerDisplays": 1
+    },
+    "speakerLanguage": "auto",
+    "tvLanguage": "en",
+    "transcripts": [
+      {
+        "original": "إن الحمد لله نحمده ونستعينه ونستغفره",
+        "translation": "All praise is due to Allah; we praise Him, seek His help, and ask for His forgiveness.",
+        "timestamp": "2026-10-05T18:37:32.826Z"
+      },
+      {
+        "original": "فإن مع العسر يسرا",
+        "translation": "For indeed, with hardship [will be] ease.",
+        "timestamp": "2026-10-05T18:37:32.831Z"
+      },
+      {
+        "original": "إن الحمد لله نحمده ونستعينه ونستغفره",
+        "translation": "All praise is due to Allah; we praise Him, seek His help, and ask for His forgiveness.",
+        "timestamp": "2026-10-05T18:37:32.838Z"
+      }
+    ]
+  },
+  {
     "id": "hist_test-session-live_1791223844809",
     "sessionId": "test-session-live",
     "mosqueName": "Test Masjid",

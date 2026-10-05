@@ -74,8 +74,8 @@ const qrModalLinkText = document.getElementById('qr-modal-link-text');
 const btnCopyQrModalLink = document.getElementById('btn-copy-qr-modal-link');
 const btnOpenQrModalLink = document.getElementById('btn-open-qr-modal-link');
 
-// Speaker / Microphone Language elements
-const speakerLangSelect = document.getElementById('speaker-lang-select');
+// Speaker / Microphone Language elements - auto detects spoken language directly
+let currentSessionData = null;
 
 // Session History Modal elements
 const btnHeaderHistory = document.getElementById('btn-header-history');
@@ -556,53 +556,6 @@ if (btnArchiveCurrentNow) {
   });
 }
 
-// ─── UNIVERSAL SPEAKER LANGUAGE LOGIC ───
-function getWebSpeechLang(code) {
-  const map = {
-    auto: (navigator.language || 'en-US'),
-    ar: 'ar-SA',
-    en: 'en-US',
-    bn: 'bn-BD',
-    ur: 'ur-PK',
-    tr: 'tr-TR',
-    fr: 'fr-FR',
-    'zh-cn': 'zh-CN',
-    'zh-tw': 'zh-TW',
-    id: 'id-ID',
-    ms: 'ms-MY',
-    ru: 'ru-RU',
-    de: 'de-DE',
-    es: 'es-ES'
-  };
-  return map[code] || (navigator.language || 'en-US');
-}
-
-if (speakerLangSelect) {
-  speakerLangSelect.addEventListener('change', () => {
-    const lang = speakerLangSelect.value;
-    try { localStorage.setItem('mosq_speaker_lang', lang); } catch (e) {}
-
-    if (speechRecognition && micActive) {
-      speechRecognition.lang = getWebSpeechLang(lang);
-    }
-
-    if (currentSessionId) {
-      fetch(`/api/session/${encodeURIComponent(currentSessionId)}/speaker-language`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ language: lang })
-      }).catch(() => {});
-
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
-          type: 'SET_SPEAKER_LANGUAGE',
-          sessionId: currentSessionId,
-          language: lang
-        }));
-      }
-    }
-  });
-}
 
 // Create New Session Modal Logic
 if (btnOpenCreateModal) {
@@ -856,12 +809,11 @@ btnInject.addEventListener('click', async () => {
   const text = manualInput.value.trim();
   if (!text) return;
 
-  const chosenLang = speakerLangSelect ? speakerLangSelect.value : 'auto';
   try {
     const res = await fetch(`/api/session/${currentSessionId}/inject-text`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, inputLang: chosenLang })
+      body: JSON.stringify({ text, inputLang: 'auto' })
     });
     if (!res.ok) {
       const err = await res.json();
@@ -916,8 +868,8 @@ async function startMicrophone() {
     speechRecognition = new SpeechRec();
     speechRecognition.continuous = true;
     speechRecognition.interimResults = false;
-    const activeSpeakerLang = speakerLangSelect ? speakerLangSelect.value : 'auto';
-    speechRecognition.lang = getWebSpeechLang(activeSpeakerLang);
+    const recLang = (currentSessionData && (currentSessionData.primaryLanguage === 'en' || currentSessionData.primaryLanguage === 'en-US')) ? 'en-US' : 'ar-SA';
+    speechRecognition.lang = recLang;
     speechRecognition.maxAlternatives = 1;
 
     let lastProcessedIndex = -1;
@@ -944,12 +896,11 @@ async function startMicrophone() {
           lastProcessedIndex = i;
 
           console.log('[Live Mic Recognized]:', transcript);
-          const currentInputLang = speakerLangSelect ? speakerLangSelect.value : 'auto';
           try {
             await fetch(`/api/session/${currentSessionId}/inject-text`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ text: transcript, inputLang: currentInputLang })
+              body: JSON.stringify({ text: transcript, inputLang: 'auto' })
             });
           } catch (err) {
             console.warn('[Live Mic] Inject error:', err.message);
@@ -1029,14 +980,7 @@ async function initConsoleSession(sessionId) {
       if (data.tvFontSize) syncTvFontSizeUI(data.tvFontSize, data.tvCapacity);
       if (data.tvAudioEnabled !== undefined) syncTvAudioUI(data.tvAudioEnabled);
       if (data.tvShowQr !== undefined) syncTvQrUI(data.tvShowQr);
-      if (data.speakerLanguage && speakerLangSelect) {
-        speakerLangSelect.value = data.speakerLanguage;
-      } else {
-        try {
-          const savedSpeaker = localStorage.getItem('mosq_speaker_lang');
-          if (savedSpeaker && speakerLangSelect) speakerLangSelect.value = savedSpeaker;
-        } catch (e) {}
-      }
+      currentSessionData = data;
 
       // Update dynamic links with session primary language
       const joinUrl = `${window.location.origin}/join.html?session=${encodeURIComponent(sessionId)}&lang=${encodeURIComponent(data.primaryLanguage || 'en')}`;
@@ -1139,7 +1083,7 @@ function connectWebSocket(sessionId) {
         if (data.tvAudioEnabled !== undefined) syncTvAudioUI(data.tvAudioEnabled);
         if (data.tvShowQr !== undefined) syncTvQrUI(data.tvShowQr);
       }
-      if (data.type === 'LIVE_SUBTITLE') addTranscriptEntry(data);
+      if (data.type === 'LIVE_SUBTITLE' || data.type === 'ADMIN_TRANSCRIPT') addTranscriptEntry(data);
     } catch (e) {}
   };
 

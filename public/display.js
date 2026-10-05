@@ -672,6 +672,7 @@ function connectWebSocket() {
         updateSpeakerPill(data.language);
       }
       if (data.type === 'JOINED_SUCCESS' && data.session) {
+        if (data.session.status) updateTVStatusUI(data.session.status, data.session.mosqueName);
         if (data.session.tvFontSize) applyTvFontSize(data.session.tvFontSize, data.session.tvCapacity, false);
         if (data.session.tvAudioEnabled !== undefined) setTvAudioState(data.session.tvAudioEnabled);
         if (data.session.tvShowQr !== undefined) setTvQrVisibility(data.session.tvShowQr);
