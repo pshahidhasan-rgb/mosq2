@@ -91,7 +91,7 @@ async function processTranscript({ text, isFinal, source, sessionId }) {
   const ayahMatch = null;
 
   // Step 2: Multi-language Translation — always runs
-  const targetLanguages = ['en', 'uz', 'bn', 'ur', 'fr', 'zh', 'tr', 'id', 'so'];
+  const targetLanguages = ['en', 'uz', 'bn', 'ur', 'fr', 'zh', 'zh-TW', 'tr', 'id', 'so'];
   const translations = await translationService.translateMultiple(cleanArabic, targetLanguages);
 
   // Step 3: Low-Latency Spoken Audio Generation for Earbuds (Cartesia / Sonic)
@@ -400,14 +400,15 @@ app.post('/api/session/:id/inject-text', async (req, res) => {
 
 // TV Screen Font Size & Capacity Settings
 app.post('/api/session/:id/tv-settings', (req, res) => {
-  const { fontSize, capacity, audioEnabled } = req.body;
-  const session = sessionManager.updateTvSettings(req.params.id, { fontSize, capacity, audioEnabled });
+  const { fontSize, capacity, audioEnabled, showQr } = req.body;
+  const session = sessionManager.updateTvSettings(req.params.id, { fontSize, capacity, audioEnabled, showQr });
   if (!session) return res.status(404).json({ error: 'Session not found' });
   res.json({
     success: true,
     tvFontSize: session.tvFontSize,
     tvCapacity: session.tvCapacity,
-    tvAudioEnabled: session.tvAudioEnabled
+    tvAudioEnabled: session.tvAudioEnabled,
+    tvShowQr: session.tvShowQr !== undefined ? session.tvShowQr : true
   });
 });
 
@@ -438,6 +439,7 @@ app.get('/api/session/:id/feed', (req, res) => {
     tvFontSize: session.tvFontSize,
     tvCapacity: session.tvCapacity,
     tvAudioEnabled: session.tvAudioEnabled,
+    tvShowQr: session.tvShowQr !== undefined ? session.tvShowQr : true,
     transcripts,
     stats,
     serverTime: new Date().toISOString()
@@ -520,9 +522,9 @@ wss.on('connection', (ws) => {
       }
 
       if (msg.type === 'UPDATE_TV_SETTINGS') {
-        const { fontSize, capacity, audioEnabled, sessionId } = msg;
+        const { fontSize, capacity, audioEnabled, showQr, sessionId } = msg;
         const targetSessionId = sessionId || userSessionId;
-        sessionManager.updateTvSettings(targetSessionId, { fontSize, capacity, audioEnabled });
+        sessionManager.updateTvSettings(targetSessionId, { fontSize, capacity, audioEnabled, showQr });
       }
 
       if (msg.type === 'CLEAR_SESSION_TEXT') {

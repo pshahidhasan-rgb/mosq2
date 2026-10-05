@@ -337,6 +337,26 @@
                 <span id="tv-audio-btn-text">Turn ON TV Audio</span>
               </button>
             </div>
+
+            <!-- TV Screen QR Code Visibility Control (Admin Controlled) -->
+            <div style="margin-top: 1rem; padding-top: 0.9rem; border-top: 1px solid rgba(255, 255, 255, 0.08);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <div style="display: flex; align-items: center; gap: 0.45rem;">
+                  <span style="font-size: 1.05rem;">📱</span>
+                  <span style="font-size: 0.82rem; font-weight: 700; color: #f8fafc;">TV Display QR Code</span>
+                </div>
+                <span id="tv-qr-status-badge" class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-size: 0.7rem; font-weight: 700; border: 1px solid rgba(16, 185, 129, 0.4);">
+                  Visible (Shown)
+                </span>
+              </div>
+              <p style="font-size: 0.77rem; color: var(--text-secondary); margin-bottom: 0.7rem; line-height: 1.4;">
+                Hide or show the "Listen on your phone" QR code on the display TV.
+              </p>
+              <button type="button" id="btn-toggle-tv-qr" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.6rem; padding: 0.65rem 1rem; border-radius: 9px; font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: all 0.2s; border: 1px solid rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.15); color: #fca5a5;">
+                <span id="tv-qr-btn-icon" style="font-size: 0.95rem;">👁️‍🗨️</span>
+                <span id="tv-qr-btn-text">Hide QR</span>
+              </button>
+            </div>
           </div>
 
           <!-- Attendee Join QR Code Card -->

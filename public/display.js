@@ -2,7 +2,7 @@
 const urlParams = new URLSearchParams(window.location.search);
 const sessionId = urlParams.get('session') || 'myo-youth';
 
-const VALID_LANGS = ['en', 'uz', 'tr', 'ur', 'bn', 'fr', 'id', 'so'];
+const VALID_LANGS = ['en', 'uz', 'tr', 'ur', 'bn', 'fr', 'zh', 'zh-TW', 'id', 'so'];
 let userExplicitlySelectedLang = false;
 
 // Determine initial language:
@@ -53,6 +53,8 @@ const LANG_BCP47_MAP = {
   ur: 'ur-PK',
   bn: 'bn-BD',
   fr: 'fr-FR',
+  zh: 'zh-CN',
+  'zh-TW': 'zh-TW',
   id: 'id-ID',
   so: 'so-SO',
   ar: 'ar-SA'
@@ -107,6 +109,15 @@ function getBestMaleVoice(langCode) {
 }
 
 let isTvAudioEnabled = false; // Default: OFF (Admin controlled)
+let isTvQrVisible = true; // Default: ON (Admin controlled)
+
+function setTvQrVisibility(visible) {
+  isTvQrVisible = visible !== false;
+  const qrWidget = document.getElementById('qr-widget');
+  if (qrWidget) {
+    qrWidget.style.display = isTvQrVisible ? 'flex' : 'none';
+  }
+}
 
 function setTvAudioState(enabled) {
   isTvAudioEnabled = Boolean(enabled);
@@ -559,6 +570,12 @@ async function initSession() {
       if (data.tvFontSize) {
         applyTvFontSize(data.tvFontSize, data.tvCapacity, false);
       }
+      if (data.tvAudioEnabled !== undefined) {
+        setTvAudioState(data.tvAudioEnabled);
+      }
+      if (data.tvShowQr !== undefined) {
+        setTvQrVisibility(data.tvShowQr);
+      }
 
       // Only adopt session primaryLanguage on initial load IF user has NOT explicitly chosen a language
       if (!userExplicitlySelectedLang && data.primaryLanguage && VALID_LANGS.includes(data.primaryLanguage)) {
@@ -644,10 +661,12 @@ function connectWebSocket() {
       if (data.type === 'JOINED_SUCCESS' && data.session) {
         if (data.session.tvFontSize) applyTvFontSize(data.session.tvFontSize, data.session.tvCapacity, false);
         if (data.session.tvAudioEnabled !== undefined) setTvAudioState(data.session.tvAudioEnabled);
+        if (data.session.tvShowQr !== undefined) setTvQrVisibility(data.session.tvShowQr);
       }
       if (data.type === 'TV_SETTINGS_UPDATE') {
         if (data.tvFontSize) applyTvFontSize(data.tvFontSize, data.tvCapacity, true);
         if (data.tvAudioEnabled !== undefined) setTvAudioState(data.tvAudioEnabled);
+        if (data.tvShowQr !== undefined) setTvQrVisibility(data.tvShowQr);
       }
       if (data.type === 'SESSION_CLEAR_TEXT') {
         clearTvFeeds();
@@ -694,6 +713,9 @@ function startFeedSync() {
       }
       if (data.tvAudioEnabled !== undefined && data.tvAudioEnabled !== isTvAudioEnabled) {
         setTvAudioState(data.tvAudioEnabled);
+      }
+      if (data.tvShowQr !== undefined && data.tvShowQr !== isTvQrVisible) {
+        setTvQrVisibility(data.tvShowQr);
       }
       if (data.transcripts && data.transcripts.length === 0 && recentFeedItems.length > 0) {
         clearTvFeeds();

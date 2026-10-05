@@ -717,6 +717,7 @@ async function initConsoleSession(sessionId) {
       if (data.stats) updateStatsDisplay(data.stats);
       if (data.tvFontSize) syncTvFontSizeUI(data.tvFontSize, data.tvCapacity);
       if (data.tvAudioEnabled !== undefined) syncTvAudioUI(data.tvAudioEnabled);
+      if (data.tvShowQr !== undefined) syncTvQrUI(data.tvShowQr);
 
       // Update dynamic links with session primary language
       const joinUrl = `${window.location.origin}/join.html?session=${encodeURIComponent(sessionId)}&lang=${encodeURIComponent(data.primaryLanguage || 'en')}`;
@@ -817,6 +818,7 @@ function connectWebSocket(sessionId) {
       if (data.type === 'TV_SETTINGS_UPDATE') {
         syncTvFontSizeUI(data.tvFontSize, data.tvCapacity);
         if (data.tvAudioEnabled !== undefined) syncTvAudioUI(data.tvAudioEnabled);
+        if (data.tvShowQr !== undefined) syncTvQrUI(data.tvShowQr);
       }
       if (data.type === 'LIVE_SUBTITLE') addTranscriptEntry(data);
     } catch (e) {}
@@ -950,6 +952,7 @@ const TV_PRESETS_INFO = {
 let activeTvFontSize = 'medium';
 let activeTvCapacity = 12;
 let activeTvAudioEnabled = false; // Default: OFF (Admin controlled)
+let activeTvShowQr = true; // Default: ON (Admin controlled)
 
 function getTvCapacityBadge() { return document.getElementById('tv-capacity-badge'); }
 function getTvScaleDisplay() { return document.getElementById('tv-scale-display'); }
@@ -958,6 +961,82 @@ function getTvAudioStatusBadge() { return document.getElementById('tv-audio-stat
 function getBtnToggleTvAudio() { return document.getElementById('btn-toggle-tv-audio'); }
 function getTvAudioBtnIcon() { return document.getElementById('tv-audio-btn-icon'); }
 function getTvAudioBtnText() { return document.getElementById('tv-audio-btn-text'); }
+function getTvQrStatusBadge() { return document.getElementById('tv-qr-status-badge'); }
+function getBtnToggleTvQr() { return document.getElementById('btn-toggle-tv-qr'); }
+function getTvQrBtnIcon() { return document.getElementById('tv-qr-btn-icon'); }
+function getTvQrBtnText() { return document.getElementById('tv-qr-btn-text'); }
+
+function syncTvQrUI(showQr) {
+  activeTvShowQr = showQr !== false;
+  const badge = getTvQrStatusBadge();
+  const btn = getBtnToggleTvQr();
+  const icon = getTvQrBtnIcon();
+  const text = getTvQrBtnText();
+
+  if (activeTvShowQr) {
+    if (badge) {
+      badge.textContent = 'Visible (Shown)';
+      badge.style.background = 'rgba(16, 185, 129, 0.2)';
+      badge.style.color = '#34d399';
+      badge.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+    }
+    if (btn) {
+      btn.style.borderColor = 'rgba(239, 68, 68, 0.35)';
+      btn.style.background = 'rgba(239, 68, 68, 0.15)';
+      btn.style.color = '#fca5a5';
+    }
+    if (icon) icon.textContent = '👁️‍🗨️';
+    if (text) text.textContent = 'Hide QR';
+  } else {
+    if (badge) {
+      badge.textContent = 'Hidden (Removed)';
+      badge.style.background = 'rgba(148, 163, 184, 0.15)';
+      badge.style.color = '#94a3b8';
+      badge.style.borderColor = 'rgba(148, 163, 184, 0.3)';
+    }
+    if (btn) {
+      btn.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+      btn.style.background = 'rgba(16, 185, 129, 0.15)';
+      btn.style.color = '#34d399';
+    }
+    if (icon) icon.textContent = '📱';
+    if (text) text.textContent = 'Show QR';
+  }
+}
+
+async function toggleTvQr() {
+  const nextState = !activeTvShowQr;
+  activeTvShowQr = nextState;
+  syncTvQrUI(nextState);
+
+  if (!currentSessionId) return;
+
+  // 1. Instant WebSocket broadcast to connected TV displays
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: 'UPDATE_TV_SETTINGS',
+      sessionId: currentSessionId,
+      fontSize: activeTvFontSize,
+      capacity: activeTvCapacity,
+      audioEnabled: activeTvAudioEnabled,
+      showQr: nextState
+    }));
+  }
+
+  // 2. Persist to server session storage
+  try {
+    await fetch(`/api/session/${currentSessionId}/tv-settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fontSize: activeTvFontSize,
+        capacity: activeTvCapacity,
+        audioEnabled: activeTvAudioEnabled,
+        showQr: nextState
+      })
+    });
+  } catch (e) {}
+}
 
 function syncTvAudioUI(enabled) {
   activeTvAudioEnabled = Boolean(enabled);
@@ -1011,7 +1090,8 @@ async function toggleTvAudio() {
       sessionId: currentSessionId,
       fontSize: activeTvFontSize,
       capacity: activeTvCapacity,
-      audioEnabled: nextState
+      audioEnabled: nextState,
+      showQr: activeTvShowQr
     }));
   }
 
@@ -1023,7 +1103,8 @@ async function toggleTvAudio() {
       body: JSON.stringify({
         fontSize: activeTvFontSize,
         capacity: activeTvCapacity,
-        audioEnabled: nextState
+        audioEnabled: nextState,
+        showQr: activeTvShowQr
       })
     });
   } catch (e) {}
@@ -1091,7 +1172,8 @@ async function setTvFontSize(fontSize, capacity = null) {
       sessionId: currentSessionId,
       fontSize,
       capacity: targetCap,
-      audioEnabled: activeTvAudioEnabled
+      audioEnabled: activeTvAudioEnabled,
+      showQr: activeTvShowQr
     }));
   }
 
@@ -1103,7 +1185,8 @@ async function setTvFontSize(fontSize, capacity = null) {
       body: JSON.stringify({
         fontSize,
         capacity: targetCap,
-        audioEnabled: activeTvAudioEnabled
+        audioEnabled: activeTvAudioEnabled,
+        showQr: activeTvShowQr
       })
     });
   } catch (e) {}
@@ -1136,6 +1219,11 @@ function initTvFontControls() {
   const btnToggleTvAudio = getBtnToggleTvAudio();
   if (btnToggleTvAudio) {
     btnToggleTvAudio.addEventListener('click', toggleTvAudio);
+  }
+
+  const btnToggleTvQr = getBtnToggleTvQr();
+  if (btnToggleTvQr) {
+    btnToggleTvQr.addEventListener('click', toggleTvQr);
   }
 }
 

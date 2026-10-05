@@ -11,6 +11,8 @@ const LANGUAGES = [
   { code: 'ur', name: 'Urdu', native: 'اردو', flag: '🇵🇰' },
   { code: 'bn', name: 'Bengali', native: 'বাংলা', flag: '🇧🇩' },
   { code: 'fr', name: 'French', native: 'Français', flag: '🇫🇷' },
+  { code: 'zh', name: 'Chinese (Mandarin)', native: '中文 (普通话)', flag: '🇨🇳' },
+  { code: 'zh-TW', name: 'Traditional Chinese', native: '中文 (繁體)', flag: '🇹🇼' },
   { code: 'id', name: 'Indonesian', native: 'Bahasa', flag: '🇮🇩' },
   { code: 'so', name: 'Somali', native: 'Soomaali', flag: '🇸🇴' }
 ];
@@ -31,6 +33,8 @@ const LANG_BCP47_MAP = {
   ur: 'ur-PK',
   bn: 'bn-BD',
   fr: 'fr-FR',
+  zh: 'zh-CN',
+  'zh-TW': 'zh-TW',
   id: 'id-ID',
   so: 'so-SO',
   ar: 'ar-SA'
