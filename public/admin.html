@@ -314,6 +314,26 @@
                 <span>150% (Max Size)</span>
               </div>
             </div>
+
+            <!-- TV Screen Audio Control (Admin Controlled - Default OFF) -->
+            <div style="margin-top: 1rem; padding-top: 0.9rem; border-top: 1px solid rgba(255, 255, 255, 0.08);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <div style="display: flex; align-items: center; gap: 0.45rem;">
+                  <span style="font-size: 1.05rem;">🔊</span>
+                  <span style="font-size: 0.82rem; font-weight: 700; color: #f8fafc;">TV Screen Audio (Browser TTS)</span>
+                </div>
+                <span id="tv-audio-status-badge" class="badge" style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; font-size: 0.7rem; font-weight: 700; border: 1px solid rgba(148, 163, 184, 0.3);">
+                  OFF (Muted)
+                </span>
+              </div>
+              <p style="font-size: 0.77rem; color: var(--text-secondary); margin-bottom: 0.7rem; line-height: 1.4;">
+                Admin controls audio on the TV display. When enabled, incoming translated speech will be read aloud on the TV using a clear male voice.
+              </p>
+              <button type="button" id="btn-toggle-tv-audio" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.6rem; padding: 0.65rem 1rem; border-radius: 9px; font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: all 0.2s; border: 1px solid rgba(148, 163, 184, 0.3); background: rgba(30, 41, 59, 0.8); color: #f8fafc;">
+                <span id="tv-audio-btn-icon" style="font-size: 0.95rem;">▶</span>
+                <span id="tv-audio-btn-text">Turn ON TV Audio</span>
+              </button>
+            </div>
           </div>
 
           <!-- Attendee Join QR Code Card -->

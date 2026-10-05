@@ -45,6 +45,121 @@ const tvClientId = getTvClientId();
 const seenTimestamps = new Set();
 let feedSyncInterval = null;
 
+// BCP-47 language tag mappings for supported languages
+const LANG_BCP47_MAP = {
+  en: 'en-US',
+  uz: 'uz-UZ',
+  tr: 'tr-TR',
+  ur: 'ur-PK',
+  bn: 'bn-BD',
+  fr: 'fr-FR',
+  id: 'id-ID',
+  so: 'so-SO',
+  ar: 'ar-SA'
+};
+
+const MALE_VOICE_KEYWORDS = [
+  'male', 'david', 'mark', 'george', 'guy', 'paul', 'daniel', 'thomas',
+  'alex', 'fred', 'oliver', 'arthur', 'aaron', 'james', 'nathan', 'rishi',
+  'tarik', 'mehdi', 'salman', 'ali', 'hakan', 'berk', 'cem', 'deep', 'baritone'
+];
+
+const FEMALE_VOICE_KEYWORDS = [
+  'female', 'zira', 'susan', 'samantha', 'victoria', 'karen', 'moira',
+  'fiona', 'tessa', 'veena', 'yelda', 'filiz', 'amira', 'zeina', 'salma',
+  'camille', 'clara', 'marie', 'anna', 'helena', 'eva', 'laura', 'lucia'
+];
+
+function getBestMaleVoice(langCode) {
+  if (!('speechSynthesis' in window)) return null;
+  const voices = window.speechSynthesis.getVoices() || [];
+  if (!voices.length) return null;
+
+  const targetPrefix = (langCode || 'en').toLowerCase().split('-')[0];
+
+  const matchingVoices = voices.filter(v => {
+    const vLang = (v.lang || '').toLowerCase().replace('_', '-');
+    return vLang.startsWith(targetPrefix);
+  });
+
+  const pool = matchingVoices.length > 0 ? matchingVoices : voices;
+
+  for (const voice of pool) {
+    const nameLower = voice.name.toLowerCase();
+    const uriLower = (voice.voiceURI || '').toLowerCase();
+    const isExplicitMale = MALE_VOICE_KEYWORDS.some(kw => nameLower.includes(kw) || uriLower.includes(kw));
+    const isExplicitFemale = FEMALE_VOICE_KEYWORDS.some(kw => nameLower.includes(kw) || uriLower.includes(kw));
+    if (isExplicitMale && !isExplicitFemale) {
+      return voice;
+    }
+  }
+
+  for (const voice of pool) {
+    const nameLower = voice.name.toLowerCase();
+    const uriLower = (voice.voiceURI || '').toLowerCase();
+    const isExplicitFemale = FEMALE_VOICE_KEYWORDS.some(kw => nameLower.includes(kw) || uriLower.includes(kw));
+    if (!isExplicitFemale) {
+      return voice;
+    }
+  }
+
+  return pool[0] || null;
+}
+
+let isTvAudioEnabled = false; // Default: OFF (Admin controlled)
+
+function setTvAudioState(enabled) {
+  isTvAudioEnabled = Boolean(enabled);
+  if (!isTvAudioEnabled && 'speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+  }
+}
+
+function playTvBrowserAudio(text, langCode) {
+  if (!isTvAudioEnabled) return;
+  if (!('speechSynthesis' in window)) return;
+  if (!text || typeof text !== 'string') return;
+
+  const cleanText = text.trim();
+  if (!cleanText) return;
+
+  try {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    const bcpTag = LANG_BCP47_MAP[langCode] || langCode || 'en-US';
+    utterance.lang = bcpTag;
+
+    const maleVoice = getBestMaleVoice(langCode);
+    if (maleVoice) {
+      utterance.voice = maleVoice;
+    }
+    utterance.pitch = 0.92;
+    utterance.rate = 1.0;
+    window.speechSynthesis.speak(utterance);
+  } catch (err) {
+    console.warn('[TV Audio] Speech error:', err);
+  }
+}
+
+// User interaction audio unlocker for display screen
+let hasUnlockedTvAudio = false;
+function unlockTvAudio() {
+  if (hasUnlockedTvAudio) return;
+  hasUnlockedTvAudio = true;
+  try {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.resume();
+      const silent = new SpeechSynthesisUtterance('');
+      silent.volume = 0;
+      window.speechSynthesis.speak(silent);
+    }
+  } catch (e) {}
+}
+document.addEventListener('click', unlockTvAudio);
+document.addEventListener('keydown', unlockTvAudio);
+document.addEventListener('touchstart', unlockTvAudio);
+
+
 // Dynamic TV Font Size & Capacity Presets (Default is 3X previous capacity = 12 lines)
 const TV_FONT_PRESETS = {
   small: { scale: 0.8, capacity: 18 },
@@ -369,6 +484,9 @@ function appendToFeed(arabicText, transObj, isLive = true) {
 
     if (isLive) {
       streamWordsIntoElement(pTrans, displayTrans, 75);
+      if (isTvAudioEnabled) {
+        playTvBrowserAudio(displayTrans, targetLang);
+      }
     } else {
       pTrans.textContent = displayTrans;
     }
@@ -509,11 +627,13 @@ function connectWebSocket() {
       if (data.type === 'SESSION_STATUS') {
         updateTVStatusUI(data.status, data.mosqueName);
       }
-      if (data.type === 'JOINED_SUCCESS' && data.session && data.session.tvFontSize) {
-        applyTvFontSize(data.session.tvFontSize, data.session.tvCapacity, false);
+      if (data.type === 'JOINED_SUCCESS' && data.session) {
+        if (data.session.tvFontSize) applyTvFontSize(data.session.tvFontSize, data.session.tvCapacity, false);
+        if (data.session.tvAudioEnabled !== undefined) setTvAudioState(data.session.tvAudioEnabled);
       }
       if (data.type === 'TV_SETTINGS_UPDATE') {
-        applyTvFontSize(data.tvFontSize, data.tvCapacity, true);
+        if (data.tvFontSize) applyTvFontSize(data.tvFontSize, data.tvCapacity, true);
+        if (data.tvAudioEnabled !== undefined) setTvAudioState(data.tvAudioEnabled);
       }
       if (data.type === 'LIVE_SUBTITLE') {
         // Mark this timestamp as seen so the HTTP fallback won't re-render it
@@ -545,6 +665,9 @@ function startFeedSync() {
       }
       if (data.tvFontSize && data.tvFontSize !== currentTvFontSize) {
         applyTvFontSize(data.tvFontSize, data.tvCapacity, false);
+      }
+      if (data.tvAudioEnabled !== undefined && data.tvAudioEnabled !== isTvAudioEnabled) {
+        setTvAudioState(data.tvAudioEnabled);
       }
       if (data.transcripts && data.transcripts.length > 0) {
         // Only process items we haven't seen yet (by timestamp)

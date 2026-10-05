@@ -23,6 +23,67 @@ let isPlayingAudio = false;
 const renderedTimestamps = new Set();
 let lastSyncTime = null;
 
+// BCP-47 language tag mappings for supported languages
+const LANG_BCP47_MAP = {
+  en: 'en-US',
+  uz: 'uz-UZ',
+  tr: 'tr-TR',
+  ur: 'ur-PK',
+  bn: 'bn-BD',
+  fr: 'fr-FR',
+  id: 'id-ID',
+  so: 'so-SO',
+  ar: 'ar-SA'
+};
+
+const MALE_VOICE_KEYWORDS = [
+  'male', 'david', 'mark', 'george', 'guy', 'paul', 'daniel', 'thomas',
+  'alex', 'fred', 'oliver', 'arthur', 'aaron', 'james', 'nathan', 'rishi',
+  'tarik', 'mehdi', 'salman', 'ali', 'hakan', 'berk', 'cem', 'deep', 'baritone'
+];
+
+const FEMALE_VOICE_KEYWORDS = [
+  'female', 'zira', 'susan', 'samantha', 'victoria', 'karen', 'moira',
+  'fiona', 'tessa', 'veena', 'yelda', 'filiz', 'amira', 'zeina', 'salma',
+  'camille', 'clara', 'marie', 'anna', 'helena', 'eva', 'laura', 'lucia'
+];
+
+function getBestMaleVoice(langCode) {
+  if (!('speechSynthesis' in window)) return null;
+  const voices = window.speechSynthesis.getVoices() || [];
+  if (!voices.length) return null;
+
+  const targetPrefix = (langCode || 'en').toLowerCase().split('-')[0];
+
+  const matchingVoices = voices.filter(v => {
+    const vLang = (v.lang || '').toLowerCase().replace('_', '-');
+    return vLang.startsWith(targetPrefix);
+  });
+
+  const pool = matchingVoices.length > 0 ? matchingVoices : voices;
+
+  for (const voice of pool) {
+    const nameLower = voice.name.toLowerCase();
+    const uriLower = (voice.voiceURI || '').toLowerCase();
+    const isExplicitMale = MALE_VOICE_KEYWORDS.some(kw => nameLower.includes(kw) || uriLower.includes(kw));
+    const isExplicitFemale = FEMALE_VOICE_KEYWORDS.some(kw => nameLower.includes(kw) || uriLower.includes(kw));
+    if (isExplicitMale && !isExplicitFemale) {
+      return voice;
+    }
+  }
+
+  for (const voice of pool) {
+    const nameLower = voice.name.toLowerCase();
+    const uriLower = (voice.voiceURI || '').toLowerCase();
+    const isExplicitFemale = FEMALE_VOICE_KEYWORDS.some(kw => nameLower.includes(kw) || uriLower.includes(kw));
+    if (!isExplicitFemale) {
+      return voice;
+    }
+  }
+
+  return pool[0] || null;
+}
+
 function detectDeviceType() {
   const ua = navigator.userAgent || '';
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|mobile/i.test(ua)
@@ -220,6 +281,18 @@ if (langModal) {
 }
 
 // ─── AUDIO TOGGLE & SYNTHESIS (Off by default, Turn on when clicked) ───
+function speakLatestCardIfAvailable() {
+  if (!isAudioEnabled) return;
+  const cards = mobileCardsFeed ? mobileCardsFeed.querySelectorAll('.sermon-card') : [];
+  if (cards.length > 0) {
+    const lastCard = cards[cards.length - 1];
+    const textEl = lastCard.querySelector('.card-translated-text') || lastCard.querySelector('.card-text');
+    if (textEl && textEl.textContent && textEl.textContent.trim()) {
+      speakSpeech(textEl.textContent.trim(), currentLanguage);
+    }
+  }
+}
+
 async function toggleAudio() {
   isAudioEnabled = !isAudioEnabled;
   if (isAudioEnabled) {
@@ -232,6 +305,17 @@ async function toggleAudio() {
       if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       if (audioCtx.state === 'suspended') await audioCtx.resume();
     } catch (e) {}
+
+    try {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.resume();
+        const warmUp = new SpeechSynthesisUtterance('');
+        warmUp.volume = 0;
+        window.speechSynthesis.speak(warmUp);
+      }
+    } catch (e) {}
+
+    speakLatestCardIfAvailable();
   } else {
     if (playPauseIcon) playPauseIcon.textContent = '▶';
     if (audioFreqBars) audioFreqBars.classList.add('idle');
@@ -239,6 +323,20 @@ async function toggleAudio() {
     if (playerSubtitle) playerSubtitle.textContent = 'Tap play to stream audio to earbuds';
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
   }
+}
+
+if (btnToggleAudio) {
+  btnToggleAudio.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleAudio();
+  });
+}
+const compPlayerBar = document.querySelector('.comp-player-bar');
+if (compPlayerBar) {
+  compPlayerBar.addEventListener('click', (e) => {
+    if (e.target.closest('#btn-toggle-audio')) return;
+    toggleAudio();
+  });
 }
 
 let activeMobileStreamCleanups = [];
@@ -333,15 +431,28 @@ function renderSermonCard({ arabic, translations, translated, ayah, timestamp },
 }
 
 function speakSpeech(text, lang) {
+  if (!isAudioEnabled) return;
   if (!('speechSynthesis' in window)) return;
+  if (!text || typeof text !== 'string') return;
+  const cleanText = text.trim();
+  if (!cleanText) return;
+
   try {
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = lang || 'en';
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    const bcpTag = LANG_BCP47_MAP[lang] || lang || 'en-US';
+    utterance.lang = bcpTag;
+
+    const maleVoice = getBestMaleVoice(lang);
+    if (maleVoice) {
+      utterance.voice = maleVoice;
+    }
+    utterance.pitch = 0.92;
     utterance.rate = 1.0;
-    utterance.pitch = 1.0;
     window.speechSynthesis.speak(utterance);
-  } catch (err) {}
+  } catch (err) {
+    console.warn('[Mobile Audio] Speech error:', err);
+  }
 }
 
 // ─── WEBSOCKET & SYNC ───

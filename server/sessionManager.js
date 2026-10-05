@@ -73,6 +73,7 @@ class SessionManager {
       primaryLanguage,
       tvFontSize: 'medium', // 'small' | 'medium' | 'large' | 'xlarge'
       tvCapacity: 12, // 3X previous capacity (was 4, now 12 lines)
+      tvAudioEnabled: false, // Default: OFF (Admin controlled)
       status: 'idle', // idle, active, paused, ended
       startedAt: null,
       endedAt: null,
@@ -122,7 +123,7 @@ class SessionManager {
     return session;
   }
 
-  updateTvSettings(sessionId, { fontSize, capacity } = {}) {
+  updateTvSettings(sessionId, { fontSize, capacity, audioEnabled } = {}) {
     const session = this.getSession(sessionId);
     if (!session) return null;
     if (fontSize !== undefined && fontSize !== null) {
@@ -131,10 +132,14 @@ class SessionManager {
     if (capacity !== undefined && capacity !== null) {
       session.tvCapacity = Number(capacity);
     }
+    if (audioEnabled !== undefined && audioEnabled !== null) {
+      session.tvAudioEnabled = Boolean(audioEnabled);
+    }
     this.broadcastToSession(sessionId, {
       type: 'TV_SETTINGS_UPDATE',
       tvFontSize: session.tvFontSize,
-      tvCapacity: session.tvCapacity
+      tvCapacity: session.tvCapacity,
+      tvAudioEnabled: session.tvAudioEnabled
     });
     return session;
   }

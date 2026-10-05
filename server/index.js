@@ -380,13 +380,14 @@ app.post('/api/session/:id/inject-text', async (req, res) => {
 
 // TV Screen Font Size & Capacity Settings
 app.post('/api/session/:id/tv-settings', (req, res) => {
-  const { fontSize, capacity } = req.body;
-  const session = sessionManager.updateTvSettings(req.params.id, { fontSize, capacity });
+  const { fontSize, capacity, audioEnabled } = req.body;
+  const session = sessionManager.updateTvSettings(req.params.id, { fontSize, capacity, audioEnabled });
   if (!session) return res.status(404).json({ error: 'Session not found' });
   res.json({
     success: true,
     tvFontSize: session.tvFontSize,
-    tvCapacity: session.tvCapacity
+    tvCapacity: session.tvCapacity,
+    tvAudioEnabled: session.tvAudioEnabled
   });
 });
 
@@ -416,6 +417,7 @@ app.get('/api/session/:id/feed', (req, res) => {
     latestAyah: session.detectedAyahs.length > 0 ? session.detectedAyahs[session.detectedAyahs.length - 1] : null,
     tvFontSize: session.tvFontSize,
     tvCapacity: session.tvCapacity,
+    tvAudioEnabled: session.tvAudioEnabled,
     transcripts,
     stats,
     serverTime: new Date().toISOString()
@@ -498,9 +500,9 @@ wss.on('connection', (ws) => {
       }
 
       if (msg.type === 'UPDATE_TV_SETTINGS') {
-        const { fontSize, capacity, sessionId } = msg;
+        const { fontSize, capacity, audioEnabled, sessionId } = msg;
         const targetSessionId = sessionId || userSessionId;
-        sessionManager.updateTvSettings(targetSessionId, { fontSize, capacity });
+        sessionManager.updateTvSettings(targetSessionId, { fontSize, capacity, audioEnabled });
       }
 
       if (msg.type === 'AUDIO_DATA') {

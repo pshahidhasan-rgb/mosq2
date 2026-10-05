@@ -664,6 +664,7 @@ async function initConsoleSession(sessionId) {
 
       if (data.stats) updateStatsDisplay(data.stats);
       if (data.tvFontSize) syncTvFontSizeUI(data.tvFontSize, data.tvCapacity);
+      if (data.tvAudioEnabled !== undefined) syncTvAudioUI(data.tvAudioEnabled);
 
       // Update dynamic links with session primary language
       const joinUrl = `${window.location.origin}/join.html?session=${encodeURIComponent(sessionId)}&lang=${encodeURIComponent(data.primaryLanguage || 'en')}`;
@@ -761,7 +762,10 @@ function connectWebSocket(sessionId) {
       if (data.type === 'SESSION_STATS' || data.type === 'STATS_UPDATE') {
         updateStatsDisplay(data.stats);
       }
-      if (data.type === 'TV_SETTINGS_UPDATE') syncTvFontSizeUI(data.tvFontSize, data.tvCapacity);
+      if (data.type === 'TV_SETTINGS_UPDATE') {
+        syncTvFontSizeUI(data.tvFontSize, data.tvCapacity);
+        if (data.tvAudioEnabled !== undefined) syncTvAudioUI(data.tvAudioEnabled);
+      }
       if (data.type === 'LIVE_SUBTITLE') addTranscriptEntry(data);
     } catch (e) {}
   };
@@ -893,10 +897,85 @@ const TV_PRESETS_INFO = {
 
 let activeTvFontSize = 'medium';
 let activeTvCapacity = 12;
+let activeTvAudioEnabled = false; // Default: OFF (Admin controlled)
 
 function getTvCapacityBadge() { return document.getElementById('tv-capacity-badge'); }
 function getTvScaleDisplay() { return document.getElementById('tv-scale-display'); }
 function getTvFontSlider() { return document.getElementById('tv-font-slider'); }
+function getTvAudioStatusBadge() { return document.getElementById('tv-audio-status-badge'); }
+function getBtnToggleTvAudio() { return document.getElementById('btn-toggle-tv-audio'); }
+function getTvAudioBtnIcon() { return document.getElementById('tv-audio-btn-icon'); }
+function getTvAudioBtnText() { return document.getElementById('tv-audio-btn-text'); }
+
+function syncTvAudioUI(enabled) {
+  activeTvAudioEnabled = Boolean(enabled);
+  const badge = getTvAudioStatusBadge();
+  const btn = getBtnToggleTvAudio();
+  const icon = getTvAudioBtnIcon();
+  const text = getTvAudioBtnText();
+
+  if (activeTvAudioEnabled) {
+    if (badge) {
+      badge.textContent = '🔊 LIVE ON TV';
+      badge.style.background = 'rgba(16, 185, 129, 0.2)';
+      badge.style.color = '#34d399';
+      badge.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+    }
+    if (btn) {
+      btn.style.borderColor = '#10b981';
+      btn.style.background = 'rgba(16, 185, 129, 0.25)';
+      btn.style.color = '#34d399';
+    }
+    if (icon) icon.textContent = '⏸';
+    if (text) text.textContent = 'Turn OFF TV Audio';
+  } else {
+    if (badge) {
+      badge.textContent = 'OFF (Muted)';
+      badge.style.background = 'rgba(148, 163, 184, 0.15)';
+      badge.style.color = '#94a3b8';
+      badge.style.borderColor = 'rgba(148, 163, 184, 0.3)';
+    }
+    if (btn) {
+      btn.style.borderColor = 'rgba(148, 163, 184, 0.3)';
+      btn.style.background = 'rgba(30, 41, 59, 0.8)';
+      btn.style.color = '#f8fafc';
+    }
+    if (icon) icon.textContent = '▶';
+    if (text) text.textContent = 'Turn ON TV Audio';
+  }
+}
+
+async function toggleTvAudio() {
+  const nextState = !activeTvAudioEnabled;
+  activeTvAudioEnabled = nextState;
+  syncTvAudioUI(nextState);
+
+  if (!currentSessionId) return;
+
+  // 1. Instant WebSocket broadcast to connected TV displays
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: 'UPDATE_TV_SETTINGS',
+      sessionId: currentSessionId,
+      fontSize: activeTvFontSize,
+      capacity: activeTvCapacity,
+      audioEnabled: nextState
+    }));
+  }
+
+  // 2. Persist to server session storage
+  try {
+    await fetch(`/api/session/${currentSessionId}/tv-settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fontSize: activeTvFontSize,
+        capacity: activeTvCapacity,
+        audioEnabled: nextState
+      })
+    });
+  } catch (e) {}
+}
 
 function syncTvFontSizeUI(fontSize, capacity) {
   if (!fontSize) return;
@@ -959,7 +1038,8 @@ async function setTvFontSize(fontSize, capacity = null) {
       type: 'UPDATE_TV_SETTINGS',
       sessionId: currentSessionId,
       fontSize,
-      capacity: targetCap
+      capacity: targetCap,
+      audioEnabled: activeTvAudioEnabled
     }));
   }
 
@@ -968,7 +1048,11 @@ async function setTvFontSize(fontSize, capacity = null) {
     await fetch(`/api/session/${currentSessionId}/tv-settings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fontSize, capacity: targetCap })
+      body: JSON.stringify({
+        fontSize,
+        capacity: targetCap,
+        audioEnabled: activeTvAudioEnabled
+      })
     });
   } catch (e) {}
 }
@@ -995,6 +1079,11 @@ function initTvFontControls() {
       const capacity = Math.max(4, Math.round(12 / (scale / 100)));
       setTvFontSize(scale, capacity);
     });
+  }
+
+  const btnToggleTvAudio = getBtnToggleTvAudio();
+  if (btnToggleTvAudio) {
+    btnToggleTvAudio.addEventListener('click', toggleTvAudio);
   }
 }
 
