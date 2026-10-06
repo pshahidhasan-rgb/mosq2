@@ -192,8 +192,8 @@ sessionManager.on('languages_updated', ({ sessionId, languages }) => {
 });
 
 // Broadcast real-time streaming tokens (sub-200ms word-by-word)
-sonioxService.on('token_stream', ({ lang, translatedChunk, originalChunk, isFinal, timestamp }) => {
-  sessionManager.broadcastStreamingToken(activeLiveSessionId, {
+sonioxService.on('token_stream', ({ sessionId, lang, translatedChunk, originalChunk, isFinal, timestamp }) => {
+  sessionManager.broadcastStreamingToken(sessionId || activeLiveSessionId, {
     lang,
     translatedChunk,
     originalChunk,
@@ -203,8 +203,8 @@ sonioxService.on('token_stream', ({ lang, translatedChunk, originalChunk, isFina
 });
 
 // When a sentence is finalized by Soniox, run Quran Ayah check and commit to history
-sonioxService.on('sentence_finalized', async ({ lang, translatedText, originalText, translations: fullTrans, timestamp }) => {
-  const targetSessionId = activeLiveSessionId;
+sonioxService.on('sentence_finalized', async ({ sessionId, lang, translatedText, originalText, translations: fullTrans, timestamp }) => {
+  const targetSessionId = sessionId || activeLiveSessionId;
   const session = sessionManager.getSession(targetSessionId);
   if (!session || session.status !== 'active') return;
 
@@ -572,14 +572,15 @@ wss.on('connection', (ws) => {
   let userRole = 'attendee';
   let userLanguage = 'en';
 
-  ws.on('message', async (raw) => {
+  ws.on('message', async (raw, isBinary) => {
     try {
       // Check if message is binary audio chunk from microphone
-      if (Buffer.isBuffer(raw)) {
+      if (isBinary) {
         if (sonioxService.isConfigured()) {
           sonioxService.broadcastAudio(raw);
+        } else {
+          sttService.sendAudioChunk(raw);
         }
-        sttService.sendAudioChunk(raw);
         return;
       }
 

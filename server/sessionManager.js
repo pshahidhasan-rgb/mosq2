@@ -588,12 +588,15 @@ class SessionManager extends EventEmitter {
     const subs = this.subscribers.get(sessionId);
     if (!subs) return;
 
+    const session = this.getSession(sessionId);
+    const defaultLang = session ? session.primaryLanguage : 'en';
+
     for (const sub of subs) {
       if (sub.ws.readyState !== 1 /* OPEN */) continue;
 
-      const clientLang = sub.language || 'en';
+      const clientLang = sub.language || defaultLang;
       if (sub.role === 'tv') {
-        const tvLang = sub.language || (session ? session.primaryLanguage : 'en');
+        const tvLang = sub.language || defaultLang;
         // Only deliver tokens destined for TV's current language (with original speech)
         if (tvLang === lang) {
           sub.ws.send(JSON.stringify({

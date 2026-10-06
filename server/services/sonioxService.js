@@ -491,6 +491,7 @@ class SonioxGateManager extends EventEmitter {
       const translatedChunk = chunkWords.length > 0 ? (chunkWords.join(' ')) : '';
 
       this.emit('token_stream', {
+        sessionId: this.simSessionId,
         lang,
         translatedChunk,
         originalChunk: arChunk,
@@ -511,6 +512,7 @@ class SonioxGateManager extends EventEmitter {
       // Sentence is complete — emit finalized event for Quran detection and history archive
       for (const lang of this.simTargetLangs) {
         this.emit('sentence_finalized', {
+          sessionId: this.simSessionId,
           lang,
           translatedText: sentence[lang] || sentence.en,
           originalText: sentence.arabic,
