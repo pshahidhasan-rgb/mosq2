@@ -71,6 +71,7 @@ class SessionManager {
       id: sessionId,
       mosqueName,
       primaryLanguage,
+      tvLanguage: primaryLanguage || 'en', // Display TV target language
       tvFontSize: 'medium', // 'small' | 'medium' | 'large' | 'xlarge'
       tvCapacity: 12, // 3X previous capacity (was 4, now 12 lines)
       tvAudioEnabled: false, // Default: OFF (Admin controlled)
@@ -152,6 +153,9 @@ class SessionManager {
   clearSessionText(sessionId) {
     const session = this.getSession(sessionId);
     if (!session) return null;
+    if (session.transcripts && session.transcripts.length > 0) {
+      this.archiveSessionRun(session.id);
+    }
     session.transcripts = [];
     session.detectedAyahs = [];
     this.broadcastToSession(session.id, {
@@ -175,7 +179,7 @@ class SessionManager {
     if (this.httpClients) this.httpClients.delete(actualId);
     this.sessions.delete(actualId);
 
-    this.history = this.history.filter(h => h.id !== actualId);
+    this.history = this.history.filter(h => h.sessionId !== actualId && h.id !== actualId);
     this.saveHistory();
 
     return true;
@@ -184,9 +188,11 @@ class SessionManager {
   getAllActiveSessions() {
     return Array.from(this.sessions.values()).map(session => {
       const stats = this.getSessionStats(session.id);
+      const historyRuns = this.getSessionHistory(session.id);
       return {
         ...session,
-        stats
+        stats,
+        historyCount: historyRuns.length
       };
     });
   }
@@ -194,8 +200,17 @@ class SessionManager {
   startSession(sessionId) {
     const session = this.getSession(sessionId);
     if (!session) return null;
+
+    // If there were already transcripts from an earlier run on a different day, archive them first
+    if (session.transcripts && session.transcripts.length > 0) {
+      this.archiveSessionRun(session.id);
+      session.transcripts = [];
+      session.detectedAyahs = [];
+    }
+
     session.status = 'active';
     session.startedAt = new Date().toISOString();
+    session.endedAt = null;
     this.broadcastToSession(sessionId, {
       type: 'SESSION_STATUS',
       status: 'active',
@@ -223,28 +238,10 @@ class SessionManager {
     session.status = 'ended';
     session.endedAt = new Date().toISOString();
 
-    const durationSeconds = session.startedAt
-      ? Math.round((new Date(session.endedAt) - new Date(session.startedAt)) / 1000)
-      : 0;
-
-    const stats = this.getSessionStats(sessionId);
-
-    // Save to archive
-    const archiveRecord = {
-      id: session.id,
-      mosqueName: session.mosqueName,
-      startedAt: session.startedAt,
-      endedAt: session.endedAt,
-      durationSeconds,
-      totalTranscripts: session.transcripts.length,
-      totalAyahsDetected: session.detectedAyahs.length,
-      peakListeners: stats.totalAttendees,
-      transcripts: session.transcripts,
-      detectedAyahs: session.detectedAyahs
-    };
-
-    this.history.unshift(archiveRecord);
-    this.saveHistory();
+    let archiveRecord = null;
+    if (session.transcripts && session.transcripts.length > 0) {
+      archiveRecord = this.archiveSessionRun(sessionId);
+    }
 
     this.broadcastToSession(sessionId, {
       type: 'SESSION_STATUS',
@@ -257,6 +254,103 @@ class SessionManager {
   }
 
   /**
+   * Archives a completed khutbah run for a session with date, time, display TV translations, and attendance
+   */
+  archiveSessionRun(sessionId) {
+    const session = this.getSession(sessionId);
+    if (!session || !session.transcripts || session.transcripts.length === 0) {
+      return null;
+    }
+
+    const now = new Date();
+    const started = session.startedAt ? new Date(session.startedAt) : now;
+    const durationSeconds = Math.max(0, Math.round((now - started) / 1000));
+    const mins = Math.floor(durationSeconds / 60);
+    const secs = durationSeconds % 60;
+    const durationDisplay = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+
+    const dateDisplay = started.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+    const timeDisplay = started.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    const stats = this.getSessionStats(session.id);
+    const tvLang = session.tvLanguage || session.primaryLanguage || 'en';
+
+    // Format transcripts: original speech + translation tailored to the display TV language
+    const formattedTranscripts = session.transcripts.map(t => {
+      const orig = t.arabic || t.original || '';
+      let trans = '';
+      if (t.translations && typeof t.translations === 'object') {
+        trans = t.translations[tvLang] || t.translations.en || Object.values(t.translations)[0] || '';
+      } else if (typeof t.translated === 'string') {
+        trans = t.translated;
+      } else if (typeof t.translation === 'string') {
+        trans = t.translation;
+      }
+      return {
+        original: orig,
+        translation: trans,
+        timestamp: t.timestamp || new Date().toISOString()
+      };
+    });
+
+    const runId = `hist_${session.id}_${Date.now()}`;
+    const archiveRecord = {
+      id: runId,
+      sessionId: session.id,
+      mosqueName: session.mosqueName,
+      startedAt: started.toISOString(),
+      endedAt: now.toISOString(),
+      dateDisplay,
+      timeDisplay,
+      durationSeconds,
+      durationDisplay,
+      totalTranscripts: formattedTranscripts.length,
+      totalAyahsDetected: (session.detectedAyahs && session.detectedAyahs.length) || 0,
+      totalAttendance: stats.totalBrowsers || (stats.phoneAttendees + stats.computerDisplays) || stats.totalAttendees || 0,
+      attendance: {
+        total: stats.totalBrowsers || (stats.phoneAttendees + stats.computerDisplays) || stats.totalAttendees || 0,
+        phoneAttendees: stats.phoneAttendees || 0,
+        computerDisplays: stats.computerDisplays || 0
+      },
+      phoneAttendees: stats.phoneAttendees || 0,
+      computerDisplays: stats.computerDisplays || 0,
+      tvLanguage: tvLang,
+      transcripts: formattedTranscripts,
+      createdAt: now.toISOString()
+    };
+
+    this.history.unshift(archiveRecord);
+    this.saveHistory();
+
+    return archiveRecord;
+  }
+
+  getSessionHistory(sessionId) {
+    if (!sessionId) return [];
+    const session = this.getSession(sessionId);
+    const actualId = session ? session.id : sessionId;
+    return this.history.filter(h => h.sessionId === actualId || h.sessionId === sessionId || h.id === sessionId);
+  }
+
+  deleteHistoryRecord(historyId) {
+    if (!historyId) return false;
+    const initialLen = this.history.length;
+    this.history = this.history.filter(h => h.id !== historyId);
+    if (this.history.length !== initialLen) {
+      this.saveHistory();
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * Adds a WebSocket connection to the session room
    */
   addSubscriber(sessionId, ws, { role = 'attendee', language = 'en', clientId = '', deviceType = null } = {}) {
@@ -266,6 +360,11 @@ class SessionManager {
     const resolvedDevice = deviceType || (role === 'tv' ? 'computer' : 'phone');
     const subscriber = { ws, role, language, clientId, deviceType: resolvedDevice, lastPing: Date.now() };
     this.subscribers.get(sessionId).add(subscriber);
+
+    if (role === 'tv' && language) {
+      const session = this.getSession(sessionId);
+      if (session) session.tvLanguage = language;
+    }
 
     // Update attendee counts
     this.notifyStatsUpdate(sessionId);
@@ -280,7 +379,13 @@ class SessionManager {
       if (sub.ws === ws) {
         sub.lastPing = Date.now();
         if (deviceType) sub.deviceType = deviceType;
-        if (language) sub.language = language;
+        if (language) {
+          sub.language = language;
+          if (sub.role === 'tv') {
+            const session = this.getSession(sessionId);
+            if (session) session.tvLanguage = language;
+          }
+        }
         if (clientId) sub.clientId = clientId;
         break;
       }
@@ -299,6 +404,10 @@ class SessionManager {
       language: language || 'en',
       lastSeen: Date.now()
     });
+    if (role === 'tv' && language) {
+      const session = this.getSession(sessionId);
+      if (session) session.tvLanguage = language;
+    }
     this.notifyStatsUpdate(sessionId);
   }
 
@@ -337,6 +446,10 @@ class SessionManager {
     for (const sub of subs) {
       if (sub.ws === ws) {
         sub.language = newLanguage;
+        if (sub.role === 'tv') {
+          const session = this.getSession(sessionId);
+          if (session) session.tvLanguage = newLanguage;
+        }
         break;
       }
     }

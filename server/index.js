@@ -417,6 +417,27 @@ app.get('/api/history', (req, res) => {
   res.json(sessionManager.history);
 });
 
+// Session-specific history runs (multi-day)
+app.get('/api/session/:id/history', (req, res) => {
+  const runs = sessionManager.getSessionHistory(req.params.id);
+  res.json(runs);
+});
+
+// Manual archive current session run
+app.post('/api/session/:id/archive-current', (req, res) => {
+  const record = sessionManager.archiveSessionRun(req.params.id);
+  if (!record) {
+    return res.status(400).json({ success: false, error: 'No speech transcripts to archive for this session yet.' });
+  }
+  res.json({ success: true, record });
+});
+
+// Delete specific history record
+app.delete('/api/history/:id', (req, res) => {
+  const success = sessionManager.deleteHistoryRecord(req.params.id);
+  res.json({ success });
+});
+
 // Live resilient polling feed endpoint
 app.get('/api/session/:id/feed', (req, res) => {
   const session = sessionManager.getSession(req.params.id);

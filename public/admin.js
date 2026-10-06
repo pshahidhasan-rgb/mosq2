@@ -74,7 +74,27 @@ const qrModalLinkText = document.getElementById('qr-modal-link-text');
 const btnCopyQrModalLink = document.getElementById('btn-copy-qr-modal-link');
 const btnOpenQrModalLink = document.getElementById('btn-open-qr-modal-link');
 
+// Session History Modal elements
+const btnHeaderHistory = document.getElementById('btn-header-history');
+const modalSessionHistory = document.getElementById('modal-session-history');
+const btnCloseHistModal = document.getElementById('btn-close-hist-modal');
+const histModalTitle = document.getElementById('hist-modal-title');
+const histModalSubtitle = document.getElementById('hist-modal-subtitle');
+const histModalCountBadge = document.getElementById('hist-modal-count-badge');
+const histModalBody = document.getElementById('hist-modal-body');
+const btnArchiveCurrentNow = document.getElementById('btn-archive-current-now');
+
 let transcriptItemsCount = 0;
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 // ─── AUTHENTICATION ───
 async function checkAuth() {
@@ -216,8 +236,11 @@ async function loadAllSessionsList() {
           <a href="/admin.html?session=${encodeURIComponent(sess.id)}" class="btn btn-primary" style="flex: 1 1 100%; text-align: center; font-size: 0.84rem; padding: 0.48rem;">
             🎙️ Open Pulpit Console →
           </a>
+          <button type="button" class="btn btn-secondary btn-show-session-history" data-session-id="${sess.id}" data-mosque-name="${sess.mosqueName}" style="flex: 1; font-size: 0.82rem; padding: 0.45rem;">
+            📜 History (${sess.historyCount || 0})
+          </button>
           <button type="button" class="btn btn-secondary btn-show-session-qr" data-session-id="${sess.id}" data-mosque-name="${sess.mosqueName}" data-lang="${sess.primaryLanguage || 'en'}" style="flex: 1; font-size: 0.82rem; padding: 0.45rem;">
-            📱 Show QR Code
+            📱 QR Code
           </button>
           <a href="/display.html?session=${encodeURIComponent(sess.id)}" target="_blank" class="btn btn-secondary" style="flex: 1; font-size: 0.82rem; padding: 0.45rem;">
             📺 TV Display ↗
@@ -228,6 +251,15 @@ async function loadAllSessionsList() {
         </div>
       `;
       sessionsGridContainer.appendChild(card);
+    });
+
+    // Wire up Session History buttons
+    document.querySelectorAll('.btn-show-session-history').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const sid = e.currentTarget.getAttribute('data-session-id');
+        const mname = e.currentTarget.getAttribute('data-mosque-name');
+        openSessionHistoryModal(sid, mname);
+      });
     });
 
     // Wire up QR Code preview buttons
@@ -293,6 +325,211 @@ function openQrModal(sessionId, mosqueName, lang = 'en') {
 if (btnCloseQrModal) {
   btnCloseQrModal.addEventListener('click', () => {
     if (modalQrPreview) modalQrPreview.style.display = 'none';
+  });
+}
+
+// ─── SESSION HISTORY MODAL ───
+async function openSessionHistoryModal(sessionId, mosqueName) {
+  if (!modalSessionHistory) return;
+  modalSessionHistory.style.display = 'flex';
+
+  if (histModalTitle) {
+    histModalTitle.textContent = `${mosqueName || sessionId} — Sermon History`;
+  }
+  if (histModalSubtitle) {
+    histModalSubtitle.textContent = `Session ID: ${sessionId} • Multi-day sermon archive`;
+  }
+  if (histModalCountBadge) {
+    histModalCountBadge.textContent = 'Loading...';
+  }
+  if (btnArchiveCurrentNow) {
+    btnArchiveCurrentNow.dataset.sessionId = sessionId;
+  }
+  if (histModalBody) {
+    histModalBody.innerHTML = '<div style="text-align: center; padding: 2rem; color: #94a3b8;">Loading recorded sermon history...</div>';
+  }
+
+  try {
+    const res = await fetch(`/api/session/${encodeURIComponent(sessionId)}/history`);
+    if (!res.ok) throw new Error('Failed to fetch history');
+    const runs = await res.json();
+
+    if (histModalCountBadge) {
+      histModalCountBadge.textContent = `${runs.length} Run${runs.length === 1 ? '' : 's'}`;
+    }
+
+    if (!histModalBody) return;
+
+    if (!runs || runs.length === 0) {
+      histModalBody.innerHTML = `
+        <div style="text-align: center; padding: 3rem 1.5rem; background: rgba(15, 23, 42, 0.6); border: 1px dashed rgba(148, 163, 184, 0.2); border-radius: 12px;">
+          <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">📜</div>
+          <h4 style="font-size: 1.05rem; font-weight: 700; color: #f8fafc; margin-bottom: 0.35rem;">No History Runs Yet</h4>
+          <p style="font-size: 0.85rem; color: #94a3b8; max-width: 420px; margin: 0 auto 1.25rem; line-height: 1.5;">
+            Sermon runs are automatically archived here when a session ends, clears, or restarts on a new day.
+          </p>
+          <p style="font-size: 0.8rem; color: #64748b;">
+            💡 Tip: Click <strong>"💾 Archive Current"</strong> above to snapshot current speech immediately.
+          </p>
+        </div>
+      `;
+      return;
+    }
+
+    let html = `
+      <div style="margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 0.85rem; color: #94a3b8;">Found <strong style="color: #38bdf8;">${runs.length}</strong> recorded sermon ${runs.length === 1 ? 'run' : 'runs'}:</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+    `;
+
+    runs.forEach((run, index) => {
+      const tvLangUpper = (run.tvLanguage || 'en').toUpperCase();
+      const transcripts = run.transcripts || [];
+      const totalAttendance = run.totalAttendance !== undefined ? run.totalAttendance : ((run.attendance && run.attendance.total) || 0);
+      const phoneCount = (run.attendance && run.attendance.phoneAttendees) || run.phoneAttendees || 0;
+      const tvCount = (run.attendance && run.attendance.computerDisplays) || run.computerDisplays || 0;
+
+      html += `
+        <div class="history-run-card" style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,0.3);">
+          <!-- Header Bar -->
+          <div style="padding: 1rem 1.25rem; background: rgba(30, 41, 59, 0.6); border-bottom: 1px solid rgba(255, 255, 255, 0.08); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.75rem;">
+            <div>
+              <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;">
+                <span style="font-weight: 800; font-size: 0.72rem; padding: 2px 7px; border-radius: 4px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #7dd3fc;">
+                  #${runs.length - index}
+                </span>
+                <h4 style="font-size: 1.05rem; font-weight: 700; color: #f8fafc; margin: 0;">
+                  📅 ${escapeHtml(run.dateDisplay)}
+                </h4>
+                <span style="font-size: 0.85rem; color: #94a3b8; margin-left: 0.25rem;">
+                  🕒 ${escapeHtml(run.timeDisplay)}
+                </span>
+              </div>
+              <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; font-size: 0.8rem; color: #cbd5e1;">
+                <span>⏱️ Duration: <strong>${escapeHtml(run.durationDisplay)}</strong></span>
+                <span>👥 Attendance: <strong>${totalAttendance}</strong> <span style="color: #64748b;">(📱 ${phoneCount} Phone, 📺 ${tvCount} TV)</span></span>
+                <span>📺 TV Translation: <strong style="color: #10b981;">${tvLangUpper}</strong></span>
+                <span>🗣️ <strong>${transcripts.length}</strong> Spoken Lines</span>
+              </div>
+            </div>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <button type="button" class="btn btn-secondary btn-toggle-run-transcripts" data-target="run-trans-${index}" style="font-size: 0.78rem; padding: 0.35rem 0.75rem;">
+                👁️ View Transcripts (${transcripts.length})
+              </button>
+              <button type="button" class="btn btn-danger btn-delete-history-run" data-history-id="${run.id}" data-session-id="${sessionId}" data-mosque-name="${mosqueName || sessionId}" style="font-size: 0.78rem; padding: 0.35rem 0.65rem; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #fca5a5; cursor: pointer;">
+                🗑️
+              </button>
+            </div>
+          </div>
+
+          <!-- Transcripts Container (Collapsible) -->
+          <div id="run-trans-${index}" style="display: none; padding: 1rem 1.25rem; background: rgba(10, 17, 30, 0.95); max-height: 380px; overflow-y: auto; border-top: 1px solid rgba(255, 255, 255, 0.05);">
+            ${transcripts.length === 0 ? '<div style="color: #64748b; font-size: 0.85rem; font-style: italic;">No speech transcripts recorded in this run.</div>' : `
+              <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+                ${transcripts.map((t, tIdx) => `
+                  <div style="padding-bottom: 0.75rem; border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.35rem;">
+                      <span style="font-size: 0.72rem; color: #64748b; font-family: monospace;">Line ${tIdx + 1}</span>
+                      <div style="font-family: var(--font-arabic); direction: rtl; text-align: right; color: #fef08a; font-size: 1.15rem; line-height: 1.6; flex: 1; margin-left: 1rem;">
+                        ${escapeHtml(t.original)}
+                      </div>
+                    </div>
+                    <div style="color: #6ee7b7; font-size: 0.92rem; line-height: 1.5; padding-left: 0.5rem; border-left: 2px solid #10b981;">
+                      ➔ ${escapeHtml(t.translation || '(No translation)')}
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            `}
+          </div>
+        </div>
+      `;
+    });
+
+    html += '</div>';
+    histModalBody.innerHTML = html;
+
+    // Wire up toggle transcripts buttons
+    document.querySelectorAll('.btn-toggle-run-transcripts').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetId = btn.getAttribute('data-target');
+        const targetEl = document.getElementById(targetId);
+        if (targetEl) {
+          const isHidden = targetEl.style.display === 'none';
+          targetEl.style.display = isHidden ? 'block' : 'none';
+          btn.textContent = isHidden ? '🙈 Hide Transcripts' : `👁️ View Transcripts (${btn.textContent.match(/\d+/) ? btn.textContent.match(/\d+/)[0] : ''})`;
+        }
+      });
+    });
+
+    // Wire up delete history run buttons
+    document.querySelectorAll('.btn-delete-history-run').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const hid = btn.getAttribute('data-history-id');
+        const sid = btn.getAttribute('data-session-id');
+        const mname = btn.getAttribute('data-mosque-name');
+        if (!confirm('Are you sure you want to delete this recorded sermon history run?')) return;
+
+        try {
+          const dRes = await fetch(`/api/history/${encodeURIComponent(hid)}`, { method: 'DELETE' });
+          if (dRes.ok) {
+            openSessionHistoryModal(sid, mname);
+            loadAllSessionsList(); // update run count on session cards
+          } else {
+            alert('Failed to delete history run.');
+          }
+        } catch (err) {
+          alert('Delete error: ' + err.message);
+        }
+      });
+    });
+
+  } catch (err) {
+    if (histModalBody) {
+      histModalBody.innerHTML = `<div style="text-align: center; padding: 2rem; color: #fca5a5;">Error loading history: ${escapeHtml(err.message)}</div>`;
+    }
+  }
+}
+
+if (btnCloseHistModal) {
+  btnCloseHistModal.addEventListener('click', () => {
+    if (modalSessionHistory) modalSessionHistory.style.display = 'none';
+  });
+}
+
+if (btnHeaderHistory) {
+  btnHeaderHistory.addEventListener('click', () => {
+    if (!currentSessionId) return;
+    const mName = mosqueTitle ? mosqueTitle.textContent.replace(' — Pulpit Console', '').trim() : currentSessionId;
+    openSessionHistoryModal(currentSessionId, mName);
+  });
+}
+
+if (btnArchiveCurrentNow) {
+  btnArchiveCurrentNow.addEventListener('click', async () => {
+    const sid = btnArchiveCurrentNow.dataset.sessionId || currentSessionId;
+    if (!sid) return;
+    try {
+      btnArchiveCurrentNow.disabled = true;
+      btnArchiveCurrentNow.textContent = 'Archiving...';
+      const res = await fetch(`/api/session/${encodeURIComponent(sid)}/archive-current`, {
+        method: 'POST'
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const mName = mosqueTitle ? mosqueTitle.textContent.replace(' — Pulpit Console', '').trim() : sid;
+        await openSessionHistoryModal(sid, mName);
+        loadAllSessionsList();
+      } else {
+        alert(data.error || 'No active speech to archive in this session yet.');
+      }
+    } catch (err) {
+      alert('Error archiving session: ' + err.message);
+    } finally {
+      btnArchiveCurrentNow.disabled = false;
+      btnArchiveCurrentNow.textContent = '💾 Archive Current';
+    }
   });
 }
 
