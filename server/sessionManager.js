@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const QRCode = require('qrcode');
+const EventEmitter = require('events');
 
 const isVercel = !!process.env.VERCEL;
 const DATA_DIR = isVercel ? '/tmp' : path.join(__dirname, '../data');
@@ -20,8 +21,9 @@ try {
   console.warn('[Session] Notice on data directory creation:', err.message);
 }
 
-class SessionManager {
+class SessionManager extends EventEmitter {
   constructor() {
+    super();
     this.sessions = new Map();
     this.subscribers = new Map(); // sessionId -> Set of { ws, role, language, clientId }
     this.history = this.loadHistory();
@@ -524,6 +526,37 @@ class SessionManager {
     };
   }
 
+  /**
+   * Computes the list of distinct languages actively needed for the session room
+   * (Display TV target language + all languages selected by connected attendees)
+   */
+  getRequiredLanguages(sessionId) {
+    const session = this.getSession(sessionId);
+    const languages = new Set();
+    if (session) {
+      const tvLang = session.tvLanguage || session.primaryLanguage || 'en';
+      languages.add(tvLang);
+    } else {
+      languages.add('en');
+    }
+
+    const subs = this.subscribers.get(sessionId) || new Set();
+    for (const sub of subs) {
+      if (sub.role !== 'admin' && sub.language) {
+        languages.add(sub.language);
+      }
+    }
+
+    const activeHttp = this.getActiveHttpClients(sessionId);
+    for (const [_, info] of activeHttp.entries()) {
+      if (info.role !== 'admin' && info.language) {
+        languages.add(info.language);
+      }
+    }
+
+    return Array.from(languages);
+  }
+
   notifyStatsUpdate(sessionId) {
     const stats = this.getSessionStats(sessionId);
     this.broadcastToSession(sessionId, {
@@ -534,6 +567,65 @@ class SessionManager {
       type: 'SESSION_STATS',
       stats
     });
+
+    // Notify language gates synchronization
+    this.emit('languages_updated', {
+      sessionId,
+      languages: this.getRequiredLanguages(sessionId)
+    });
+  }
+
+  /**
+   * Relays live streaming tokens (sub-200ms word-by-word) to the TV and matching attendees
+   */
+  broadcastStreamingToken(sessionId, {
+    lang,
+    translatedChunk = '',
+    originalChunk = '',
+    isFinal = false,
+    timestamp = new Date().toISOString()
+  }) {
+    const subs = this.subscribers.get(sessionId);
+    if (!subs) return;
+
+    for (const sub of subs) {
+      if (sub.ws.readyState !== 1 /* OPEN */) continue;
+
+      const clientLang = sub.language || 'en';
+      if (sub.role === 'tv') {
+        const tvLang = sub.language || 'en';
+        if (tvLang === lang || (originalChunk && originalChunk.trim().length > 0)) {
+          sub.ws.send(JSON.stringify({
+            type: 'STREAMING_TOKEN',
+            lang,
+            translatedChunk: tvLang === lang ? translatedChunk : '',
+            originalChunk: originalChunk || '',
+            isFinal,
+            timestamp
+          }));
+        }
+      } else if (sub.role === 'attendee') {
+        if (clientLang === lang) {
+          sub.ws.send(JSON.stringify({
+            type: 'STREAMING_TOKEN',
+            lang,
+            translatedChunk,
+            originalChunk: '',
+            isFinal,
+            timestamp
+          }));
+        }
+      } else if (sub.role === 'admin') {
+        sub.ws.send(JSON.stringify({
+          type: 'STREAMING_TOKEN',
+          lang,
+          translatedChunk,
+          originalChunk,
+          isFinal,
+          timestamp
+        }));
+      }
+    }
   }
 
   /**

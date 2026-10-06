@@ -526,8 +526,94 @@ function handleIncomingSpeech({ arabic, translations, translated, ayah, timestam
     transObj = { [targetLang]: translated };
   }
 
+  // If a streaming paragraph is currently active on screen, finalize it in-place
+  const streamingArabic = arabicFeed.querySelector('.para-item.current.streaming');
+  const streamingTrans = transFeed.querySelector('.para-item.current.streaming');
+  let displayTrans = '';
+  if (typeof transObj === 'object' && transObj !== null) {
+    displayTrans = transObj[targetLang] || transObj.en || Object.values(transObj)[0] || '';
+  } else {
+    displayTrans = transObj || '';
+  }
+
+  if (streamingArabic || streamingTrans) {
+    if (streamingArabic && arabic) {
+      streamingArabic.classList.remove('streaming');
+      streamingArabic.textContent = arabic;
+    }
+    if (streamingTrans && displayTrans) {
+      streamingTrans.classList.remove('streaming');
+      streamingTrans.textContent = displayTrans;
+      if (isTvAudioEnabled && isLive) {
+        playTvBrowserAudio(displayTrans, targetLang);
+      }
+    }
+    recentFeedItems.push({ arabicText: arabic, transObj });
+    while (recentFeedItems.length > MAX_HISTORY) recentFeedItems.shift();
+    return;
+  }
+
   // Quran Ayah Overlay is DISABLED — just append to feeds directly
   appendToFeed(arabic, transObj, isLive);
+}
+
+/**
+ * Handle Sub-200ms Word-by-Word Streaming Tokens from Soniox
+ */
+function handleStreamingToken({ lang, translatedChunk = '', originalChunk = '', isFinal = false }) {
+  // 1. Arabic streaming column
+  if (originalChunk && originalChunk.trim().length > 0) {
+    let currentArabic = arabicFeed.querySelector('.para-item.current.streaming');
+    if (!currentArabic) {
+      arabicFeed.querySelectorAll('.para-item.current').forEach(el => {
+        el.classList.remove('current', 'streaming');
+        el.classList.add('history');
+      });
+      currentArabic = document.createElement('div');
+      currentArabic.className = 'para-item current streaming';
+      arabicFeed.appendChild(currentArabic);
+    }
+    currentArabic.textContent = (currentArabic.textContent ? currentArabic.textContent + ' ' : '') + originalChunk.trim();
+    while (arabicFeed.children.length > MAX_HISTORY) {
+      arabicFeed.firstElementChild.remove();
+    }
+    if (arabicFeed.parentElement) {
+      arabicFeed.parentElement.scrollTo({ top: arabicFeed.parentElement.scrollHeight, behavior: 'smooth' });
+    }
+  }
+
+  // 2. Translation streaming column (for active targetLang)
+  if (translatedChunk && translatedChunk.trim().length > 0) {
+    let currentTrans = transFeed.querySelector('.para-item.current.streaming');
+    if (!currentTrans) {
+      transFeed.querySelectorAll('.para-item.current').forEach(el => {
+        el.classList.remove('current', 'streaming');
+        el.classList.add('history');
+      });
+      currentTrans = document.createElement('div');
+      currentTrans.className = 'para-item current streaming';
+      transFeed.appendChild(currentTrans);
+    }
+    currentTrans.textContent = (currentTrans.textContent ? currentTrans.textContent + ' ' : '') + translatedChunk.trim();
+    while (transFeed.children.length > MAX_HISTORY) {
+      transFeed.firstElementChild.remove();
+    }
+    if (transFeed.parentElement) {
+      transFeed.parentElement.scrollTo({ top: transFeed.parentElement.scrollHeight, behavior: 'smooth' });
+    }
+  }
+
+  if (isFinal) {
+    const currentArabic = arabicFeed.querySelector('.para-item.current.streaming');
+    if (currentArabic) currentArabic.classList.remove('streaming');
+    const currentTrans = transFeed.querySelector('.para-item.current.streaming');
+    if (currentTrans) {
+      currentTrans.classList.remove('streaming');
+      if (isTvAudioEnabled && currentTrans.textContent) {
+        playTvBrowserAudio(currentTrans.textContent, targetLang);
+      }
+    }
+  }
 }
 
 /**
@@ -662,6 +748,9 @@ function connectWebSocket() {
           stageStatusBanner.style.background = 'rgba(239, 68, 68, 0.25)';
           stageStatusBanner.style.color = '#fca5a5';
         }
+      }
+      if (data.type === 'STREAMING_TOKEN') {
+        handleStreamingToken(data);
       }
       if (data.type === 'LIVE_SUBTITLE') {
         // Mark this timestamp as seen so the HTTP fallback won't re-render it

@@ -37,6 +37,7 @@ const translationService = new TranslationService(openrouterKey, process.env.DEE
 const ttsService = new TTSService(process.env.CARTESIA_API_KEY);
 const sttService = new STTService(process.env.GLADIA_API_KEYS || process.env.GLADIA_API_KEY);
 const quranAiDetector = new QuranAIDetector(openrouterKey, openrouterModel);
+const sonioxService = require('./services/sonioxService');
 
 // Active session tracking for STT distribution
 let activeLiveSessionId = 'jumuah-live-4b2c1d';
@@ -175,6 +176,57 @@ sttService.on('translation', async (data) => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Soniox Dynamic Language Gates Integration
+// ---------------------------------------------------------------------------
+// Synchronize open Soniox language gates when attendee/TV language selection changes
+sessionManager.on('languages_updated', ({ sessionId, languages }) => {
+  if (sessionId === activeLiveSessionId && sonioxService.isConfigured()) {
+    sonioxService.syncGates(languages);
+  }
+});
+
+// Broadcast real-time streaming tokens (sub-200ms word-by-word)
+sonioxService.on('token_stream', ({ lang, translatedChunk, originalChunk, isFinal, timestamp }) => {
+  sessionManager.broadcastStreamingToken(activeLiveSessionId, {
+    lang,
+    translatedChunk,
+    originalChunk,
+    isFinal,
+    timestamp
+  });
+});
+
+// When a sentence is finalized by Soniox, run Quran Ayah check and commit to history
+sonioxService.on('sentence_finalized', async ({ lang, translatedText, originalText, timestamp }) => {
+  const targetSessionId = activeLiveSessionId;
+  const session = sessionManager.getSession(targetSessionId);
+  if (!session || session.status !== 'active') return;
+
+  let ayahMatch = null;
+  if (originalText && originalText.trim().length > 0) {
+    try {
+      ayahMatch = await quranAiDetector.detect(originalText.trim());
+      if (ayahMatch) {
+        console.log(`[Soniox -> Quran Match]: ${ayahMatch.reference} (${ayahMatch.confidence}%)`);
+      }
+    } catch (_) {}
+  }
+
+  const translations = { [lang]: translatedText };
+  if (ayahMatch && ayahMatch.translations) {
+    Object.assign(translations, ayahMatch.translations);
+  }
+
+  sessionManager.broadcastTranslations(targetSessionId, {
+    arabicText: originalText,
+    translations,
+    ayahData: ayahMatch,
+    audioByLanguage: {},
+    timestamp
+  });
+});
+
 
 // Admin / Imam Authentication System
 const ADMIN_PIN = process.env.ADMIN_PIN || 'mosq2026';
@@ -222,8 +274,10 @@ app.get('/api/status', (req, res) => {
       openrouterModel,
       deeplTranslation: isKeyActive(process.env.DEEPL_API_KEY),
       quranAiModel: isKeyActive(openrouterKey),
-      cartesiaTTS: isKeyActive(process.env.CARTESIA_API_KEY)
+      cartesiaTTS: isKeyActive(process.env.CARTESIA_API_KEY),
+      sonioxStreaming: sonioxService.isConfigured()
     },
+    sonioxGates: sonioxService.getStatus(),
     activeSessionId: activeLiveSessionId,
     timestamp: new Date().toISOString()
   });
@@ -492,6 +546,9 @@ wss.on('connection', (ws) => {
     try {
       // Check if message is binary audio chunk from microphone
       if (Buffer.isBuffer(raw)) {
+        if (sonioxService.isConfigured()) {
+          sonioxService.broadcastAudio(raw);
+        }
         sttService.sendAudioChunk(raw);
         return;
       }
@@ -557,6 +614,9 @@ wss.on('connection', (ws) => {
         // Base64 audio chunk from browser WebRTC/MediaRecorder
         if (msg.base64Audio) {
           const audioBuffer = Buffer.from(msg.base64Audio, 'base64');
+          if (sonioxService.isConfigured()) {
+            sonioxService.broadcastAudio(audioBuffer);
+          }
           sttService.sendAudioChunk(audioBuffer);
         }
       }

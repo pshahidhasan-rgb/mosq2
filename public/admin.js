@@ -835,6 +835,26 @@ async function startMicrophone() {
       micLevelBar.style.width = `${Math.min(avg * 2.5, 100)}%`;
     }, 100);
 
+    // Stream raw 16kHz PCM audio over WebSocket for Soniox & real-time audio pipeline
+    try {
+      const bufferSize = 2048;
+      micAudioProcessor = audioContext.createScriptProcessor(bufferSize, 1, 1);
+      source.connect(micAudioProcessor);
+      micAudioProcessor.connect(audioContext.destination);
+
+      micAudioProcessor.onaudioprocess = (e) => {
+        if (sessionStatus !== 'active' || !ws || ws.readyState !== WebSocket.OPEN) return;
+        const inputData = e.inputBuffer.getChannelData(0);
+        const inputSampleRate = audioContext.sampleRate;
+        const pcm16 = downsampleTo16kPCM(inputData, inputSampleRate);
+        if (pcm16 && pcm16.byteLength > 0) {
+          ws.send(pcm16.buffer);
+        }
+      };
+    } catch (procErr) {
+      console.warn('[Live Mic] Audio processor setup notice:', procErr.message);
+    }
+
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       alert('Live speech recognition requires Google Chrome or Safari.');
       return;
@@ -923,8 +943,34 @@ async function startMicrophone() {
   }
 }
 
+function downsampleTo16kPCM(input, inputRate, targetRate = 16000) {
+  if (inputRate === targetRate) {
+    const output = new Int16Array(input.length);
+    for (let i = 0; i < input.length; i++) {
+      const s = Math.max(-1, Math.min(1, input[i]));
+      output[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    }
+    return output;
+  }
+  const ratio = inputRate / targetRate;
+  const newLength = Math.round(input.length / ratio);
+  const output = new Int16Array(newLength);
+  for (let i = 0; i < newLength; i++) {
+    const srcIndex = Math.min(Math.round(i * ratio), input.length - 1);
+    const s = Math.max(-1, Math.min(1, input[srcIndex]));
+    output[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+  }
+  return output;
+}
+
+let micAudioProcessor = null;
+
 function stopMicrophone() {
   micActive = false;
+  if (micAudioProcessor) {
+    try { micAudioProcessor.disconnect(); } catch (_) {}
+    micAudioProcessor = null;
+  }
   if (speechRecognition) {
     try { speechRecognition.stop(); } catch (e) {}
     speechRecognition = null;

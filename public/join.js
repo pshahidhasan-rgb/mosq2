@@ -397,6 +397,41 @@ function streamWordsToMobileCard(element, fullText, delayMs = 85, onComplete = n
   return cleanup;
 }
 
+let currentStreamingCard = null;
+
+function handleStreamingTokenMobile({ lang, translatedChunk = '', isFinal = false }) {
+  if (lang !== currentLanguage || !translatedChunk || translatedChunk.trim().length === 0) return;
+
+  if (!currentStreamingCard) {
+    const card = document.createElement('div');
+    card.className = 'sermon-card streaming';
+    card.innerHTML = `
+      <div class="card-brand-glyph">🎙️</div>
+      <div class="card-translated-text"></div>
+      <span class="card-tag-pill">Aa LIVE STREAM</span>
+    `;
+    currentStreamingCard = card;
+    mobileCardsFeed.insertBefore(card, activeListeningCard);
+  }
+
+  const transContainer = currentStreamingCard.querySelector('.card-translated-text');
+  if (transContainer) {
+    transContainer.textContent = (transContainer.textContent ? transContainer.textContent + ' ' : '') + translatedChunk.trim();
+  }
+  mobileCardsFeed.scrollTop = mobileCardsFeed.scrollHeight;
+
+  if (isFinal) {
+    if (currentStreamingCard) {
+      currentStreamingCard.classList.remove('streaming');
+      const finalText = transContainer ? transContainer.textContent : '';
+      if (isAudioEnabled && finalText) {
+        speakSpeech(finalText, currentLanguage);
+      }
+      currentStreamingCard = null;
+    }
+  }
+}
+
 // ─── RENDERING SERMON CARDS (Word-by-Word Live Streaming) ───
 function renderSermonCard({ arabic, translations, translated, ayah, timestamp }, isLive = false) {
   if (!arabic && !translated) return;
@@ -409,6 +444,16 @@ function renderSermonCard({ arabic, translations, translated, ayah, timestamp },
     displayText = translations[currentLanguage] || translations['en'] || Object.values(translations)[0] || translated || '';
   } else {
     displayText = translated || '';
+  }
+
+  // If streaming card was active, promote it in-place
+  if (currentStreamingCard) {
+    currentStreamingCard.classList.remove('streaming');
+    const transContainer = currentStreamingCard.querySelector('.card-translated-text');
+    if (transContainer && displayText) transContainer.textContent = displayText;
+    if (isAudioEnabled && displayText) speakSpeech(displayText, currentLanguage);
+    currentStreamingCard = null;
+    return;
   }
 
   const card = document.createElement('div');
@@ -529,6 +574,9 @@ function connectWebSocket() {
       if (data.type === 'SESSION_DELETED') {
         clearMobileCards();
         updateMobileStatus('ended', 'Session Concluded');
+      }
+      if (data.type === 'STREAMING_TOKEN') {
+        handleStreamingTokenMobile(data);
       }
       if (data.type === 'LIVE_SUBTITLE') {
         const key = data.timestamp || `${data.arabic}_${Date.now()}`;
