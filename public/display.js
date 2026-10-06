@@ -561,9 +561,6 @@ function handleIncomingSpeech({ arabic, translations, translated, ayah, timestam
  * Handle Sub-200ms Word-by-Word Streaming Tokens from Soniox
  */
 function handleStreamingToken({ lang, translatedChunk = '', originalChunk = '', isFinal = false }) {
-  // Ignore streaming tokens destined for a different target language
-  if (lang && targetLang && lang !== targetLang) return;
-
   // 1. Arabic streaming column
   if (originalChunk && originalChunk.trim().length > 0) {
     let currentArabic = arabicFeed.querySelector('.para-item.current.streaming');

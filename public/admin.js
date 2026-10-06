@@ -760,21 +760,19 @@ btnSimulate.addEventListener('click', async () => {
       await fetch(`/api/session/${currentSessionId}/simulate/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ intervalMs: 95 })
+        body: JSON.stringify({ intervalMs: 3800 })
       });
     } catch (e) {}
     isSimulating = true;
     btnSimulate.textContent = '⏹ Stop Simulation';
     btnSimulate.className = 'btn btn-danger';
-    updateEngineStatus();
   } else {
     try {
       await fetch(`/api/session/${currentSessionId}/simulate/stop`, { method: 'POST' });
     } catch (e) {}
     isSimulating = false;
-    btnSimulate.textContent = '⚡ Simulate Soniox';
+    btnSimulate.textContent = '⚡ Simulate Demo';
     btnSimulate.className = 'btn btn-accent';
-    updateEngineStatus();
   }
 });
 
@@ -892,12 +890,7 @@ async function startMicrophone() {
           lastSentTime = now;
           lastProcessedIndex = i;
 
-          // If Soniox live cloud STT is active, microphone PCM is sent directly over WS
-          if (isSonioxCloudActive) {
-            return;
-          }
-
-          console.log('[Live Mic Recognized -> Soniox Pipeline]:', transcript);
+          console.log('[Live Mic Recognized]:', transcript);
           try {
             await fetch(`/api/session/${currentSessionId}/inject-text`, {
               method: 'POST',
@@ -1033,8 +1026,6 @@ async function initConsoleSession(sessionId) {
 
   connectWebSocket(sessionId);
   startAdminStatsSync();
-  updateEngineStatus();
-  setInterval(updateEngineStatus, 4000);
 }
 
 let adminStatsSyncInterval = null;
@@ -1112,109 +1103,13 @@ function connectWebSocket(sessionId) {
         if (data.tvAudioEnabled !== undefined) syncTvAudioUI(data.tvAudioEnabled);
         if (data.tvShowQr !== undefined) syncTvQrUI(data.tvShowQr);
       }
-      if (data.type === 'STREAMING_TOKEN') {
-        handleAdminStreamingToken(data);
-      }
-      if (data.type === 'LIVE_SUBTITLE') {
-        if (!currentAdminStreamingItem) {
-          addTranscriptEntry(data);
-        }
-      }
+      if (data.type === 'LIVE_SUBTITLE') addTranscriptEntry(data);
     } catch (e) {}
   };
 
   ws.onclose = () => {
     setTimeout(() => connectWebSocket(sessionId), 3000);
   };
-}
-
-let isSonioxCloudActive = false;
-let currentAdminStreamingItem = null;
-let currentAdminStreamingTextSpan = null;
-
-function handleAdminStreamingToken({ originalChunk, isFinal }) {
-  if (!originalChunk || !originalChunk.trim()) return;
-
-  if (!currentAdminStreamingItem) {
-    transcriptItemsCount++;
-    if (transCount) transCount.textContent = `${transcriptItemsCount} lines`;
-
-    currentAdminStreamingItem = document.createElement('div');
-    currentAdminStreamingItem.style.cssText = 'padding: 0.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-family: var(--font-arabic); font-size: 1.15rem; direction: rtl; text-align: right; color: #f8fafc;';
-
-    currentAdminStreamingTextSpan = document.createElement('span');
-    currentAdminStreamingItem.appendChild(currentAdminStreamingTextSpan);
-
-    if (transcriptFeed.children[0] && transcriptFeed.children[0].textContent.includes('Spoken Arabic')) {
-      transcriptFeed.innerHTML = '';
-    }
-    transcriptFeed.prepend(currentAdminStreamingItem);
-  }
-
-  currentAdminStreamingTextSpan.textContent = (currentAdminStreamingTextSpan.textContent ? currentAdminStreamingTextSpan.textContent + ' ' : '') + originalChunk.trim();
-
-  if (isFinal) {
-    currentAdminStreamingItem = null;
-    currentAdminStreamingTextSpan = null;
-  }
-}
-
-async function updateEngineStatus() {
-  const engineBadgeText = document.getElementById('engine-badge-text');
-  const engineDot = document.getElementById('engine-dot');
-  const engineTitleText = document.getElementById('engine-title-text');
-  const engineSubtitleText = document.getElementById('engine-subtitle-text');
-  const engineStatusPill = document.getElementById('engine-status-pill');
-  const engineCostPill = document.getElementById('engine-cost-pill');
-
-  try {
-    const res = await fetch('/api/status');
-    if (!res.ok) return;
-    const data = await res.json();
-    const gates = data.sonioxGates || {};
-    isSonioxCloudActive = Boolean(gates.operational);
-
-    if (gates.operational) {
-      if (engineBadgeText) engineBadgeText.textContent = '⚡ Engine: Soniox Live Cloud';
-      if (engineDot) engineDot.style.background = '#10b981';
-      if (engineTitleText) engineTitleText.textContent = 'Soniox Cloud Streaming Active (Sub-200ms Live STT & Translation)';
-      if (engineSubtitleText) engineSubtitleText.textContent = 'Hardware mic streams PCM audio directly to Soniox Cloud WebSockets.';
-      if (engineStatusPill) {
-        engineStatusPill.textContent = '● Cloud API Key Active';
-        engineStatusPill.style.color = '#34d399';
-        engineStatusPill.style.borderColor = 'rgba(16, 185, 129, 0.4)';
-      }
-      if (engineCostPill) {
-        engineCostPill.textContent = `${gates.activeGateCount || 0} Gates (${gates.estimatedHourlyCost || '$0.00/hr'})`;
-      }
-    } else if (gates.isSimulating) {
-      if (engineBadgeText) engineBadgeText.textContent = '⚡ Engine: Soniox Streaming (<100ms)';
-      if (engineDot) engineDot.style.background = '#34d399';
-      if (engineTitleText) engineTitleText.textContent = 'Soniox Real-Time Word-by-Word Streaming Running';
-      if (engineSubtitleText) engineSubtitleText.textContent = 'Sub-100ms token streaming active across TV display and attendee earbuds.';
-      if (engineStatusPill) {
-        engineStatusPill.textContent = '● Streaming Active (<100ms)';
-        engineStatusPill.style.color = '#34d399';
-        engineStatusPill.style.borderColor = 'rgba(16, 185, 129, 0.4)';
-      }
-      if (engineCostPill) {
-        engineCostPill.textContent = `${gates.activeGateCount || 0} Gates ($0.00/hr)`;
-      }
-    } else {
-      if (engineBadgeText) engineBadgeText.textContent = '⚡ Engine: Soniox Dynamic Gates';
-      if (engineDot) engineDot.style.background = '#38bdf8';
-      if (engineTitleText) engineTitleText.textContent = 'Soniox Real-Time Streaming Architecture Ready';
-      if (engineSubtitleText) engineSubtitleText.textContent = 'Sub-200ms pipeline ready. Click "Simulate Soniox" or provide SONIOX_API_KEY in .env for live cloud STT.';
-      if (engineStatusPill) {
-        engineStatusPill.textContent = '● Pipeline Ready';
-        engineStatusPill.style.color = '#38bdf8';
-        engineStatusPill.style.borderColor = 'rgba(56, 189, 248, 0.4)';
-      }
-      if (engineCostPill) {
-        engineCostPill.textContent = '0 Cloud Gates ($0.00/hr)';
-      }
-    }
-  } catch (e) {}
 }
 
 function addTranscriptEntry({ arabic, translations, ayah }) {

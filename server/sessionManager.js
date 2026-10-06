@@ -588,21 +588,17 @@ class SessionManager extends EventEmitter {
     const subs = this.subscribers.get(sessionId);
     if (!subs) return;
 
-    const session = this.getSession(sessionId);
-    const defaultLang = session ? session.primaryLanguage : 'en';
-
     for (const sub of subs) {
       if (sub.ws.readyState !== 1 /* OPEN */) continue;
 
-      const clientLang = sub.language || defaultLang;
+      const clientLang = sub.language || 'en';
       if (sub.role === 'tv') {
-        const tvLang = sub.language || defaultLang;
-        // Only deliver tokens destined for TV's current language (with original speech)
-        if (tvLang === lang) {
+        const tvLang = sub.language || 'en';
+        if (tvLang === lang || (originalChunk && originalChunk.trim().length > 0)) {
           sub.ws.send(JSON.stringify({
             type: 'STREAMING_TOKEN',
             lang,
-            translatedChunk: translatedChunk || '',
+            translatedChunk: tvLang === lang ? translatedChunk : '',
             originalChunk: originalChunk || '',
             isFinal,
             timestamp
@@ -660,33 +656,18 @@ class SessionManager extends EventEmitter {
   }) {
     const session = this.getSession(sessionId);
     if (session) {
-      const lastTranscript = session.transcripts && session.transcripts.length > 0
-        ? session.transcripts[session.transcripts.length - 1]
-        : null;
-
-      const isSameRecentSentence = lastTranscript && (
-        lastTranscript.arabic === arabicText ||
-        (lastTranscript.arabic && arabicText && lastTranscript.arabic.slice(0, 15) === arabicText.slice(0, 15))
-      );
-
-      if (isSameRecentSentence) {
-        // Merge translations for this sentence across language gates
-        lastTranscript.translations = { ...lastTranscript.translations, ...translations };
-        if (ayahData && !lastTranscript.ayah) lastTranscript.ayah = ayahData;
-      } else {
-        session.transcripts.push({
-          arabic: arabicText,
-          translations: { ...translations },
-          ayah: ayahData || null,
+      session.transcripts.push({
+        arabic: arabicText,
+        translations,
+        ayah: ayahData || null,
+        timestamp
+      });
+      if (ayahData) {
+        session.detectedAyahs.push({
+          reference: ayahData.reference,
+          arabicUthmani: ayahData.arabicUthmani,
           timestamp
         });
-        if (ayahData) {
-          session.detectedAyahs.push({
-            reference: ayahData.reference,
-            arabicUthmani: ayahData.arabicUthmani,
-            timestamp
-          });
-        }
       }
     }
 
@@ -699,41 +680,34 @@ class SessionManager extends EventEmitter {
       if (sub.role === 'tv') {
         // TV display gets Arabic + full multi-language translations map so client can display any selected language
         const tvLang = sub.language || (session ? session.primaryLanguage : 'en');
-        const translatedText = (translations && translations[tvLang]) || (translations && translations.en);
-
-        // Only send LIVE_SUBTITLE to TV if target language is present or no specific language restriction
-        if (translatedText || !translations || Object.keys(translations).length === 0) {
-          sub.ws.send(JSON.stringify({
-            type: 'LIVE_SUBTITLE',
-            arabic: arabicText,
-            translations,
-            translated: translatedText || arabicText,
-            language: tvLang,
-            ayah: ayahData || null,
-            timestamp
-          }));
-        }
+        sub.ws.send(JSON.stringify({
+          type: 'LIVE_SUBTITLE',
+          arabic: arabicText,
+          translations,
+          translated: (translations && translations[tvLang]) || (translations && translations.en) || arabicText,
+          language: tvLang,
+          ayah: ayahData || null,
+          timestamp
+        }));
       } else if (sub.role === 'attendee') {
         // Attendee receives their chosen language + audio buffer
         const attendeeLang = sub.language || 'en';
-        const translatedText = (translations && translations[attendeeLang]) || (translations && translations.en);
+        const translatedText = (translations && translations[attendeeLang]) || (translations && translations.en) || arabicText;
         const audio = audioByLanguage[attendeeLang] || null;
 
-        if (translatedText || !translations || Object.keys(translations).length === 0) {
-          sub.ws.send(JSON.stringify({
-            type: 'LIVE_SUBTITLE',
-            arabic: arabicText,
-            translations,
-            translated: translatedText || arabicText,
-            language: attendeeLang,
-            ayah: ayahData ? {
-              ...ayahData,
-              translation: ayahData.translations[attendeeLang] || ayahData.translations.en
-            } : null,
-            audio,
-            timestamp
-          }));
-        }
+        sub.ws.send(JSON.stringify({
+          type: 'LIVE_SUBTITLE',
+          arabic: arabicText,
+          translations,
+          translated: translatedText,
+          language: attendeeLang,
+          ayah: ayahData ? {
+            ...ayahData,
+            translation: ayahData.translations[attendeeLang] || ayahData.translations.en
+          } : null,
+          audio,
+          timestamp
+        }));
       } else if (sub.role === 'admin') {
         // Admin gets the full packet with ayah detection details
         sub.ws.send(JSON.stringify({
