@@ -178,56 +178,52 @@ class SonioxGateManager extends EventEmitter {
   }
 
   /**
-   * Parse Soniox streaming tokens and dispatch
+   * Parse Soniox streaming tokens and dispatch immediately (per-token for sub-200ms latency)
    */
   handleSonioxMessage(gate, data) {
     if (!data) return;
 
-    // Check for tokens array
+    // Soninox returns tokens individually via data.tokens or data.result.tokens
     const tokens = data.tokens || (data.result && data.result.tokens) || [];
     if (!Array.isArray(tokens) || tokens.length === 0) return;
 
-    let hasTranslation = false;
-    let hasOriginal = false;
-    let translatedWords = [];
-    let originalWords = [];
-    let isFinal = false;
-
+    // Emit each token IMMEDIATELY as it arrives — no batching
     for (const token of tokens) {
       const text = token.text || '';
       const status = token.translation_status || 'none';
-      if (token.is_final) isFinal = true;
+      const isFinal = Boolean(token.is_final);
 
       if (status === 'translation') {
-        hasTranslation = true;
-        translatedWords.push(text);
+        // Word-by-word translation token — stream immediately
+        this.emit('token_stream', {
+          lang: gate.lang,
+          translatedChunk: text,
+          originalChunk: '',
+          isFinal,
+          token,
+          timestamp: new Date().toISOString()
+        });
       } else if (status === 'original' || status === 'none') {
-        hasOriginal = true;
-        originalWords.push(text);
+        // Original (Arabic) word token — stream immediately
+        this.emit('token_stream', {
+          lang: gate.lang,
+          translatedChunk: '',
+          originalChunk: text,
+          isFinal,
+          token,
+          timestamp: new Date().toISOString()
+        });
       }
-    }
 
-    const translatedTextChunk = translatedWords.join('');
-    const originalTextChunk = originalWords.join('');
-
-    if (hasTranslation || hasOriginal) {
-      this.emit('token_stream', {
-        lang: gate.lang,
-        translatedChunk: translatedTextChunk,
-        originalChunk: originalTextChunk,
-        isFinal: Boolean(isFinal),
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    if (isFinal) {
-      // Sentence finalized
-      this.emit('sentence_finalized', {
-        lang: gate.lang,
-        translatedText: translatedTextChunk,
-        originalText: originalTextChunk,
-        timestamp: new Date().toISOString()
-      });
+      // Sentence boundary — fire finalized event
+      if (isFinal) {
+        this.emit('sentence_finalized', {
+          lang: gate.lang,
+          finalText: text,
+          originalText: status === 'original' || status === 'none' ? text : '',
+          timestamp: new Date().toISOString()
+        });
+      }
     }
   }
 

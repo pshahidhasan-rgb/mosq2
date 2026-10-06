@@ -131,6 +131,11 @@ async function processTranscript({ text, isFinal, source, sessionId }) {
 }
 
 sttService.on('transcript', (data) => {
+  // Skip Gladia's slow transcript path when Sonnox is active (Sonox handles streaming)
+  if (sonioxService.isConfigured()) {
+    console.log('[Sonox Active] Skipping Gladia transcript pipeline');
+    return;
+  }
   processTranscript(data).catch(err => console.error('[STT] Processing error:', err.message));
 });
 
@@ -548,8 +553,9 @@ wss.on('connection', (ws) => {
       if (Buffer.isBuffer(raw)) {
         if (sonioxService.isConfigured()) {
           sonioxService.broadcastAudio(raw);
+        } else {
+          sttService.sendAudioChunk(raw);
         }
-        sttService.sendAudioChunk(raw);
         return;
       }
 
@@ -616,8 +622,9 @@ wss.on('connection', (ws) => {
           const audioBuffer = Buffer.from(msg.base64Audio, 'base64');
           if (sonioxService.isConfigured()) {
             sonioxService.broadcastAudio(audioBuffer);
+          } else {
+            sttService.sendAudioChunk(audioBuffer);
           }
-          sttService.sendAudioChunk(audioBuffer);
         }
       }
 

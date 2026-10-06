@@ -65,30 +65,33 @@ async function runSonioxGateTests() {
   assert.strictEqual(sonioxService.activeGates.get('ur').lastSent, testPcmChunk, 'Urdu gate received audio');
   console.log('  ✔ Audio successfully fanned out in parallel to all active gates.');
 
-  // Test 5: Token stream parsing
-  console.log('\n[Test 5] Testing Soniox streaming token parsing...');
-  let receivedTokenStream = null;
+  // Test 5: Token stream parsing — verifies per-token emission for sub-200ms streaming
+  console.log('\n[Test 5] Testing Sonox per-token streaming emission...');
+  const receivedTokenStreams = [];
   let receivedFinalized = null;
 
-  sonioxService.once('token_stream', (data) => { receivedTokenStream = data; });
+  sonioxService.on('token_stream', (data) => { receivedTokenStreams.push(data); });
   sonioxService.once('sentence_finalized', (data) => { receivedFinalized = data; });
 
   const enGate = sonioxService.activeGates.get('en');
+
+  // First token arrives (translation word)
   sonioxService.handleSonioxMessage(enGate, {
-    tokens: [
-      { text: 'Indeed, ', translation_status: 'translation', is_final: false },
-      { text: 'إن ', translation_status: 'original', is_final: false }
-    ]
+    tokens: [{ text: 'Indeed, ', translation_status: 'translation', is_final: false }]
   });
 
-  assert(receivedTokenStream !== null, 'token_stream event should have fired');
-  assert.strictEqual(receivedTokenStream.lang, 'en');
-  assert.strictEqual(receivedTokenStream.translatedChunk, 'Indeed, ');
-  assert.strictEqual(receivedTokenStream.originalChunk, 'إن ');
-  assert.strictEqual(receivedTokenStream.isFinal, false);
-  console.log('  ✔ Word-by-word streaming token emitted correctly.');
+  // Second token arrives (original Arabic word) — emitted separately for real-time streaming
+  sonioxService.handleSonioxMessage(enGate, {
+    tokens: [{ text: 'إن ', translation_status: 'original', is_final: false }]
+  });
 
-  // Final sentence completion
+  assert(receivedTokenStreams.length >= 2, 'Both per-token streams should have fired independently');
+  assert.strictEqual(receivedTokenStreams[0].lang, 'en');
+  assert.strictEqual(receivedTokenStreams[0].translatedChunk, 'Indeed, ');
+  assert.strictEqual(receivedTokenStreams[1].originalChunk, 'إن ');
+  console.log('  ✔ Per-token streaming emission verified (' + receivedTokenStreams.length + ' tokens emitted independently).');
+
+  // Final sentence completion token
   sonioxService.handleSonioxMessage(enGate, {
     tokens: [
       { text: 'with hardship comes ease.', translation_status: 'translation', is_final: true },
@@ -97,8 +100,11 @@ async function runSonioxGateTests() {
   });
 
   assert(receivedFinalized !== null, 'sentence_finalized event should have fired');
-  assert.strictEqual(receivedFinalized.translatedText, 'with hardship comes ease.');
+  assert.strictEqual(receivedFinalized.finalText, 'with hardship comes ease.');
   console.log('  ✔ Sentence finalized event emitted correctly.');
+
+  // Clean up the listener to avoid interference
+  sonioxService.removeAllListeners('token_stream');
 
   // Clean up
   sonioxService.closeAllGates();
