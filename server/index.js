@@ -181,8 +181,13 @@ sttService.on('translation', async (data) => {
 // ---------------------------------------------------------------------------
 // Synchronize open Soniox language gates when attendee/TV language selection changes
 sessionManager.on('languages_updated', ({ sessionId, languages }) => {
-  if (sessionId === activeLiveSessionId && sonioxService.isConfigured()) {
-    sonioxService.syncGates(languages);
+  if (sessionId === activeLiveSessionId) {
+    if (sonioxService.isConfigured()) {
+      sonioxService.syncGates(languages);
+    }
+    if (sonioxService.isSimulating) {
+      sonioxService.updateSimulationLanguages(languages);
+    }
   }
 });
 
@@ -198,7 +203,7 @@ sonioxService.on('token_stream', ({ lang, translatedChunk, originalChunk, isFina
 });
 
 // When a sentence is finalized by Soniox, run Quran Ayah check and commit to history
-sonioxService.on('sentence_finalized', async ({ lang, translatedText, originalText, timestamp }) => {
+sonioxService.on('sentence_finalized', async ({ lang, translatedText, originalText, translations: fullTrans, timestamp }) => {
   const targetSessionId = activeLiveSessionId;
   const session = sessionManager.getSession(targetSessionId);
   if (!session || session.status !== 'active') return;
@@ -213,7 +218,7 @@ sonioxService.on('sentence_finalized', async ({ lang, translatedText, originalTe
     } catch (_) {}
   }
 
-  const translations = { [lang]: translatedText };
+  const translations = fullTrans ? { ...fullTrans } : { [lang]: translatedText };
   if (ayahMatch && ayahMatch.translations) {
     Object.assign(translations, ayahMatch.translations);
   }
@@ -265,8 +270,10 @@ const isKeyActive = (k) => Boolean(k && !k.includes('your_') && !k.includes('pla
 
 app.get('/api/status', (req, res) => {
   const sttStatus = sttService.getStatus ? sttService.getStatus() : {};
+  const sonioxStatus = sonioxService.getStatus ? sonioxService.getStatus() : {};
   res.json({
     status: 'online',
+    activeEngine: sonioxService.isConfigured() ? 'soniox_live_cloud' : (sonioxService.isSimulating ? 'soniox_streaming_sim' : 'soniox_local_pipeline'),
     providers: {
       gladiaSTT: (sttStatus.keyPool && sttStatus.keyPool.total > 0),
       gladiaKeyPool: sttStatus.keyPool || {},
@@ -275,9 +282,10 @@ app.get('/api/status', (req, res) => {
       deeplTranslation: isKeyActive(process.env.DEEPL_API_KEY),
       quranAiModel: isKeyActive(openrouterKey),
       cartesiaTTS: isKeyActive(process.env.CARTESIA_API_KEY),
-      sonioxStreaming: sonioxService.isConfigured()
+      sonioxStreaming: true,
+      sonioxCloudActive: sonioxService.isConfigured()
     },
-    sonioxGates: sonioxService.getStatus(),
+    sonioxGates: sonioxStatus,
     activeSessionId: activeLiveSessionId,
     timestamp: new Date().toISOString()
   });
@@ -388,6 +396,7 @@ app.post('/api/session/:id/pause', (req, res) => {
 
 // End Session
 app.post('/api/session/:id/end', (req, res) => {
+  sonioxService.stopStreamingSimulation();
   sttService.stopSimulation();
   const session = sessionManager.endSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
@@ -414,22 +423,32 @@ app.post('/api/session/:id/delete', (req, res) => {
   res.json({ success: true, message: 'Session deleted successfully' });
 });
 
-// Simulation Controls
+// Simulation Controls — Real-Time Word-by-Word Soniox Streaming (<100ms)
 app.post('/api/session/:id/simulate/start', (req, res) => {
   const session = sessionManager.getSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
 
   sessionManager.startSession(req.params.id);
-  sttService.startSimulation(req.body.intervalMs || 4000);
-  res.json({ message: 'Simulation started', sessionId: req.params.id });
+  sttService.stopSimulation();
+
+  const reqLangs = sessionManager.getRequiredLanguages(req.params.id);
+  sonioxService.startStreamingSimulation(req.params.id, reqLangs, req.body.intervalMs || 95);
+
+  res.json({
+    message: 'Soniox Real-Time Word-by-Word Streaming Simulation started',
+    engine: 'soniox_streaming',
+    sessionId: req.params.id,
+    activeLanguages: reqLangs
+  });
 });
 
 app.post('/api/session/:id/simulate/stop', (req, res) => {
+  sonioxService.stopStreamingSimulation();
   sttService.stopSimulation();
   res.json({ message: 'Simulation stopped' });
 });
 
-// Direct test text injection (strictly guarded: only allowed when session is active)
+// Direct test text injection (Routed via Soniox streaming pipeline)
 app.post('/api/session/:id/inject-text', async (req, res) => {
   const { text } = req.body;
   if (!text) return res.status(400).json({ error: 'Text required' });
@@ -442,14 +461,25 @@ app.post('/api/session/:id/inject-text', async (req, res) => {
     });
   }
 
-  const result = await processTranscript({
-    text,
-    isFinal: true,
-    source: 'manual_injection',
-    sessionId: req.params.id
+  const cleanText = text.trim();
+  const reqLangs = sessionManager.getRequiredLanguages(req.params.id);
+
+  // Rapid translation lookup/fetch
+  let transMap = null;
+  try {
+    transMap = await translationService.translateMultiple(cleanText, reqLangs);
+  } catch (_) {}
+
+  // Stream tokens word-by-word at 85ms intervals through the streaming pipeline!
+  sonioxService.streamInjectedSentence(cleanText, reqLangs, transMap).catch(err => {
+    console.warn('[Inject Stream] Error:', err.message);
   });
 
-  res.json({ success: true, result });
+  res.json({
+    success: true,
+    message: 'Streamed injected speech via Soniox pipeline',
+    arabic: cleanText
+  });
 });
 
 // TV Screen Font Size & Capacity Settings

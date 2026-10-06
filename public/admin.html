@@ -92,6 +92,10 @@
         <span class="badge badge-idle" id="session-badge">
           <span class="pulse-dot"></span> <span id="session-status-text">IDLE</span>
         </span>
+        <span class="badge" id="engine-badge" style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); color: #34d399; font-size: 0.74rem; font-weight: 700; display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.35rem 0.75rem;">
+          <span id="engine-dot" style="width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></span>
+          <span id="engine-badge-text">⚡ Engine: Soniox Streaming</span>
+        </span>
         <a href="/display.html" target="_blank" id="header-btn-tv" class="btn btn-secondary" style="font-size: 0.82rem; padding: 0.35rem 0.75rem;">TV Screen ↗</a>
         <button id="btn-logout" class="btn btn-secondary" style="font-size: 0.82rem; padding: 0.35rem 0.65rem;" title="Lock Console">
           🔒 Lock
@@ -154,6 +158,29 @@
       <div class="control-lock-banner" id="lock-banner">
         <span id="lock-banner-icon">🔒</span>
         <span id="lock-banner-text">Controls are locked. Click <strong>"▶ Start"</strong> to activate the microphone and begin live translation broadcasting.</span>
+      </div>
+
+      <!-- Soniox Engine Active Info Banner -->
+      <div id="soniox-engine-banner" style="background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 10px; padding: 0.75rem 1.15rem; margin-bottom: 1rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <span style="font-size: 1.35rem;">⚡</span>
+          <div>
+            <div style="font-size: 0.9rem; font-weight: 700; color: #f8fafc;" id="engine-title-text">
+              Soniox Real-Time Streaming Engine Active (Sub-200ms Word-by-Word)
+            </div>
+            <div style="font-size: 0.77rem; color: #94a3b8;" id="engine-subtitle-text">
+              Dynamic Language Gates enabled. Sub-100ms streaming tokens piping to TV and attendees.
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;" id="engine-stats-pills">
+          <span id="engine-status-pill" class="badge" style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); color: #34d399; font-size: 0.72rem;">
+            ● Streaming Pipeline Ready
+          </span>
+          <span id="engine-cost-pill" class="badge" style="background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); color: #93c5fd; font-size: 0.72rem;">
+            0 Gates ($0.00/hr)
+          </span>
+        </div>
       </div>
 
       <!-- Main Grid -->

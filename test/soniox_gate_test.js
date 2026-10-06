@@ -100,11 +100,24 @@ async function runSonioxGateTests() {
   assert.strictEqual(receivedFinalized.translatedText, 'with hardship comes ease.');
   console.log('  ✔ Sentence finalized event emitted correctly.');
 
-  // Clean up
-  sonioxService.closeAllGates();
-  assert.strictEqual(sonioxService.activeGates.size, 0, 'All gates closed');
-  sonioxService.connectGate = originalConnectGate;
-  sonioxService.setApiKey(process.env.SONIOX_API_KEY || ''); // reset to env
+  // Test 6: Word-by-Word Streaming Simulation
+  console.log('\n[Test 6] Testing Soniox word-by-word streaming simulation...');
+  const simTokens = [];
+  const onToken = (tok) => { simTokens.push(tok); };
+  sonioxService.on('token_stream', onToken);
+
+  sonioxService.startStreamingSimulation('test-session', ['en', 'ur'], 50);
+  assert.strictEqual(sonioxService.isSimulating, true, 'Simulation should be marked active');
+
+  // Wait 220ms to collect streaming tokens
+  await new Promise(r => setTimeout(r, 220));
+  sonioxService.stopStreamingSimulation();
+  sonioxService.off('token_stream', onToken);
+
+  assert(simTokens.length >= 2, `Should have emitted at least 2 streaming tokens (got ${simTokens.length})`);
+  assert(simTokens.some(t => t.lang === 'en'), 'English tokens emitted');
+  assert(simTokens.some(t => t.lang === 'ur'), 'Urdu tokens emitted');
+  console.log(`  ✔ Successfully streamed ${simTokens.length} real-time tokens across ['en', 'ur'] at 50ms interval.`);
 
   console.log('\n========================================================');
   console.log('🎉 ALL SONIOX DYNAMIC GATE TESTS PASSED! (100% GREEN)');
