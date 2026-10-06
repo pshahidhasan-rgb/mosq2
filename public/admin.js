@@ -74,17 +74,6 @@ const qrModalLinkText = document.getElementById('qr-modal-link-text');
 const btnCopyQrModalLink = document.getElementById('btn-copy-qr-modal-link');
 const btnOpenQrModalLink = document.getElementById('btn-open-qr-modal-link');
 
-// Speaker / Microphone Language elements - auto detects spoken language directly
-let currentSessionData = null;
-
-// Session History Modal elements
-const btnHeaderHistory = document.getElementById('btn-header-history');
-const modalSessionHistory = document.getElementById('modal-session-history');
-const btnCloseHistModal = document.getElementById('btn-close-hist-modal');
-const histModalSubtitle = document.getElementById('hist-modal-subtitle');
-const histModalBody = document.getElementById('hist-modal-body');
-const btnArchiveCurrentNow = document.getElementById('btn-archive-current-now');
-
 let transcriptItemsCount = 0;
 
 // ─── AUTHENTICATION ───
@@ -227,9 +216,6 @@ async function loadAllSessionsList() {
           <a href="/admin.html?session=${encodeURIComponent(sess.id)}" class="btn btn-primary" style="flex: 1 1 100%; text-align: center; font-size: 0.84rem; padding: 0.48rem;">
             🎙️ Open Pulpit Console →
           </a>
-          <button type="button" class="btn btn-secondary btn-show-session-history" data-session-id="${sess.id}" data-mosque-name="${sess.mosqueName}" style="flex: 1 1 100%; font-size: 0.82rem; padding: 0.45rem; display: flex; align-items: center; justify-content: center; gap: 0.35rem; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3); color: #7dd3fc; cursor: pointer; transition: all 0.2s;">
-            📜 View Session History ${sess.historyCount !== undefined ? `(${sess.historyCount} ${sess.historyCount === 1 ? 'Run' : 'Runs'})` : ''}
-          </button>
           <button type="button" class="btn btn-secondary btn-show-session-qr" data-session-id="${sess.id}" data-mosque-name="${sess.mosqueName}" data-lang="${sess.primaryLanguage || 'en'}" style="flex: 1; font-size: 0.82rem; padding: 0.45rem;">
             📱 Show QR Code
           </button>
@@ -242,15 +228,6 @@ async function loadAllSessionsList() {
         </div>
       `;
       sessionsGridContainer.appendChild(card);
-    });
-
-    // Wire up Session History buttons on cards
-    document.querySelectorAll('.btn-show-session-history').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const sid = e.currentTarget.getAttribute('data-session-id');
-        const mname = e.currentTarget.getAttribute('data-mosque-name') || sid;
-        openSessionHistoryModal(sid, mname);
-      });
     });
 
     // Wire up QR Code preview buttons
@@ -291,201 +268,6 @@ async function loadAllSessionsList() {
   }
 }
 
-function escapeHtml(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
-async function openSessionHistoryModal(sessionId, mosqueName) {
-  if (!modalSessionHistory) return;
-  modalSessionHistory.style.display = 'flex';
-
-  const mName = mosqueName || sessionId;
-  if (histModalSubtitle) {
-    histModalSubtitle.innerHTML = `Mosque: <strong style="color: #fff;">${escapeHtml(mName)}</strong> • Session: <code style="color: #38bdf8;">${escapeHtml(sessionId)}</code>`;
-  }
-  if (btnArchiveCurrentNow) {
-    btnArchiveCurrentNow.dataset.sessionId = sessionId;
-  }
-  if (histModalBody) {
-    histModalBody.innerHTML = `
-      <div style="text-align: center; padding: 3rem 1rem; color: #94a3b8;">
-        <div style="font-size: 2rem; margin-bottom: 0.5rem; animation: pulse 1.5s infinite;">📜</div>
-        <p>Loading session history records...</p>
-      </div>
-    `;
-  }
-
-  try {
-    const res = await fetch(`/api/session/${encodeURIComponent(sessionId)}/history`);
-    if (!res.ok) {
-      if (histModalBody) histModalBody.innerHTML = `<div style="text-align: center; padding: 2rem; color: #fca5a5;">Failed loading history. Status: ${res.status}</div>`;
-      return;
-    }
-    const rawData = await res.json();
-    const runs = Array.isArray(rawData) ? rawData : (rawData.history || []);
-
-    if (!runs || runs.length === 0) {
-      if (histModalBody) {
-        histModalBody.innerHTML = `
-          <div style="text-align: center; padding: 3.5rem 1.5rem; background: rgba(30, 41, 59, 0.4); border: 1px dashed rgba(255,255,255,0.12); border-radius: 12px;">
-            <div style="font-size: 2.75rem; margin-bottom: 0.75rem;">📅</div>
-            <h4 style="font-size: 1.1rem; color: #f8fafc; margin-bottom: 0.5rem;">No Archived Runs Yet</h4>
-            <p style="font-size: 0.88rem; color: #94a3b8; max-width: 520px; margin: 0 auto 1.5rem; line-height: 1.6;">
-              When sermons are delivered across multiple days or prayer sessions, every khutbah's complete transcript, duration, attendance, and translations (tailored to your Display TV) are automatically archived here.
-            </p>
-            <p style="font-size: 0.8rem; color: #64748b;">
-              💡 Tip: Click <strong>"📥 Archive Current Run Now"</strong> above to snapshot current speech immediately.
-            </p>
-          </div>
-        `;
-      }
-      return;
-    }
-
-    // Render runs
-    let html = `
-      <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-size: 0.85rem; color: #94a3b8;">Found <strong style="color: #38bdf8;">${runs.length}</strong> recorded sermon ${runs.length === 1 ? 'run' : 'runs'}:</span>
-      </div>
-      <div style="display: flex; flex-direction: column; gap: 1.25rem;">
-    `;
-
-    runs.forEach((run, index) => {
-      const tvLangUpper = (run.tvLanguage || 'en').toUpperCase();
-
-      html += `
-        <div class="history-run-card" style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,0.3);">
-          <!-- Header Bar -->
-          <div style="padding: 1rem 1.25rem; background: rgba(30, 41, 59, 0.6); border-bottom: 1px solid rgba(255, 255, 255, 0.08); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.75rem;">
-            <div>
-              <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;">
-                <span style="background: #38bdf8; font-weight: 800; font-size: 0.72rem; padding: 2px 7px; border-radius: 4px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #7dd3fc;">
-                  #${runs.length - index}
-                </span>
-                <h4 style="font-size: 1.05rem; font-weight: 700; color: #f8fafc; margin: 0;">
-                  📅 ${escapeHtml(run.dateDisplay)}
-                </h4>
-                <span style="font-size: 0.85rem; color: #94a3b8; margin-left: 0.25rem;">
-                  🕒 ${escapeHtml(run.timeDisplay)}
-                </span>
-              </div>
-              <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; font-size: 0.8rem; color: #cbd5e1;">
-                <span>⏱️ Duration: <strong>${escapeHtml(run.durationDisplay)}</strong></span>
-                <span>👥 Attendance: <strong>${run.totalAttendance}</strong> <span style="color: #64748b;">(📱 ${run.phoneAttendees} Phone, 📺 ${run.computerDisplays} TV)</span></span>
-                <span>📺 TV Language: <strong style="color: #10b981;">${tvLangUpper}</strong></span>
-                <span>🗣️ <strong>${run.totalTranscripts}</strong> Lines</span>
-              </div>
-            </div>
-
-            <div style="display: flex; gap: 0.5rem; align-items: center;">
-              <button type="button" class="btn btn-secondary btn-copy-run-transcript" data-run-id="${run.id}" style="font-size: 0.78rem; padding: 0.35rem 0.65rem; background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.2);">
-                📋 Copy Transcript
-              </button>
-              <button type="button" class="btn btn-danger btn-delete-run" data-run-id="${run.id}" data-session-id="${sessionId}" style="font-size: 0.78rem; padding: 0.35rem 0.65rem; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); color: #fca5a5;">
-                🗑️ Delete
-              </button>
-            </div>
-          </div>
-
-          <!-- Transcript Lines Container -->
-          <div style="padding: 1rem 1.25rem; max-height: 280px; overflow-y: auto;">
-      `;
-
-      if (!run.transcripts || run.transcripts.length === 0) {
-        html += `<div style="font-size: 0.84rem; color: #64748b; font-style: italic;">No speech lines recorded for this run.</div>`;
-      } else {
-        html += `<div style="display: flex; flex-direction: column; gap: 0.75rem;">`;
-        run.transcripts.forEach((t, tIdx) => {
-          const origRtl = /[\u0591-\u07FF\uFB1D-\uFDFD\uFE70-\uFEFC]/.test(t.original);
-          const transRtl = /[\u0591-\u07FF\uFB1D-\uFDFD\uFE70-\uFEFC]/.test(t.translation);
-          const timeStr = t.timestamp ? new Date(t.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
-
-          html += `
-            <div style="padding: 0.6rem 0.8rem; background: rgba(255,255,255,0.025); border-left: 3px solid #38bdf8; border-radius: 4px;">
-              <div style="display: flex; justify-content: space-between; font-size: 0.72rem; color: #64748b; margin-bottom: 0.25rem;">
-                <span>Line #${tIdx + 1}</span>
-                <span>${timeStr}</span>
-              </div>
-              <div style="font-size: 0.96rem; color: #e2e8f0; line-height: 1.5; direction: ${origRtl ? 'rtl' : 'ltr'}; text-align: ${origRtl ? 'right' : 'left'}; font-family: ${origRtl ? 'var(--font-arabic)' : 'inherit'};">
-                <span style="font-size: 0.75rem; color: #94a3b8; font-weight: 600; display: inline-block; margin-right: 0.4rem;">🗣️ Spoken:</span>${escapeHtml(t.original)}
-              </div>
-              <div style="font-size: 0.92rem; color: #34d399; margin-top: 0.35rem; line-height: 1.5; direction: ${transRtl ? 'rtl' : 'ltr'}; text-align: ${transRtl ? 'right' : 'left'}; font-family: ${transRtl ? 'var(--font-arabic)' : 'inherit'};">
-                <span style="font-size: 0.75rem; color: #10b981; font-weight: 600; display: inline-block; margin-right: 0.4rem;">📺 TV [${tvLangUpper}]:</span>${escapeHtml(t.translation || '(no translation)')}
-              </div>
-            </div>
-          `;
-        });
-        html += `</div>`;
-      }
-
-      html += `
-          </div>
-        </div>
-      `;
-    });
-
-    html += `</div>`;
-    if (histModalBody) histModalBody.innerHTML = html;
-
-    // Wire Copy buttons
-    document.querySelectorAll('.btn-copy-run-transcript').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const runId = e.currentTarget.getAttribute('data-run-id');
-        const targetRun = runs.find(r => r.id === runId);
-        if (!targetRun || !targetRun.transcripts) return;
-
-        const textContent = targetRun.transcripts.map((t, idx) => {
-          const time = t.timestamp ? `[${new Date(t.timestamp).toLocaleTimeString()}] ` : '';
-          return `${idx + 1}. ${time}\nSpoken: ${t.original}\nTV [${(targetRun.tvLanguage || 'en').toUpperCase()}]: ${t.translation}\n`;
-        }).join('\n');
-
-        const headerInfo = `=== MosqAI Khutbah Transcript ===\nMosque: ${targetRun.mosqueName}\nDate: ${targetRun.dateDisplay} ${targetRun.timeDisplay}\nDuration: ${targetRun.durationDisplay}\nAttendance: ${targetRun.totalAttendance} listeners\nDisplay TV Language: ${(targetRun.tvLanguage || 'en').toUpperCase()}\n\n`;
-
-        navigator.clipboard.writeText(headerInfo + textContent).then(() => {
-          const orig = e.currentTarget.textContent;
-          e.currentTarget.textContent = '✅ Copied!';
-          setTimeout(() => e.currentTarget.textContent = orig, 2000);
-        });
-      });
-    });
-
-    // Wire Delete Run buttons
-    document.querySelectorAll('.btn-delete-run').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        const runId = e.currentTarget.getAttribute('data-run-id');
-        const sid = e.currentTarget.getAttribute('data-session-id');
-        const ok = confirm('Delete this khutbah run from history?');
-        if (!ok) return;
-
-        try {
-          const delRes = await fetch(`/api/session/${encodeURIComponent(sid)}/history/${encodeURIComponent(runId)}`, {
-            method: 'DELETE'
-          });
-          if (delRes.ok) {
-            openSessionHistoryModal(sid, mosqueName);
-            loadAllSessionsList(); // update run count on cards
-          } else {
-            alert('Failed to delete history run.');
-          }
-        } catch (err) {
-          alert('Delete error: ' + err.message);
-        }
-      });
-    });
-
-  } catch (err) {
-    if (histModalBody) {
-      histModalBody.innerHTML = `<div style="text-align: center; padding: 2rem; color: #fca5a5;">Error loading history: ${escapeHtml(err.message)}</div>`;
-    }
-  }
-}
-
 function openQrModal(sessionId, mosqueName, lang = 'en') {
   const joinUrl = `${window.location.origin}/join.html?session=${encodeURIComponent(sessionId)}&lang=${encodeURIComponent(lang)}`;
   if (qrModalMosqueName) qrModalMosqueName.textContent = mosqueName || sessionId;
@@ -513,49 +295,6 @@ if (btnCloseQrModal) {
     if (modalQrPreview) modalQrPreview.style.display = 'none';
   });
 }
-
-// Session History Modal Listeners
-if (btnCloseHistModal) {
-  btnCloseHistModal.addEventListener('click', () => {
-    if (modalSessionHistory) modalSessionHistory.style.display = 'none';
-  });
-}
-
-if (btnHeaderHistory) {
-  btnHeaderHistory.addEventListener('click', () => {
-    if (!currentSessionId) return;
-    const mName = mosqueTitle ? mosqueTitle.textContent.replace(' — Pulpit Console', '').trim() : currentSessionId;
-    openSessionHistoryModal(currentSessionId, mName);
-  });
-}
-
-if (btnArchiveCurrentNow) {
-  btnArchiveCurrentNow.addEventListener('click', async () => {
-    const sid = btnArchiveCurrentNow.dataset.sessionId || currentSessionId;
-    if (!sid) return;
-    try {
-      btnArchiveCurrentNow.disabled = true;
-      btnArchiveCurrentNow.textContent = 'Archiving...';
-      const res = await fetch(`/api/session/${encodeURIComponent(sid)}/archive-current`, {
-        method: 'POST'
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        const mName = mosqueTitle ? mosqueTitle.textContent.replace(' — Pulpit Console', '').trim() : sid;
-        await openSessionHistoryModal(sid, mName);
-        if (typeof loadAllSessionsList === 'function') loadAllSessionsList();
-      } else {
-        alert(data.error || 'No active speech to archive in this session yet.');
-      }
-    } catch (err) {
-      alert('Error archiving session: ' + err.message);
-    } finally {
-      btnArchiveCurrentNow.disabled = false;
-      btnArchiveCurrentNow.textContent = '📥 Archive Current Run Now';
-    }
-  });
-}
-
 
 // Create New Session Modal Logic
 if (btnOpenCreateModal) {
@@ -650,7 +389,7 @@ function updateControlLockState() {
   btnInject.disabled = !isLive;
 
   if (isLive) {
-    manualInput.placeholder = 'Type speech text in any language (English, Arabic, Bengali, etc.)...';
+    manualInput.placeholder = 'Type or paste Arabic text / Ayah to test...';
     lockBanner.className = 'control-lock-banner unlocked';
     lockBannerIcon.textContent = '🟢';
     lockBannerText.innerHTML = '<strong>Session is LIVE!</strong> Microphone input and live translation broadcasting are enabled.';
@@ -661,7 +400,7 @@ function updateControlLockState() {
     lockBannerText.innerHTML = '<strong>Session is PAUSED.</strong> Translation is paused. Click <strong>"▶ Resume"</strong> to continue.';
     if (micActive) stopMicrophone();
   } else {
-    manualInput.placeholder = 'Click "▶ Start" first to enable live speech input and testing...';
+    manualInput.placeholder = 'Click "▶ Start" first to enable live translation testing...';
     lockBanner.className = 'control-lock-banner';
     lockBannerIcon.textContent = '🔒';
     lockBannerText.innerHTML = 'Controls are locked. Click <strong>"▶ Start"</strong> to activate the microphone and begin live translation broadcasting.';
@@ -813,7 +552,7 @@ btnInject.addEventListener('click', async () => {
     const res = await fetch(`/api/session/${currentSessionId}/inject-text`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, inputLang: 'auto' })
+      body: JSON.stringify({ text })
     });
     if (!res.ok) {
       const err = await res.json();
@@ -868,8 +607,7 @@ async function startMicrophone() {
     speechRecognition = new SpeechRec();
     speechRecognition.continuous = true;
     speechRecognition.interimResults = false;
-    const recLang = (currentSessionData && (currentSessionData.primaryLanguage === 'en' || currentSessionData.primaryLanguage === 'en-US')) ? 'en-US' : 'ar-SA';
-    speechRecognition.lang = recLang;
+    speechRecognition.lang = 'ar-SA';
     speechRecognition.maxAlternatives = 1;
 
     let lastProcessedIndex = -1;
@@ -900,7 +638,7 @@ async function startMicrophone() {
             await fetch(`/api/session/${currentSessionId}/inject-text`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ text: transcript, inputLang: 'auto' })
+              body: JSON.stringify({ text: transcript })
             });
           } catch (err) {
             console.warn('[Live Mic] Inject error:', err.message);
@@ -980,7 +718,6 @@ async function initConsoleSession(sessionId) {
       if (data.tvFontSize) syncTvFontSizeUI(data.tvFontSize, data.tvCapacity);
       if (data.tvAudioEnabled !== undefined) syncTvAudioUI(data.tvAudioEnabled);
       if (data.tvShowQr !== undefined) syncTvQrUI(data.tvShowQr);
-      currentSessionData = data;
 
       // Update dynamic links with session primary language
       const joinUrl = `${window.location.origin}/join.html?session=${encodeURIComponent(sessionId)}&lang=${encodeURIComponent(data.primaryLanguage || 'en')}`;
@@ -1083,7 +820,7 @@ function connectWebSocket(sessionId) {
         if (data.tvAudioEnabled !== undefined) syncTvAudioUI(data.tvAudioEnabled);
         if (data.tvShowQr !== undefined) syncTvQrUI(data.tvShowQr);
       }
-      if (data.type === 'LIVE_SUBTITLE' || data.type === 'ADMIN_TRANSCRIPT') addTranscriptEntry(data);
+      if (data.type === 'LIVE_SUBTITLE') addTranscriptEntry(data);
     } catch (e) {}
   };
 
@@ -1097,9 +834,8 @@ function addTranscriptEntry({ arabic, translations, ayah }) {
   transcriptItemsCount++;
   if (transCount) transCount.textContent = `${transcriptItemsCount} lines`;
 
-  const isRtl = /[\u0591-\u07FF\uFB1D-\uFDFD\uFE70-\uFEFC]/.test(arabic);
   const item = document.createElement('div');
-  item.style.cssText = `padding: 0.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-family: ${isRtl ? 'var(--font-arabic)' : 'inherit'}; font-size: 1.15rem; direction: ${isRtl ? 'rtl' : 'ltr'}; text-align: ${isRtl ? 'right' : 'left'}; color: #f8fafc;`;
+  item.style.cssText = 'padding: 0.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-family: var(--font-arabic); font-size: 1.15rem; direction: rtl; text-align: right; color: #f8fafc;';
 
   if (ayah) {
     const badge = document.createElement('span');
@@ -1111,7 +847,7 @@ function addTranscriptEntry({ arabic, translations, ayah }) {
   const textSpan = document.createElement('span');
   item.appendChild(textSpan);
 
-  if (transcriptFeed.children[0] && (transcriptFeed.children[0].textContent.includes('Spoken Arabic') || transcriptFeed.children[0].textContent.includes('Spoken Speech'))) {
+  if (transcriptFeed.children[0] && transcriptFeed.children[0].textContent.includes('Spoken Arabic')) {
     transcriptFeed.innerHTML = '';
   }
   transcriptFeed.prepend(item);

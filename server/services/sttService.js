@@ -197,8 +197,8 @@ class GladiaLiveSession {
       bit_depth: 16,
       channels: 1,
       language_config: {
-        languages: null,
-        code_switching: true
+        languages: ['ar'],
+        code_switching: false
       },
       translation_config: {
         target_languages: this.targetLangs,

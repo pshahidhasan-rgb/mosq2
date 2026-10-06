@@ -124,23 +124,22 @@ class TranslationService {
   }
 
   /**
-   * Translates speech text to multiple target languages concurrently
-   * @param {string} text - Spoken text in any language
-   * @param {string[]} targetLanguages - Array of target language codes
-   * @param {string} sourceLang - Spoken input language code (e.g. 'auto', 'ar', 'en', 'bn', etc.)
+   * Translates Arabic text into multiple target languages
+   * @param {string} arabicText - Input Arabic text
+   * @param {string[]} targetLanguages - Array of ISO codes (e.g. ['en', 'bn', 'ur'])
    * @returns {Promise<Object>} Map of { [lang]: translatedText }
    */
-  async translateMultiple(text, targetLanguages = ['en', 'bn', 'ur', 'fr', 'zh', 'tr'], sourceLang = 'auto') {
-    if (!text || text.trim().length === 0) return {};
+  async translateMultiple(arabicText, targetLanguages = ['en', 'bn', 'ur', 'fr', 'zh', 'tr']) {
+    if (!arabicText || arabicText.trim().length === 0) return {};
 
     const results = {};
     const promises = targetLanguages.map(async (lang) => {
       try {
-        const translated = await this.translate(text, lang, sourceLang);
+        const translated = await this.translate(arabicText, lang);
         results[lang] = translated;
       } catch (err) {
         console.warn(`[Translation] Error translating to ${lang}:`, err.message);
-        results[lang] = text;
+        results[lang] = arabicText;
       }
     });
 
@@ -149,22 +148,13 @@ class TranslationService {
   }
 
   /**
-   * Translates speech text in ANY language to a single target language
-   * @param {string} text - Speech text in any language
-   * @param {string} targetLang - Target language code
-   * @param {string} sourceLang - Source language code or 'auto'
+   * Translates Arabic text to a single target language
    */
-  async translate(text, targetLang = 'en', sourceLang = 'auto') {
-    if (!text) return '';
-    const cleanText = text.trim();
-    const sl = (sourceLang && sourceLang !== 'auto') ? sourceLang.split('-')[0].toLowerCase() : 'auto';
+  async translate(arabicText, targetLang = 'en') {
+    if (!arabicText) return '';
+    const cleanText = arabicText.trim();
+    const cacheKey = `${cleanText}:${targetLang}`;
 
-    // If source language matches target language, no translation needed
-    if (sl !== 'auto' && (sl === targetLang || (sl === 'zh' && (targetLang === 'zh' || targetLang === 'zh-CN' || targetLang === 'zh-TW')))) {
-      return cleanText;
-    }
-
-    const cacheKey = `${cleanText}:${sl}:${targetLang}`;
     if (this.cache.has(cacheKey)) {
       return this.cache.get(cacheKey);
     }
@@ -180,35 +170,32 @@ class TranslationService {
     }
 
     // Priority 1: DeepL (user's preferred translation service)
+    // DeepL language codes for all 6 target languages
     const deeplLangMap = {
       en: 'EN-US',
       fr: 'FR',
       zh: 'ZH',
       'zh-TW': 'ZH',
       tr: 'TR',
-      ur: 'AR',
-      bn: 'AR'
+      ur: 'AR',  // DeepL doesn't support Urdu; will fall through to OpenRouter
+      bn: 'AR'   // DeepL doesn't support Bengali; will fall through to OpenRouter
     };
     const deeplSupportedNatively = ['en', 'fr', 'zh', 'zh-TW', 'tr'];
 
     if (this.deeplKey && deeplSupportedNatively.includes(targetLang)) {
       try {
         const target = deeplLangMap[targetLang];
-        const deeplBody = {
-          text: [cleanText],
-          target_lang: target
-        };
-        if (sl !== 'auto' && ['en', 'fr', 'zh', 'tr', 'ar', 'de', 'es', 'it', 'ja', 'nl', 'pl', 'pt', 'ru'].includes(sl)) {
-          deeplBody.source_lang = sl.toUpperCase();
-        }
-
         const res = await fetch('https://api-free.deepl.com/v2/translate', {
           method: 'POST',
           headers: {
             'Authorization': `DeepL-Auth-Key ${this.deeplKey}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify(deeplBody)
+          body: JSON.stringify({
+            text: [cleanText],
+            target_lang: target,
+            source_lang: 'AR'
+          })
         });
 
         if (res.ok) {
@@ -227,7 +214,7 @@ class TranslationService {
       }
     }
 
-    // Priority 2: OpenRouter Llama 3.3 70B (multi-lingual intelligence)
+    // Priority 2: OpenRouter Llama 3.3 70B (handles Bengali, Urdu, and DeepL fallback)
     if (this.openrouterKey) {
       try {
         const langName = LANGUAGE_NAMES[targetLang] || targetLang;
@@ -244,7 +231,7 @@ class TranslationService {
             messages: [
               {
                 role: 'system',
-                content: `You are an expert multi-lingual speech and Friday sermon (Khutbah) translator. The speaker may speak in ANY language (Arabic, English, Bengali, Urdu, Turkish, French, Chinese, etc.). Detect the input language automatically and translate the speech into ${langName} with the highest theological precision, dignity, and natural fluency. Retain sacred terms (Allah, Taqwa, Ihsan, Akhirah) with reverent equivalents. Output ONLY the translated text without commentary or quotes.`
+                content: `You are an expert Islamic Friday sermon (Khutbah) translator. Translate the Arabic text into ${langName} with the highest theological precision, dignity, and accuracy. Retain sacred terms (Allah, Taqwa, Ihsan, Akhirah) with reverent equivalents. Output ONLY the translated text without commentary or quotes.`
               },
               {
                 role: 'user',
@@ -272,13 +259,12 @@ class TranslationService {
       }
     }
 
-    // Priority 3: Dynamic Real-Time Neural Translation Engine (Translates from ANY input language to all targets)
+    // Priority 3: Dynamic Real-Time Neural Translation Engine (Translates ANY arbitrary dynamic speech)
     try {
       let googleLang = targetLang;
       if (targetLang === 'zh' || targetLang === 'zh-CN') googleLang = 'zh-CN';
       if (targetLang === 'zh-TW') googleLang = 'zh-TW';
-      const googleSource = (sl && sl !== 'auto') ? sl : 'auto';
-      const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=${googleSource}&tl=${googleLang}&dt=t&q=${encodeURIComponent(cleanText)}`);
+      const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=ar&tl=${googleLang}&dt=t&q=${encodeURIComponent(cleanText)}`);
       if (res.ok) {
         const data = await res.json();
         const translated = data[0]?.map(item => item[0]).join('').trim();

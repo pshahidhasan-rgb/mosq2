@@ -39,23 +39,23 @@ const sttService = new STTService(process.env.GLADIA_API_KEYS || process.env.GLA
 const quranAiDetector = new QuranAIDetector(openrouterKey, openrouterModel);
 
 // Active session tracking for STT distribution
-let activeLiveSessionId = 'myo-youth';
+let activeLiveSessionId = 'jumuah-live-4b2c1d';
 
-// Pre-create initial default sessions with clean canonical IDs
+// Pre-create initial default sessions with secure unique IDs
 (async () => {
   await sessionManager.createSession({
-    sessionId: 'myo-youth',
+    sessionId: 'myo-youth-8f3a9e',
     mosqueName: 'MYO Youth Center',
-    primaryLanguage: 'ar',
+    primaryLanguage: process.env.DEFAULT_PRIMARY_LANGUAGE || 'en',
     hostUrl: `http://localhost:${PORT}`
   });
   await sessionManager.createSession({
-    sessionId: 'jumuah-live',
+    sessionId: 'jumuah-live-4b2c1d',
     mosqueName: process.env.DEFAULT_MASJID_NAME || 'Masjid Al-Noor',
-    primaryLanguage: 'ar',
+    primaryLanguage: process.env.DEFAULT_PRIMARY_LANGUAGE || 'en',
     hostUrl: `http://localhost:${PORT}`
   });
-  console.log(`[MosqAI] Ready with canonical mosque sessions: myo-youth, jumuah-live`);
+  console.log(`[MosqAI] Ready with secure mosque sessions: myo-youth-8f3a9e, jumuah-live-4b2c1d`);
 })();
 
 // Initialize STT engine (Deepgram Nova-3 / Gladia / Simulator)
@@ -63,14 +63,14 @@ sttService.initSession();
 
 /**
  * Main Real-time Processing Pipeline:
- * Speech Transcript -> Multi-Language Translation -> Low-Latency Audio -> Broadcast
+ * Arabic Speech Transcript -> Multi-Language Translation -> Low-Latency Audio -> Broadcast
  * NOTE: Quran detection is disabled — pure translation mode only.
  */
-async function processTranscript({ text, isFinal, source, sessionId, inputLang = 'auto' }) {
+async function processTranscript({ text, isFinal, source, sessionId }) {
   if (!text || text.trim().length === 0) return null;
   const cleanArabic = text.trim();
-  const targetSessionId = sessionManager.getCanonicalId(sessionId || activeLiveSessionId);
-  console.log(`[STT -> ${source} -> ${targetSessionId}] Received speech: "${cleanArabic}"`);
+  const targetSessionId = sessionId || activeLiveSessionId;
+  console.log(`[STT -> ${source} -> ${targetSessionId}] Received Arabic: "${cleanArabic}"`);
 
   let session = sessionManager.getSession(targetSessionId);
   if (!session) {
@@ -87,12 +87,12 @@ async function processTranscript({ text, isFinal, source, sessionId, inputLang =
     return null;
   }
 
-  const cleanText = text.trim();
-  const sourceLang = (inputLang && inputLang !== 'auto') ? inputLang : (session.speakerLanguage || 'auto');
+  // Quran detection DISABLED — always use pure translation pipeline
+  const ayahMatch = null;
 
-  // Step 2: Multi-language Translation — always runs from ANY input language
+  // Step 2: Multi-language Translation — always runs
   const targetLanguages = ['en', 'uz', 'bn', 'ur', 'fr', 'zh', 'zh-TW', 'tr', 'id', 'so'];
-  const translations = await translationService.translateMultiple(cleanText, targetLanguages, sourceLang);
+  const translations = await translationService.translateMultiple(cleanArabic, targetLanguages);
 
   // Step 3: Low-Latency Spoken Audio Generation for Earbuds (Cartesia / Sonic)
   const audioByLanguage = {};
@@ -104,7 +104,7 @@ async function processTranscript({ text, isFinal, source, sessionId, inputLang =
 
   const ttsPromises = neededAudioLangs.map(async (lang) => {
     try {
-      const textToSpeak = translations[lang] || translations.en || cleanText;
+      const textToSpeak = translations[lang] || translations.en || cleanArabic;
       const audioResult = await ttsService.generateSpeech(textToSpeak, lang);
       if (audioResult) {
         audioByLanguage[lang] = audioResult;
@@ -118,9 +118,7 @@ async function processTranscript({ text, isFinal, source, sessionId, inputLang =
 
   // Step 4: Instant Multi-Screen & Earbud Broadcast to THIS specific session room
   const broadcastPayload = {
-    arabicText: cleanText, // Backwards compatible alias
-    originalText: cleanText,
-    sourceLang,
+    arabicText: cleanArabic,
     translations,
     ayahData: null,  // Quran detection disabled
     audioByLanguage,
@@ -295,8 +293,8 @@ app.post('/api/session/create', async (req, res) => {
     .replace(/(^-|-$)+/g, '');
 
   if (!cleanId) cleanId = 'mosque';
-  // Only attach random token if user didn't specify an explicit sessionId
-  if (!sessionId && !/-[a-z0-9]{5,8}$/.test(cleanId)) {
+  // Ensure secure random token is attached (e.g. east-london-8f3a9e)
+  if (!/-[a-z0-9]{5,8}$/.test(cleanId)) {
     const token = Math.random().toString(36).substring(2, 8);
     cleanId = `${cleanId}-${token}`;
   }
@@ -379,7 +377,7 @@ app.post('/api/session/:id/simulate/stop', (req, res) => {
 
 // Direct test text injection (strictly guarded: only allowed when session is active)
 app.post('/api/session/:id/inject-text', async (req, res) => {
-  const { text, inputLang } = req.body;
+  const { text } = req.body;
   if (!text) return res.status(400).json({ error: 'Text required' });
 
   const session = sessionManager.getSession(req.params.id);
@@ -394,38 +392,10 @@ app.post('/api/session/:id/inject-text', async (req, res) => {
     text,
     isFinal: true,
     source: 'manual_injection',
-    sessionId: req.params.id,
-    inputLang
+    sessionId: req.params.id
   });
 
   res.json({ success: true, result });
-});
-
-// Session History Runs (Multiple days/runs for each session)
-app.get('/api/session/:id/history', (req, res) => {
-  const history = sessionManager.getSessionHistory(req.params.id);
-  res.json(history);
-});
-
-app.delete('/api/session/:id/history/:historyId', (req, res) => {
-  const success = sessionManager.deleteSessionHistoryEntry(req.params.id, req.params.historyId);
-  if (!success) return res.status(404).json({ error: 'History record not found' });
-  res.json({ success: true, message: 'History record deleted' });
-});
-
-// Snapshot/archive current session run manually
-app.post('/api/session/:id/archive-current', (req, res) => {
-  const record = sessionManager.archiveSessionRun(req.params.id);
-  if (!record) return res.status(400).json({ error: 'No speech transcripts to archive for this session' });
-  res.json({ success: true, record });
-});
-
-// Speaker Language setting
-app.post('/api/session/:id/speaker-language', (req, res) => {
-  const { language } = req.body;
-  const session = sessionManager.setSpeakerLanguage(req.params.id, language);
-  if (!session) return res.status(404).json({ error: 'Session not found' });
-  res.json({ success: true, speakerLanguage: session.speakerLanguage });
 });
 
 // TV Screen Font Size & Capacity Settings
@@ -508,7 +478,7 @@ wss.on('connection', (ws) => {
       const msg = JSON.parse(raw.toString());
 
       if (msg.type === 'JOIN_ROOM') {
-        userSessionId = sessionManager.getCanonicalId(msg.sessionId || activeLiveSessionId);
+        userSessionId = msg.sessionId || activeLiveSessionId;
         userRole = msg.role || 'attendee';
         userLanguage = msg.language || 'en';
 
@@ -570,21 +540,14 @@ wss.on('connection', (ws) => {
         }
       }
 
-      if (msg.type === 'SET_SPEAKER_LANGUAGE') {
-        const targetSessionId = msg.sessionId || userSessionId;
-        sessionManager.setSpeakerLanguage(targetSessionId, msg.language);
-      }
-
       if (msg.type === 'DIRECT_SPEECH') {
         // Direct speech from browser Web Speech API
         if (msg.text) {
-          processTranscript({
+          sttService.emit('transcript', {
             text: msg.text,
             isFinal: true,
-            source: 'browser_mic',
-            sessionId: userSessionId,
-            inputLang: msg.language || null
-          }).catch(err => console.error('[STT] Processing error:', err.message));
+            source: 'browser_mic'
+          });
         }
       }
     } catch (err) {

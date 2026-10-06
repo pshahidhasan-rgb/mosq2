@@ -336,7 +336,7 @@ async function runAutonomousTests() {
   const endedSession = sessionMgr.endSession(testSessionId);
   assert.strictEqual(endedSession.status, 'ended');
   assert(sessionMgr.history.length > 0, 'Session should be saved to history archive');
-  assert.strictEqual(sessionMgr.history[0].sessionId || sessionMgr.history[0].id, testSessionId);
+  assert.strictEqual(sessionMgr.history[0].id, testSessionId);
   console.log(`  ✔ Session archived with ${sessionMgr.history[0].totalTranscripts} transcripts and ${sessionMgr.history[0].totalAyahsDetected} Quran ayahs detected.`);
 
   // Cleanup
