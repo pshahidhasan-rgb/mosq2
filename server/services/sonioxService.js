@@ -102,11 +102,9 @@ class SonioxGateManager extends EventEmitter {
     if (!this.isOperational) return;
 
     try {
-      const ws = new WebSocket(SONIOX_WS_ENDPOINT, {
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`
-        }
-      });
+      const ws = new WebSocket(SONIOX_WS_ENDPOINT);
+
+      ws.apiKey = this.apiKey;
 
       gate.ws = ws;
 
@@ -115,16 +113,22 @@ class SonioxGateManager extends EventEmitter {
         gate.reconnectAttempts = 0;
         console.log(`[Soniox Gate] Connected & ready for language "${gate.lang}".`);
 
-        // Send Soniox start configuration payload
+// Send Sonnox start configuration payload
+        // CRITICAL: api_key goes in the JSON config (not headers) per Sonnox API spec
+        // enable_endpoint_detection: false ensures tokens stream word-by-word immediately
         const configMessage = {
+          api_key: this.apiKey,
           model: DEFAULT_MODEL,
           audio_format: 'pcm_s16le',
           sample_rate: SAMPLE_RATE,
           num_channels: NUM_CHANNELS,
+          enable_endpoint_detection: false,
+          endpoint_latency_adjustment_level: 3,
+          max_endpoint_delay_ms: 500,
           translation: {
             type: 'one_way',
             target_language: gate.lang
-            // Note: source_language is omitted to allow auto-detection ("detect any")
+            // Note: source_language is omitted for auto-detection ("detect any")
           }
         };
 
