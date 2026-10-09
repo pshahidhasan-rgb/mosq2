@@ -33,7 +33,12 @@ class SonioxGateManager extends EventEmitter {
   }
 
   validateApiKey(key) {
-    return Boolean(key && key.length > 5 && !key.includes('your_') && !key.includes('placeholder'));
+    if (!key || key.length < 20) return false;
+    // Reject obvious placeholders
+    if (key.includes('your_') || key.includes('placeholder')) return false;
+    // Accept Sonnox project keys (snx_proj_...), legacy keys (sk-),
+    // or any other key format (validation is done by Sonnox server itself)
+    return true;
   }
 
   isConfigured() {
@@ -113,18 +118,20 @@ class SonioxGateManager extends EventEmitter {
         gate.reconnectAttempts = 0;
         console.log(`[Soniox Gate] Connected & ready for language "${gate.lang}".`);
 
-// Send Sonnox start configuration payload
+        // Send Sonnox start configuration payload
         // CRITICAL: api_key goes in the JSON config (not headers) per Sonnox API spec
-        // enable_endpoint_detection: false ensures tokens stream word-by-word immediately
+        // enable_endpoint_detection: true with high latency level allows word-by-word
+        // streaming while still detecting sentence boundaries for finalization
         const configMessage = {
           api_key: this.apiKey,
           model: DEFAULT_MODEL,
           audio_format: 'pcm_s16le',
           sample_rate: SAMPLE_RATE,
           num_channels: NUM_CHANNELS,
-          enable_endpoint_detection: false,
+          enable_endpoint_detection: true,
           endpoint_latency_adjustment_level: 3,
           max_endpoint_delay_ms: 500,
+          endpoint_sensitivity: -1.0,
           translation: {
             type: 'one_way',
             target_language: gate.lang
