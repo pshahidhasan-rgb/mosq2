@@ -194,7 +194,7 @@ class SonioxGateManager extends EventEmitter {
   handleSonioxMessage(gate, data) {
     if (!data) return;
 
-    // Soninox returns tokens individually via data.tokens or data.result.tokens
+    // Soniox returns tokens individually via data.tokens or data.result.tokens
     const tokens = data.tokens || (data.result && data.result.tokens) || [];
     if (!Array.isArray(tokens) || tokens.length === 0) return;
 
@@ -205,6 +205,7 @@ class SonioxGateManager extends EventEmitter {
       const isFinal = Boolean(token.is_final);
 
       if (status === 'translation') {
+        gate.currentTranslatedText = (gate.currentTranslatedText || '') + text;
         // Word-by-word translation token — stream immediately
         this.emit('token_stream', {
           lang: gate.lang,
@@ -215,6 +216,7 @@ class SonioxGateManager extends EventEmitter {
           timestamp: new Date().toISOString()
         });
       } else if (status === 'original' || status === 'none') {
+        gate.currentOriginalText = (gate.currentOriginalText || '') + text;
         // Original (Arabic) word token — stream immediately
         this.emit('token_stream', {
           lang: gate.lang,
@@ -226,12 +228,18 @@ class SonioxGateManager extends EventEmitter {
         });
       }
 
-      // Sentence boundary — fire finalized event
+      // Sentence boundary — fire finalized event with full accumulated sentence
       if (isFinal) {
+        const fullFinalTranslation = (gate.currentTranslatedText || text).trim();
+        const fullFinalOriginal = (gate.currentOriginalText || (status === 'original' || status === 'none' ? text : '')).trim();
+        gate.currentTranslatedText = '';
+        gate.currentOriginalText = '';
+
         this.emit('sentence_finalized', {
           lang: gate.lang,
-          finalText: text,
-          originalText: status === 'original' || status === 'none' ? text : '',
+          finalText: fullFinalTranslation,
+          translatedText: fullFinalTranslation,
+          originalText: fullFinalOriginal,
           timestamp: new Date().toISOString()
         });
       }
@@ -244,6 +252,11 @@ class SonioxGateManager extends EventEmitter {
    */
   broadcastAudio(pcmBuffer) {
     if (!this.isOperational || !pcmBuffer || !Buffer.isBuffer(pcmBuffer)) return;
+
+    // Ensure default English gate is open so initial sermon speech is never discarded
+    if (this.activeGates.size === 0) {
+      this.ensureGate('en');
+    }
 
     for (const [lang, gate] of this.activeGates.entries()) {
       if (gate.status === 'open' && gate.ws && gate.ws.readyState === WebSocket.OPEN) {

@@ -13,7 +13,8 @@ let micInterval = null;
 let micActive = false;
 let speechRecognition = null;
 let isSimulating = false;
-let isSonnoxActive = false; // When true, skip Web Speech API fallback (Sonnox handles streaming)
+let isSonnoxActive = false; // When true, Soniox handles real-time token streaming
+let lastSonioxTokenTime = 0; // Timestamp of latest received streaming token
 
 // DOM Views
 const viewSessionsList = document.getElementById('view-sessions-list');
@@ -856,18 +857,14 @@ async function startMicrophone() {
       console.warn('[Live Mic] Audio processor setup notice:', procErr.message);
     }
 
-    // When Sonnox is active, it handles real-time streaming directly via binary audio above.
-    // Skip the Web Speech API fallback to prevent duplicate full-sentence delivery.
-    if (isSonnoxActive) {
-      console.log('[Sonox] Streaming active - skipping Web Speech API fallback');
-      micActive = true;
-      btnToggleMic.textContent = 'Stop Live Mic';
-      btnToggleMic.className = 'btn btn-danger';
-      return;
-    }
+    micActive = true;
+    btnToggleMic.textContent = 'Stop Live Mic';
+    btnToggleMic.className = 'btn btn-danger';
 
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      alert('Live speech recognition requires Google Chrome or Safari.');
+      if (!isSonnoxActive) {
+        alert('Live speech recognition requires Google Chrome or Safari.');
+      }
       return;
     }
 
@@ -890,6 +887,13 @@ async function startMicrophone() {
         if (evt.results[i].isFinal) {
           const transcript = evt.results[i][0].transcript.trim();
           if (!transcript) continue;
+
+          // If Soniox is active and actively streaming tokens within the last 3.5s,
+          // suppress the Web Speech fallback injection to prevent duplicate text
+          if (isSonnoxActive && (Date.now() - lastSonioxTokenTime < 3500)) {
+            console.log('[Live Mic] Suppressing Web Speech fallback — Soniox streaming is actively delivering tokens');
+            continue;
+          }
 
           // Prevent duplicate firing within 1 second of exact same text
           const now = Date.now();
@@ -1113,6 +1117,9 @@ function connectWebSocket(sessionId) {
         syncTvFontSizeUI(data.tvFontSize, data.tvCapacity);
         if (data.tvAudioEnabled !== undefined) syncTvAudioUI(data.tvAudioEnabled);
         if (data.tvShowQr !== undefined) syncTvQrUI(data.tvShowQr);
+      }
+      if (data.type === 'STREAMING_TOKEN') {
+        lastSonioxTokenTime = Date.now();
       }
       if (data.type === 'LIVE_SUBTITLE') addTranscriptEntry(data);
     } catch (e) {}

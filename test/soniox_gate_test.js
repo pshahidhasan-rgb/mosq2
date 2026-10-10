@@ -100,8 +100,9 @@ async function runSonioxGateTests() {
   });
 
   assert(receivedFinalized !== null, 'sentence_finalized event should have fired');
-  assert.strictEqual(receivedFinalized.finalText, 'with hardship comes ease.');
-  console.log('  ✔ Sentence finalized event emitted correctly.');
+  assert.strictEqual(receivedFinalized.finalText, 'Indeed, with hardship comes ease.');
+  assert.strictEqual(receivedFinalized.translatedText, 'Indeed, with hardship comes ease.');
+  console.log('  ✔ Sentence finalized event emitted correctly with full accumulated text.');
 
   // Clean up the listener to avoid interference
   sonioxService.removeAllListeners('token_stream');

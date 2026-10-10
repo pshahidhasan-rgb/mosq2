@@ -203,10 +203,12 @@ sonioxService.on('token_stream', ({ lang, translatedChunk, originalChunk, isFina
 });
 
 // When a sentence is finalized by Soniox, run Quran Ayah check and commit to history
-sonioxService.on('sentence_finalized', async ({ lang, translatedText, originalText, timestamp }) => {
+sonioxService.on('sentence_finalized', async ({ lang, translatedText, finalText, originalText, timestamp }) => {
   const targetSessionId = activeLiveSessionId;
   const session = sessionManager.getSession(targetSessionId);
   if (!session || session.status !== 'active') return;
+
+  const resolvedTranslation = translatedText || finalText || '';
 
   let ayahMatch = null;
   if (originalText && originalText.trim().length > 0) {
@@ -218,7 +220,7 @@ sonioxService.on('sentence_finalized', async ({ lang, translatedText, originalTe
     } catch (_) {}
   }
 
-  const translations = { [lang]: translatedText };
+  const translations = { [lang]: resolvedTranslation };
   if (ayahMatch && ayahMatch.translations) {
     Object.assign(translations, ayahMatch.translations);
   }
@@ -649,10 +651,10 @@ wss.on('connection', (ws) => {
 });
 
 if (!process.env.VERCEL) {
-  server.listen(PORT, () => {
+  server.listen(PORT, '0.0.0.0', () => {
     console.log(`====================================================`);
     console.log(` MosqAI Live Khutbah Translation Prototype is LIVE `);
-    console.log(` Port: http://localhost:${PORT}                      `);
+    console.log(` Port: http://0.0.0.0:${PORT}                         `);
     console.log(` Admin Control Panel: http://localhost:${PORT}/admin.html`);
     console.log(` Live TV Display:     http://localhost:${PORT}/display.html`);
     console.log(` Mobile Attendee Join: http://localhost:${PORT}/join.html`);
