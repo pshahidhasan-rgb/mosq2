@@ -13,6 +13,7 @@ let micInterval = null;
 let micActive = false;
 let speechRecognition = null;
 let isSimulating = false;
+let isSonnoxActive = false; // When true, skip Web Speech API fallback (Sonnox handles streaming)
 
 // DOM Views
 const viewSessionsList = document.getElementById('view-sessions-list');
@@ -855,6 +856,16 @@ async function startMicrophone() {
       console.warn('[Live Mic] Audio processor setup notice:', procErr.message);
     }
 
+    // When Sonnox is active, it handles real-time streaming directly via binary audio above.
+    // Skip the Web Speech API fallback to prevent duplicate full-sentence delivery.
+    if (isSonnoxActive) {
+      console.log('[Sonox] Streaming active - skipping Web Speech API fallback');
+      micActive = true;
+      btnToggleMic.textContent = 'Stop Live Mic';
+      btnToggleMic.className = 'btn btn-danger';
+      return;
+    }
+
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       alert('Live speech recognition requires Google Chrome or Safari.');
       return;
@@ -1515,6 +1526,19 @@ async function init() {
   initTvFontControls();
   const authed = await checkAuth();
   if (authed) {
+    // Check if Sonnox real-time streaming is active
+    try {
+      const res = await fetch('/api/status');
+      if (res.ok) {
+        const data = await res.json();
+        isSonnoxActive = data.providers.sonioxStreaming === true;
+        if (isSonnoxActive) {
+          console.log('[Sonox] Real-time streaming is ACTIVE - Web Speech fallback will be skipped');
+        }
+      }
+    } catch (e) {
+      console.warn('[Init] Could not check Sonnox status:', e.message);
+    }
     setupViewRouting();
   }
 }
