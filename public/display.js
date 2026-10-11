@@ -528,9 +528,6 @@ function handleIncomingSpeech({ arabic, translations, translated, ayah, timestam
     transObj = { [targetLang]: translated };
   }
 
-  // If a streaming paragraph is currently active on screen, finalize it in-place
-  const streamingArabic = arabicFeed.querySelector('.para-item.current.streaming');
-  const streamingTrans = transFeed.querySelector('.para-item.current.streaming');
   let displayTrans = '';
   if (typeof transObj === 'object' && transObj !== null) {
     displayTrans = transObj[targetLang] || transObj.en || Object.values(transObj)[0] || '';
@@ -538,6 +535,12 @@ function handleIncomingSpeech({ arabic, translations, translated, ayah, timestam
     displayTrans = transObj || '';
   }
 
+  const streamingArabic = arabicFeed.querySelector('.para-item.current.streaming');
+  const streamingTrans = transFeed.querySelector('.para-item.current.streaming');
+  const currentArabic = arabicFeed.querySelector('.para-item.current');
+  const currentTrans = transFeed.querySelector('.para-item.current');
+
+  // 1. If a streaming paragraph is currently active on screen, finalize it in-place
   if (streamingArabic || streamingTrans) {
     if (streamingArabic && arabic) {
       if (hasArabicScript(arabic)) {
@@ -559,7 +562,16 @@ function handleIncomingSpeech({ arabic, translations, translated, ayah, timestam
     return;
   }
 
-  // Quran Ayah Overlay is DISABLED — just append to feeds directly
+  // 2. If the current paragraph on screen already contains this text (already finalized in-place), do NOT duplicate!
+  const arabicMatch = currentArabic && arabic && currentArabic.textContent.trim() === arabic.trim();
+  const transMatch = currentTrans && displayTrans && currentTrans.textContent.trim() === displayTrans.trim();
+  if (arabicMatch || transMatch) {
+    recentFeedItems.push({ arabicText: (arabic && hasArabicScript(arabic)) ? arabic : '', transObj });
+    while (recentFeedItems.length > MAX_HISTORY) recentFeedItems.shift();
+    return;
+  }
+
+  // 3. Otherwise (restoring history / polling fallback), append to feeds directly
   const validArabic = (arabic && hasArabicScript(arabic)) ? arabic : '';
   appendToFeed(validArabic, transObj, isLive);
 }

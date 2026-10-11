@@ -227,25 +227,11 @@ sonioxService.on('token_stream', ({ lang, translatedChunk, originalChunk, origin
   }
 });
 
-// When a sentence is finalized by Soniox, run Quran Ayah check and commit to history
-sonioxService.on('sentence_finalized', async ({ lang, translatedText, finalText, originalText, timestamp }) => {
+// When a sentence is finalized by Soniox, broadcast immediately (0ms delay) to session history and attendees
+sonioxService.on('sentence_finalized', ({ lang, translatedText, finalText, originalText, timestamp }) => {
   const targetIds = getTargetSessionIds();
   const resolvedTranslation = translatedText || finalText || '';
-
-  let ayahMatch = null;
-  if (originalText && originalText.trim().length > 0) {
-    try {
-      ayahMatch = await quranAiDetector.detect(originalText.trim());
-      if (ayahMatch) {
-        console.log(`[Soniox -> Quran Match]: ${ayahMatch.reference} (${ayahMatch.confidence}%)`);
-      }
-    } catch (_) {}
-  }
-
   const translations = { [lang]: resolvedTranslation };
-  if (ayahMatch && ayahMatch.translations) {
-    Object.assign(translations, ayahMatch.translations);
-  }
 
   for (const sid of targetIds) {
     const session = sessionManager.getSession(sid);
@@ -254,9 +240,9 @@ sonioxService.on('sentence_finalized', async ({ lang, translatedText, finalText,
     sessionManager.broadcastTranslations(sid, {
       arabicText: originalText,
       translations,
-      ayahData: ayahMatch,
+      ayahData: null,
       audioByLanguage: {},
-      timestamp
+      timestamp: timestamp || new Date().toISOString()
     });
   }
 });

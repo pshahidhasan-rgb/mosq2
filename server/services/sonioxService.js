@@ -151,9 +151,9 @@ class SonioxGateManager extends EventEmitter {
           sample_rate: SAMPLE_RATE,
           num_channels: NUM_CHANNELS,
           enable_endpoint_detection: true,
-          endpoint_latency_adjustment_level: 2,
-          max_endpoint_delay_ms: 400,
-          endpoint_sensitivity: 0.0,
+          endpoint_latency_adjustment_level: 3,
+          max_endpoint_delay_ms: 800,
+          endpoint_sensitivity: 0.5,
           source_language: 'ar',
           translation: {
             type: 'one_way',
@@ -296,6 +296,20 @@ class SonioxGateManager extends EventEmitter {
     if (hasEndpoint) {
       const fullFinalOriginal    = (gate.confirmedOriginalText   + gate.liveOriginalPreview).trim();
       const fullFinalTranslation = (gate.confirmedTranslatedText + gate.liveTranslatedPreview).trim();
+
+      // Emit full-replacement token_stream with isFinal: true so UI locks in the completed sentence immediately
+      if (fullFinalOriginal || fullFinalTranslation) {
+        this.emit('token_stream', {
+          lang:            gate.lang,
+          originalFull:    fullFinalOriginal,
+          translatedFull:  fullFinalTranslation,
+          translatedChunk: '',
+          originalChunk:   '',
+          isReplacement:   true,
+          isFinal:         true,
+          timestamp:       new Date().toISOString()
+        });
+      }
 
       // Reset accumulation state for the next sentence
       gate.confirmedOriginalText   = '';
