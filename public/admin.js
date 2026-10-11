@@ -898,10 +898,9 @@ async function startMicrophone() {
           const transcript = evt.results[i][0].transcript.trim();
           if (!transcript) continue;
 
-          // If Soniox is active and actively streaming tokens within the last 3.5s,
-          // suppress the Web Speech fallback injection to prevent duplicate text
-          if (isSonnoxActive && (Date.now() - lastSonioxTokenTime < 3500)) {
-            console.log('[Live Mic] Suppressing Web Speech fallback — Soniox streaming is actively delivering tokens');
+          // If Soniox is active, suppress Web Speech fallback injection to prevent duplicate / wrong language text
+          if (isSonnoxActive) {
+            console.log('[Live Mic] Suppressing Web Speech fallback — Soniox handles live audio');
             continue;
           }
 
@@ -920,7 +919,7 @@ async function startMicrophone() {
             await fetch(`/api/session/${currentSessionId}/inject-text`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ text: transcript })
+              body: JSON.stringify({ text: transcript, source: 'browser_mic' })
             });
           } catch (err) {
             console.warn('[Live Mic] Inject error:', err.message);

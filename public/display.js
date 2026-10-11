@@ -436,6 +436,8 @@ function reRenderTranslationFeed() {
   }
 }
 
+const hasArabicScript = (text) => /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/.test(text || '');
+
 /**
  * Append New Sentence to Live Split Screen without Wiping History
  */
@@ -448,8 +450,8 @@ function appendToFeed(arabicText, transObj, isLive = true) {
     recentFeedItems.shift();
   }
 
-  // 1. Arabic Column
-  if (arabicText) {
+  // 1. Arabic Column — only render if text actually contains Arabic script
+  if (arabicText && hasArabicScript(arabicText)) {
     const existingCurrent = arabicFeed.querySelectorAll('.para-item.current');
     existingCurrent.forEach(el => {
       el.classList.remove('current');
@@ -538,8 +540,12 @@ function handleIncomingSpeech({ arabic, translations, translated, ayah, timestam
 
   if (streamingArabic || streamingTrans) {
     if (streamingArabic && arabic) {
-      streamingArabic.classList.remove('streaming');
-      streamingArabic.textContent = arabic;
+      if (hasArabicScript(arabic)) {
+        streamingArabic.classList.remove('streaming');
+        streamingArabic.textContent = arabic;
+      } else {
+        streamingArabic.remove();
+      }
     }
     if (streamingTrans && displayTrans) {
       streamingTrans.classList.remove('streaming');
@@ -548,13 +554,14 @@ function handleIncomingSpeech({ arabic, translations, translated, ayah, timestam
         playTvBrowserAudio(displayTrans, targetLang);
       }
     }
-    recentFeedItems.push({ arabicText: arabic, transObj });
+    recentFeedItems.push({ arabicText: (arabic && hasArabicScript(arabic)) ? arabic : '', transObj });
     while (recentFeedItems.length > MAX_HISTORY) recentFeedItems.shift();
     return;
   }
 
   // Quran Ayah Overlay is DISABLED — just append to feeds directly
-  appendToFeed(arabic, transObj, isLive);
+  const validArabic = (arabic && hasArabicScript(arabic)) ? arabic : '';
+  appendToFeed(validArabic, transObj, isLive);
 }
 
 /**

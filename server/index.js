@@ -478,10 +478,15 @@ app.post('/api/session/:id/inject-text', async (req, res) => {
     });
   }
 
+  // If Soniox streaming is active, suppress browser Web Speech fallback injection
+  if (sonioxService.isConfigured() && req.body.source === 'browser_mic') {
+    return res.json({ success: true, suppressed: true, reason: 'Soniox handles real-time speech stream' });
+  }
+
   const result = await processTranscript({
     text,
     isFinal: true,
-    source: 'manual_injection',
+    source: req.body.source || 'manual_injection',
     sessionId: req.params.id
   });
 

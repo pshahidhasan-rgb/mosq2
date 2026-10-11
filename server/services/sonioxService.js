@@ -102,14 +102,13 @@ class SonioxGateManager extends EventEmitter {
       currentOriginalText: '',
       currentTranslatedText: '',
       // Correct accumulation state:
-      // confirmed* = is_final:true tokens (stable, accumulate within a sentence)
-      // live*Preview = is_final:false tokens (current hypothesis, REPLACE each frame)
+      // Correct accumulation state:
+      // confirmed* = is_final:true tokens (sent once by Soniox, accumulate permanently for the sentence)
+      // live*Preview = is_final:false tokens (provisional hypothesis tail, REPLACE each frame)
       confirmedOriginalText:   '',
       confirmedTranslatedText: '',
       liveOriginalPreview:     '',
       liveTranslatedPreview:   '',
-      confirmedFinalCount:     0,   // how many final-original tokens we've already committed
-      confirmedTransCount:     0,   // how many final-translation tokens we've already committed
       reconnectAttempts: 0,
       createdAt: Date.now()
     };
@@ -137,16 +136,14 @@ class SonioxGateManager extends EventEmitter {
         gate.confirmedTranslatedText = '';
         gate.liveOriginalPreview     = '';
         gate.liveTranslatedPreview   = '';
-        gate.confirmedFinalCount     = 0;
-        gate.confirmedTransCount     = 0;
         gate.currentOriginalText     = '';
         gate.currentTranslatedText   = '';
         console.log(`[Soniox Gate] Connected & ready for language "${gate.lang}".`);
 
-        // Send Sonnox start configuration payload
-        // CRITICAL: api_key goes in the JSON config (not headers) per Sonnox API spec
-        // enable_endpoint_detection: true with low latency allows word-by-word
-        // streaming while detecting sentence boundaries for finalization
+        // Send Soniox start configuration payload
+        // CRITICAL: api_key goes in the JSON config (not headers) per Soniox API spec
+        // enable_endpoint_detection: true with balanced latency allows word-by-word
+        // streaming while detecting natural sentence boundaries for finalization
         const configMessage = {
           api_key: this.apiKey,
           model: DEFAULT_MODEL,
@@ -154,12 +151,13 @@ class SonioxGateManager extends EventEmitter {
           sample_rate: SAMPLE_RATE,
           num_channels: NUM_CHANNELS,
           enable_endpoint_detection: true,
-          endpoint_latency_adjustment_level: 3,
-          max_endpoint_delay_ms: 300,  // Low latency finalization
-          endpoint_sensitivity: -1.0,
-          source_language: 'ar',  // Strictly Arabic speech recognition for pure Arabic output
+          endpoint_latency_adjustment_level: 2,
+          max_endpoint_delay_ms: 400,
+          endpoint_sensitivity: 0.0,
+          source_language: 'ar',
           translation: {
             type: 'one_way',
+            source_language: 'ar',
             target_language: gate.lang
           }
         };
@@ -216,13 +214,19 @@ class SonioxGateManager extends EventEmitter {
   /**
    * Parse Soniox streaming tokens and dispatch in real-time.
    *
-   * KEY BEHAVIOUR (fixed):
-   *  - Soniox sends the FULL GROWING HYPOTHESIS in every frame, not just the delta.
-   *    is_final:false tokens in frame N may repeat tokens from frame N-1 with revisions.
-   *    → Non-final tokens must REPLACE the live preview, never be appended.
-   *  - is_final:true means "this word is confirmed" — NOT "sentence is over".
-   *    The real sentence-end signal is the <end>/<fin> special token.
-   *    → Only emit sentence_finalized when <end>/<fin> is detected.
+   * Append-and-Replace architecture (per official Soniox specification):
+   *  1. Confirmed tokens (is_final:true): sent once by Soniox. We append each
+   *     newly confirmed token directly to confirmedOriginalText / confirmedTranslatedText.
+   *  2. Provisional tokens (is_final:false): Soniox's live hypothesis for the current
+   *     words/phrase. Each frame's provisional tokens REPLACE liveOriginalPreview /
+   *     liveTranslatedPreview.
+   *  3. Independent streams: Transcription (original) and Translation tokens arrive
+   *     independently. We only update original buffers when original tokens are present,
+   *     and translation buffers when translation tokens are present, so neither stream
+   *     wipes the other out.
+   *  4. Full replacement display: The UI always receives (confirmed + livePreview) and
+   *     SETs the text, giving sub-200ms real-time fluidity with zero duplicates.
+   *  5. Sentence boundary: <end>/<fin> triggers finalization and resets the buffer.
    */
   handleSonioxMessage(gate, data) {
     if (!data) return;
@@ -237,31 +241,35 @@ class SonioxGateManager extends EventEmitter {
     const userTokens = tokens.filter(t => t.text && !isSpecialToken(t.text));
 
     if (userTokens.length > 0) {
-      // Separate by finality and by type (original vs translation)
-      const finalOrigTokens  = userTokens.filter(t =>  t.is_final && t.translation_status !== 'translation');
-      const finalTransTokens = userTokens.filter(t =>  t.is_final && t.translation_status === 'translation');
-      const liveOrigTokens   = userTokens.filter(t => !t.is_final && t.translation_status !== 'translation');
-      const liveTransTokens  = userTokens.filter(t => !t.is_final && t.translation_status === 'translation');
+      // 1. Separate original tokens vs translation tokens
+      const origTokens  = userTokens.filter(t => t.translation_status !== 'translation');
+      const transTokens = userTokens.filter(t => t.translation_status === 'translation');
 
-      // ── Accumulate ONLY newly-seen confirmed tokens ─────────────────────────
-      // finalOrigTokens includes ALL final-original tokens seen so far in this sentence.
-      // We slice from confirmedFinalCount to grab only the NEW ones beyond what we committed.
-      const newFinalOrig  = finalOrigTokens.slice(gate.confirmedFinalCount).map(t => t.text).join('');
-      const newFinalTrans = finalTransTokens.slice(gate.confirmedTransCount).map(t => t.text).join('');
-
-      if (newFinalOrig) {
-        gate.confirmedOriginalText  += newFinalOrig;
-        gate.confirmedFinalCount     = finalOrigTokens.length;
-      }
-      if (newFinalTrans) {
-        gate.confirmedTranslatedText += newFinalTrans;
-        gate.confirmedTransCount      = finalTransTokens.length;
+      // ── Process Original Speech Tokens ─────────────────────────────────────
+      if (origTokens.length > 0) {
+        // Confirmed tokens are sent once — append to permanent buffer
+        for (const t of origTokens) {
+          if (t.is_final) {
+            gate.confirmedOriginalText += t.text;
+          }
+        }
+        // Provisional tokens replace the previous provisional tail
+        const nonFinalOrig = origTokens.filter(t => !t.is_final);
+        gate.liveOriginalPreview = nonFinalOrig.map(t => t.text).join('');
       }
 
-      // ── REPLACE live preview with the current non-final hypothesis ──────────
-      // Each frame's non-final tokens represent Soniox's latest guess — overwrite, don't append.
-      gate.liveOriginalPreview   = liveOrigTokens.map(t => t.text).join('');
-      gate.liveTranslatedPreview = liveTransTokens.map(t => t.text).join('');
+      // ── Process Translation Tokens ──────────────────────────────────────────
+      if (transTokens.length > 0) {
+        // Confirmed tokens are sent once — append to permanent buffer
+        for (const t of transTokens) {
+          if (t.is_final) {
+            gate.confirmedTranslatedText += t.text;
+          }
+        }
+        // Provisional tokens replace the previous provisional tail
+        const nonFinalTrans = transTokens.filter(t => !t.is_final);
+        gate.liveTranslatedPreview = nonFinalTrans.map(t => t.text).join('');
+      }
 
       // ── Build full current display state ────────────────────────────────────
       const originalFull   = gate.confirmedOriginalText   + gate.liveOriginalPreview;
@@ -272,13 +280,12 @@ class SonioxGateManager extends EventEmitter {
       gate.currentTranslatedText = translatedFull;
 
       // ── Emit full-replacement token_stream event ────────────────────────────
-      // isReplacement:true tells display.js to SET textContent, not concatenate.
       this.emit('token_stream', {
         lang:            gate.lang,
         originalFull,        // full current Arabic  — display should SET this
         translatedFull,      // full current English — display should SET this
-        translatedChunk: '', // kept for backward-compat; not used when isReplacement:true
-        originalChunk:   '', // kept for backward-compat; not used when isReplacement:true
+        translatedChunk: '', // kept for backward-compat
+        originalChunk:   '', // kept for backward-compat
         isReplacement:   true,
         isFinal:         false,
         timestamp:       new Date().toISOString()
@@ -290,13 +297,11 @@ class SonioxGateManager extends EventEmitter {
       const fullFinalOriginal    = (gate.confirmedOriginalText   + gate.liveOriginalPreview).trim();
       const fullFinalTranslation = (gate.confirmedTranslatedText + gate.liveTranslatedPreview).trim();
 
-      // Reset ALL accumulation state for the next sentence
+      // Reset accumulation state for the next sentence
       gate.confirmedOriginalText   = '';
       gate.confirmedTranslatedText = '';
       gate.liveOriginalPreview     = '';
       gate.liveTranslatedPreview   = '';
-      gate.confirmedFinalCount     = 0;
-      gate.confirmedTransCount     = 0;
       gate.currentOriginalText     = '';
       gate.currentTranslatedText   = '';
 
