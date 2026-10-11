@@ -18,6 +18,12 @@ const DEFAULT_MODEL = 'stt-rt-v5';
 const SAMPLE_RATE = 16000;
 const NUM_CHANNELS = 1;
 
+function isSpecialToken(text) {
+  if (!text) return true;
+  const t = text.trim();
+  return t === '<end>' || t === '<fin>' || /^<.*>$/.test(t);
+}
+
 class SonioxGateManager extends EventEmitter {
   constructor(apiKey = process.env.SONIOX_API_KEY) {
     super();
@@ -132,10 +138,10 @@ class SonioxGateManager extends EventEmitter {
           endpoint_latency_adjustment_level: 3,
           max_endpoint_delay_ms: 300,  // Low latency finalization
           endpoint_sensitivity: -1.0,
+          source_language: 'ar',  // Strictly Arabic speech recognition for pure Arabic output
           translation: {
             type: 'one_way',
             target_language: gate.lang
-            // Note: source_language is omitted to allow auto-detection ("detect any language")
           }
         };
 
@@ -203,19 +209,17 @@ class SonioxGateManager extends EventEmitter {
     // Emit each token IMMEDIATELY as it arrives — no batching
     for (const token of tokens) {
       const text = token.text || '';
+      if (!text || isSpecialToken(text)) {
+        if (text && isSpecialToken(text)) hasFinal = true;
+        continue;
+      }
+
       const status = token.translation_status || 'none';
       const isFinal = Boolean(token.is_final);
       if (isFinal) hasFinal = true;
 
       if (status === 'translation') {
-        const trimmed = text.trim();
-        if (trimmed) {
-          gate.currentTranslatedText = gate.currentTranslatedText
-            ? (/^[.,!?;:،؟]/.test(trimmed)
-                ? gate.currentTranslatedText.trimEnd() + trimmed
-                : gate.currentTranslatedText.trimEnd() + ' ' + trimmed)
-            : text;
-        }
+        gate.currentTranslatedText = (gate.currentTranslatedText || '') + text;
         // Word-by-word translation token — stream immediately
         this.emit('token_stream', {
           lang: gate.lang,
@@ -226,14 +230,7 @@ class SonioxGateManager extends EventEmitter {
           timestamp: new Date().toISOString()
         });
       } else if (status === 'original' || status === 'none') {
-        const trimmed = text.trim();
-        if (trimmed) {
-          gate.currentOriginalText = gate.currentOriginalText
-            ? (/^[.,!?;:،؟]/.test(trimmed)
-                ? gate.currentOriginalText.trimEnd() + trimmed
-                : gate.currentOriginalText.trimEnd() + ' ' + trimmed)
-            : text;
-        }
+        gate.currentOriginalText = (gate.currentOriginalText || '') + text;
         // Original word token — stream immediately
         this.emit('token_stream', {
           lang: gate.lang,

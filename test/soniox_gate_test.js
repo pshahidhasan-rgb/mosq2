@@ -91,11 +91,12 @@ async function runSonioxGateTests() {
   assert.strictEqual(receivedTokenStreams[1].originalChunk, 'إن ');
   console.log('  ✔ Per-token streaming emission verified (' + receivedTokenStreams.length + ' tokens emitted independently).');
 
-  // Final sentence completion token
+  // Final sentence completion token with Soniox <end> control token
   sonioxService.handleSonioxMessage(enGate, {
     tokens: [
       { text: 'with hardship comes ease.', translation_status: 'translation', is_final: true },
-      { text: 'مع العسر يسرا.', translation_status: 'original', is_final: true }
+      { text: 'مع العسر يسرا.', translation_status: 'original', is_final: true },
+      { text: '<end>', translation_status: 'original', is_final: true }
     ]
   });
 

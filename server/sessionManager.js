@@ -594,11 +594,11 @@ class SessionManager extends EventEmitter {
       const clientLang = sub.language || 'en';
       if (sub.role === 'tv') {
         const tvLang = sub.language || 'en';
-        if (tvLang === lang || (originalChunk && originalChunk.trim().length > 0)) {
+        if (tvLang === lang) {
           sub.ws.send(JSON.stringify({
             type: 'STREAMING_TOKEN',
             lang,
-            translatedChunk: tvLang === lang ? translatedChunk : '',
+            translatedChunk: translatedChunk || '',
             originalChunk: originalChunk || '',
             isFinal,
             timestamp

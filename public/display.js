@@ -562,7 +562,7 @@ function handleIncomingSpeech({ arabic, translations, translated, ayah, timestam
  */
 function handleStreamingToken({ lang, translatedChunk = '', originalChunk = '', isFinal = false }) {
   // 1. Arabic streaming column
-  if (originalChunk && originalChunk.trim().length > 0) {
+  if (originalChunk && originalChunk.length > 0) {
     let currentArabic = arabicFeed.querySelector('.para-item.current.streaming');
     if (!currentArabic) {
       arabicFeed.querySelectorAll('.para-item.current').forEach(el => {
@@ -573,7 +573,7 @@ function handleStreamingToken({ lang, translatedChunk = '', originalChunk = '', 
       currentArabic.className = 'para-item current streaming';
       arabicFeed.appendChild(currentArabic);
     }
-    currentArabic.textContent = (currentArabic.textContent ? currentArabic.textContent + ' ' : '') + originalChunk.trim();
+    currentArabic.textContent = (currentArabic.textContent + originalChunk).trimStart();
     while (arabicFeed.children.length > MAX_HISTORY) {
       arabicFeed.firstElementChild.remove();
     }
@@ -583,7 +583,7 @@ function handleStreamingToken({ lang, translatedChunk = '', originalChunk = '', 
   }
 
   // 2. Translation streaming column (for active targetLang)
-  if (translatedChunk && translatedChunk.trim().length > 0) {
+  if (translatedChunk && translatedChunk.length > 0) {
     let currentTrans = transFeed.querySelector('.para-item.current.streaming');
     if (!currentTrans) {
       transFeed.querySelectorAll('.para-item.current').forEach(el => {
@@ -594,7 +594,7 @@ function handleStreamingToken({ lang, translatedChunk = '', originalChunk = '', 
       currentTrans.className = 'para-item current streaming';
       transFeed.appendChild(currentTrans);
     }
-    currentTrans.textContent = (currentTrans.textContent ? currentTrans.textContent + ' ' : '') + translatedChunk.trim();
+    currentTrans.textContent = (currentTrans.textContent + translatedChunk).trimStart();
     while (transFeed.children.length > MAX_HISTORY) {
       transFeed.firstElementChild.remove();
     }

@@ -416,7 +416,7 @@ function handleStreamingTokenMobile({ lang, translatedChunk = '', isFinal = fals
 
   const transContainer = currentStreamingCard.querySelector('.card-translated-text');
   if (transContainer) {
-    transContainer.textContent = (transContainer.textContent ? transContainer.textContent + ' ' : '') + translatedChunk.trim();
+    transContainer.textContent = (transContainer.textContent + translatedChunk).trimStart();
   }
   mobileCardsFeed.scrollTop = mobileCardsFeed.scrollHeight;
 
