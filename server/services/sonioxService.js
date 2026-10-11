@@ -120,8 +120,8 @@ class SonioxGateManager extends EventEmitter {
 
         // Send Sonnox start configuration payload
         // CRITICAL: api_key goes in the JSON config (not headers) per Sonnox API spec
-        // enable_endpoint_detection: true with high latency level allows word-by-word
-        // streaming while still detecting sentence boundaries for finalization
+        // enable_endpoint_detection: true with low latency allows word-by-word
+        // streaming while detecting sentence boundaries for finalization
         const configMessage = {
           api_key: this.apiKey,
           model: DEFAULT_MODEL,
@@ -130,12 +130,12 @@ class SonioxGateManager extends EventEmitter {
           num_channels: NUM_CHANNELS,
           enable_endpoint_detection: true,
           endpoint_latency_adjustment_level: 3,
-          max_endpoint_delay_ms: 500,
+          max_endpoint_delay_ms: 300,  // Reduced from 500ms for faster finalization
           endpoint_sensitivity: -1.0,
+          source_language: 'ar',  // Explicitly set Arabic for better recognition
           translation: {
             type: 'one_way',
             target_language: gate.lang
-            // Note: source_language is omitted for auto-detection ("detect any")
           }
         };
 
@@ -205,7 +205,9 @@ class SonioxGateManager extends EventEmitter {
       const isFinal = Boolean(token.is_final);
 
       if (status === 'translation') {
-        gate.currentTranslatedText = (gate.currentTranslatedText || '') + text;
+        gate.currentTranslatedText = gate.currentTranslatedText
+          ? gate.currentTranslatedText.trimEnd() + ' ' + text.trim()
+          : text;
         // Word-by-word translation token — stream immediately
         this.emit('token_stream', {
           lang: gate.lang,
@@ -216,7 +218,9 @@ class SonioxGateManager extends EventEmitter {
           timestamp: new Date().toISOString()
         });
       } else if (status === 'original' || status === 'none') {
-        gate.currentOriginalText = (gate.currentOriginalText || '') + text;
+        gate.currentOriginalText = gate.currentOriginalText
+          ? gate.currentOriginalText.trimEnd() + text.trim()
+          : text;
         // Original (Arabic) word token — stream immediately
         this.emit('token_stream', {
           lang: gate.lang,
@@ -229,7 +233,8 @@ class SonioxGateManager extends EventEmitter {
       }
 
       // Sentence boundary — fire finalized event with full accumulated sentence
-      if (isFinal) {
+      // Only fire when we have meaningful content and the token is final
+      if (isFinal && (gate.currentTranslatedText.trim() || gate.currentOriginalText.trim())) {
         const fullFinalTranslation = (gate.currentTranslatedText || text).trim();
         const fullFinalOriginal = (gate.currentOriginalText || (status === 'original' || status === 'none' ? text : '')).trim();
         gate.currentTranslatedText = '';
