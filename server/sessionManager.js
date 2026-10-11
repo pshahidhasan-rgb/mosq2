@@ -576,12 +576,16 @@ class SessionManager extends EventEmitter {
   }
 
   /**
-   * Relays live streaming tokens (sub-200ms word-by-word) to the TV and matching attendees
+   * Relays live streaming tokens (sub-200ms word-by-word) to the TV and matching attendees.
+   * Passes originalFull/translatedFull for full-replacement mode (isReplacement:true).
    */
   broadcastStreamingToken(sessionId, {
     lang,
     translatedChunk = '',
     originalChunk = '',
+    originalFull = '',
+    translatedFull = '',
+    isReplacement = false,
     isFinal = false,
     timestamp = new Date().toISOString()
   }) {
@@ -598,8 +602,11 @@ class SessionManager extends EventEmitter {
           sub.ws.send(JSON.stringify({
             type: 'STREAMING_TOKEN',
             lang,
-            translatedChunk: translatedChunk || '',
-            originalChunk: originalChunk || '',
+            translatedChunk:  translatedChunk  || '',
+            originalChunk:    originalChunk    || '',
+            originalFull:     originalFull     || '',
+            translatedFull:   translatedFull   || '',
+            isReplacement:    Boolean(isReplacement),
             isFinal,
             timestamp
           }));
@@ -610,7 +617,9 @@ class SessionManager extends EventEmitter {
             type: 'STREAMING_TOKEN',
             lang,
             translatedChunk,
-            originalChunk: '',
+            originalChunk:   '',
+            translatedFull:  translatedFull  || '',
+            isReplacement:   Boolean(isReplacement),
             isFinal,
             timestamp
           }));
@@ -621,6 +630,9 @@ class SessionManager extends EventEmitter {
           lang,
           translatedChunk,
           originalChunk,
+          originalFull:   originalFull   || '',
+          translatedFull: translatedFull || '',
+          isReplacement:  Boolean(isReplacement),
           isFinal,
           timestamp
         }));

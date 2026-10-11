@@ -57,6 +57,13 @@ let activeLiveSessionId = 'jumuah-live-4b2c1d';
     hostUrl: `http://localhost:${PORT}`
   });
   console.log(`[MosqAI] Ready with secure mosque sessions: myo-youth-8f3a9e, jumuah-live-4b2c1d`);
+
+  // Change 6: Pre-warm the English gate immediately so it's ready before the first word.
+  // This eliminates the 200–500ms first-word delay caused by WebSocket handshake latency.
+  if (sonioxService.isConfigured()) {
+    sonioxService.ensureGate('en');
+    console.log('[Soniox] English gate pre-warmed at startup.');
+  }
 })();
 
 // Initialize STT engine (Deepgram Nova-3 / Gladia / Simulator)
@@ -204,13 +211,16 @@ sessionManager.on('languages_updated', ({ sessionId, languages }) => {
 });
 
 // Broadcast real-time streaming tokens (sub-200ms word-by-word) to all active rooms
-sonioxService.on('token_stream', ({ lang, translatedChunk, originalChunk, isFinal, timestamp }) => {
+sonioxService.on('token_stream', ({ lang, translatedChunk, originalChunk, originalFull, translatedFull, isReplacement, isFinal, timestamp }) => {
   const targetIds = getTargetSessionIds();
   for (const sid of targetIds) {
     sessionManager.broadcastStreamingToken(sid, {
       lang,
       translatedChunk,
       originalChunk,
+      originalFull,
+      translatedFull,
+      isReplacement,
       isFinal,
       timestamp
     });

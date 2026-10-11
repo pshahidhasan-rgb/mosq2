@@ -399,8 +399,16 @@ function streamWordsToMobileCard(element, fullText, delayMs = 85, onComplete = n
 
 let currentStreamingCard = null;
 
-function handleStreamingTokenMobile({ lang, translatedChunk = '', isFinal = false }) {
-  if (lang !== currentLanguage || !translatedChunk || translatedChunk.trim().length === 0) return;
+function handleStreamingTokenMobile({
+  lang,
+  translatedChunk = '',
+  translatedFull = '',
+  isReplacement = false,
+  isFinal = false
+}) {
+  // Determine which content to use — full replacement or legacy delta chunk
+  const content = isReplacement ? translatedFull : translatedChunk;
+  if (lang !== currentLanguage || !content || content.trim().length === 0) return;
 
   if (!currentStreamingCard) {
     const card = document.createElement('div');
@@ -416,7 +424,11 @@ function handleStreamingTokenMobile({ lang, translatedChunk = '', isFinal = fals
 
   const transContainer = currentStreamingCard.querySelector('.card-translated-text');
   if (transContainer) {
-    transContainer.textContent = (transContainer.textContent + translatedChunk).trimStart();
+    if (isReplacement) {
+      transContainer.textContent = content.trimStart();                           // SET
+    } else {
+      transContainer.textContent = (transContainer.textContent + content).trimStart(); // legacy APPEND
+    }
   }
   mobileCardsFeed.scrollTop = mobileCardsFeed.scrollHeight;
 

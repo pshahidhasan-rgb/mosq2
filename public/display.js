@@ -560,9 +560,25 @@ function handleIncomingSpeech({ arabic, translations, translated, ayah, timestam
 /**
  * Handle Sub-200ms Word-by-Word Streaming Tokens from Soniox
  */
-function handleStreamingToken({ lang, translatedChunk = '', originalChunk = '', isFinal = false }) {
-  // 1. Arabic streaming column
-  if (originalChunk && originalChunk.length > 0) {
+function handleStreamingToken({
+  lang,
+  translatedChunk = '',
+  originalChunk = '',
+  originalFull = '',
+  translatedFull = '',
+  isReplacement = false,
+  isFinal = false
+}) {
+  // Returns true if text contains at least one Arabic Unicode character.
+  // Used to prevent romanized/Latin pass-through tokens from appearing in the Arabic column.
+  const hasArabicScript = (text) => /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/.test(text);
+
+  // ── Left column (Arabic original) ──────────────────────────────────────────
+  // Prefer full-replacement field; fall back to legacy chunk for backwards-compat.
+  const arabicContent = isReplacement ? originalFull : originalChunk;
+  // Only update the Arabic column if the content actually contains Arabic script.
+  // This blocks romanized Latin text (e.g. "Maliki", "Tallinn") from the left side.
+  if (arabicContent && hasArabicScript(arabicContent)) {
     let currentArabic = arabicFeed.querySelector('.para-item.current.streaming');
     if (!currentArabic) {
       arabicFeed.querySelectorAll('.para-item.current').forEach(el => {
@@ -573,17 +589,20 @@ function handleStreamingToken({ lang, translatedChunk = '', originalChunk = '', 
       currentArabic.className = 'para-item current streaming';
       arabicFeed.appendChild(currentArabic);
     }
-    currentArabic.textContent = (currentArabic.textContent + originalChunk).trimStart();
-    while (arabicFeed.children.length > MAX_HISTORY) {
-      arabicFeed.firstElementChild.remove();
+    if (isReplacement) {
+      currentArabic.textContent = arabicContent.trimStart();         // SET — full replacement
+    } else {
+      currentArabic.textContent = (currentArabic.textContent + arabicContent).trimStart(); // legacy APPEND
     }
+    while (arabicFeed.children.length > MAX_HISTORY) arabicFeed.firstElementChild.remove();
     if (arabicFeed.parentElement) {
       arabicFeed.parentElement.scrollTo({ top: arabicFeed.parentElement.scrollHeight, behavior: 'smooth' });
     }
   }
 
-  // 2. Translation streaming column (for active targetLang)
-  if (translatedChunk && translatedChunk.length > 0) {
+  // ── Right column (translation) ──────────────────────────────────────────────
+  const transContent = isReplacement ? translatedFull : translatedChunk;
+  if (transContent && transContent.length > 0) {
     let currentTrans = transFeed.querySelector('.para-item.current.streaming');
     if (!currentTrans) {
       transFeed.querySelectorAll('.para-item.current').forEach(el => {
@@ -594,10 +613,12 @@ function handleStreamingToken({ lang, translatedChunk = '', originalChunk = '', 
       currentTrans.className = 'para-item current streaming';
       transFeed.appendChild(currentTrans);
     }
-    currentTrans.textContent = (currentTrans.textContent + translatedChunk).trimStart();
-    while (transFeed.children.length > MAX_HISTORY) {
-      transFeed.firstElementChild.remove();
+    if (isReplacement) {
+      currentTrans.textContent = transContent.trimStart();           // SET — full replacement
+    } else {
+      currentTrans.textContent = (currentTrans.textContent + transContent).trimStart(); // legacy APPEND
     }
+    while (transFeed.children.length > MAX_HISTORY) transFeed.firstElementChild.remove();
     if (transFeed.parentElement) {
       transFeed.parentElement.scrollTo({ top: transFeed.parentElement.scrollHeight, behavior: 'smooth' });
     }
