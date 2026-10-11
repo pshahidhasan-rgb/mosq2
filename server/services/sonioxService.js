@@ -130,12 +130,12 @@ class SonioxGateManager extends EventEmitter {
           num_channels: NUM_CHANNELS,
           enable_endpoint_detection: true,
           endpoint_latency_adjustment_level: 3,
-          max_endpoint_delay_ms: 300,  // Reduced from 500ms for faster finalization
+          max_endpoint_delay_ms: 300,  // Low latency finalization
           endpoint_sensitivity: -1.0,
-          source_language: 'ar',  // Explicitly set Arabic for better recognition
           translation: {
             type: 'one_way',
             target_language: gate.lang
+            // Note: source_language is omitted to allow auto-detection ("detect any language")
           }
         };
 
@@ -198,16 +198,24 @@ class SonioxGateManager extends EventEmitter {
     const tokens = data.tokens || (data.result && data.result.tokens) || [];
     if (!Array.isArray(tokens) || tokens.length === 0) return;
 
+    let hasFinal = false;
+
     // Emit each token IMMEDIATELY as it arrives — no batching
     for (const token of tokens) {
       const text = token.text || '';
       const status = token.translation_status || 'none';
       const isFinal = Boolean(token.is_final);
+      if (isFinal) hasFinal = true;
 
       if (status === 'translation') {
-        gate.currentTranslatedText = gate.currentTranslatedText
-          ? gate.currentTranslatedText.trimEnd() + ' ' + text.trim()
-          : text;
+        const trimmed = text.trim();
+        if (trimmed) {
+          gate.currentTranslatedText = gate.currentTranslatedText
+            ? (/^[.,!?;:،؟]/.test(trimmed)
+                ? gate.currentTranslatedText.trimEnd() + trimmed
+                : gate.currentTranslatedText.trimEnd() + ' ' + trimmed)
+            : text;
+        }
         // Word-by-word translation token — stream immediately
         this.emit('token_stream', {
           lang: gate.lang,
@@ -218,10 +226,15 @@ class SonioxGateManager extends EventEmitter {
           timestamp: new Date().toISOString()
         });
       } else if (status === 'original' || status === 'none') {
-        gate.currentOriginalText = gate.currentOriginalText
-          ? gate.currentOriginalText.trimEnd() + text.trim()
-          : text;
-        // Original (Arabic) word token — stream immediately
+        const trimmed = text.trim();
+        if (trimmed) {
+          gate.currentOriginalText = gate.currentOriginalText
+            ? (/^[.,!?;:،؟]/.test(trimmed)
+                ? gate.currentOriginalText.trimEnd() + trimmed
+                : gate.currentOriginalText.trimEnd() + ' ' + trimmed)
+            : text;
+        }
+        // Original word token — stream immediately
         this.emit('token_stream', {
           lang: gate.lang,
           translatedChunk: '',
@@ -231,23 +244,23 @@ class SonioxGateManager extends EventEmitter {
           timestamp: new Date().toISOString()
         });
       }
+    }
 
-      // Sentence boundary — fire finalized event with full accumulated sentence
-      // Only fire when we have meaningful content and the token is final
-      if (isFinal && (gate.currentTranslatedText.trim() || gate.currentOriginalText.trim())) {
-        const fullFinalTranslation = (gate.currentTranslatedText || text).trim();
-        const fullFinalOriginal = (gate.currentOriginalText || (status === 'original' || status === 'none' ? text : '')).trim();
-        gate.currentTranslatedText = '';
-        gate.currentOriginalText = '';
+    // Sentence boundary — fire finalized event with full accumulated sentence
+    // Only fire after processing all tokens in this message
+    if (hasFinal && (gate.currentTranslatedText.trim() || gate.currentOriginalText.trim())) {
+      const fullFinalTranslation = gate.currentTranslatedText.trim();
+      const fullFinalOriginal = gate.currentOriginalText.trim();
+      gate.currentTranslatedText = '';
+      gate.currentOriginalText = '';
 
-        this.emit('sentence_finalized', {
-          lang: gate.lang,
-          finalText: fullFinalTranslation,
-          translatedText: fullFinalTranslation,
-          originalText: fullFinalOriginal,
-          timestamp: new Date().toISOString()
-        });
-      }
+      this.emit('sentence_finalized', {
+        lang: gate.lang,
+        finalText: fullFinalTranslation,
+        translatedText: fullFinalTranslation,
+        originalText: fullFinalOriginal,
+        timestamp: new Date().toISOString()
+      });
     }
   }
 

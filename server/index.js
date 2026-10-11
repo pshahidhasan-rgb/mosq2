@@ -184,30 +184,42 @@ sttService.on('translation', async (data) => {
 // ---------------------------------------------------------------------------
 // Soniox Dynamic Language Gates Integration
 // ---------------------------------------------------------------------------
-// Synchronize open Soniox language gates when attendee/TV language selection changes
+// Helper to get all active session IDs (with activeLiveSessionId fallback)
+function getTargetSessionIds() {
+  const activeIds = [];
+  for (const [id, s] of sessionManager.sessions.entries()) {
+    if (s.status === 'active') activeIds.push(id);
+  }
+  if (activeIds.length === 0 && activeLiveSessionId) {
+    activeIds.push(activeLiveSessionId);
+  }
+  return activeIds;
+}
+
+// Synchronize open Soniox language gates when attendee/TV language selection changes in any room
 sessionManager.on('languages_updated', ({ sessionId, languages }) => {
-  if (sessionId === activeLiveSessionId && sonioxService.isConfigured()) {
+  if (sonioxService.isConfigured()) {
     sonioxService.syncGates(languages);
   }
 });
 
-// Broadcast real-time streaming tokens (sub-200ms word-by-word)
+// Broadcast real-time streaming tokens (sub-200ms word-by-word) to all active rooms
 sonioxService.on('token_stream', ({ lang, translatedChunk, originalChunk, isFinal, timestamp }) => {
-  sessionManager.broadcastStreamingToken(activeLiveSessionId, {
-    lang,
-    translatedChunk,
-    originalChunk,
-    isFinal,
-    timestamp
-  });
+  const targetIds = getTargetSessionIds();
+  for (const sid of targetIds) {
+    sessionManager.broadcastStreamingToken(sid, {
+      lang,
+      translatedChunk,
+      originalChunk,
+      isFinal,
+      timestamp
+    });
+  }
 });
 
 // When a sentence is finalized by Soniox, run Quran Ayah check and commit to history
 sonioxService.on('sentence_finalized', async ({ lang, translatedText, finalText, originalText, timestamp }) => {
-  const targetSessionId = activeLiveSessionId;
-  const session = sessionManager.getSession(targetSessionId);
-  if (!session || session.status !== 'active') return;
-
+  const targetIds = getTargetSessionIds();
   const resolvedTranslation = translatedText || finalText || '';
 
   let ayahMatch = null;
@@ -225,13 +237,18 @@ sonioxService.on('sentence_finalized', async ({ lang, translatedText, finalText,
     Object.assign(translations, ayahMatch.translations);
   }
 
-  sessionManager.broadcastTranslations(targetSessionId, {
-    arabicText: originalText,
-    translations,
-    ayahData: ayahMatch,
-    audioByLanguage: {},
-    timestamp
-  });
+  for (const sid of targetIds) {
+    const session = sessionManager.getSession(sid);
+    if (!session || session.status !== 'active') continue;
+
+    sessionManager.broadcastTranslations(sid, {
+      arabicText: originalText,
+      translations,
+      ayahData: ayahMatch,
+      audioByLanguage: {},
+      timestamp
+    });
+  }
 });
 
 
@@ -374,6 +391,7 @@ app.post('/api/session/create', async (req, res) => {
 
 // Start Session
 app.post('/api/session/:id/start', (req, res) => {
+  activeLiveSessionId = req.params.id;
   const session = sessionManager.startSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
   res.json(session);
@@ -381,6 +399,7 @@ app.post('/api/session/:id/start', (req, res) => {
 
 // Resume Session (alias to start)
 app.post('/api/session/:id/resume', (req, res) => {
+  activeLiveSessionId = req.params.id;
   const session = sessionManager.startSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
   res.json(session);
@@ -567,6 +586,10 @@ wss.on('connection', (ws) => {
         userSessionId = msg.sessionId || activeLiveSessionId;
         userRole = msg.role || 'attendee';
         userLanguage = msg.language || 'en';
+
+        if (userRole === 'admin') {
+          activeLiveSessionId = userSessionId;
+        }
 
         if (!sessionManager.getSession(userSessionId)) {
           await sessionManager.createSession({

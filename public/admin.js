@@ -842,7 +842,10 @@ async function startMicrophone() {
       const bufferSize = 2048;
       micAudioProcessor = audioContext.createScriptProcessor(bufferSize, 1, 1);
       source.connect(micAudioProcessor);
-      micAudioProcessor.connect(audioContext.destination);
+      const muteGain = audioContext.createGain();
+      muteGain.gain.value = 0;
+      micAudioProcessor.connect(muteGain);
+      muteGain.connect(audioContext.destination);
 
       micAudioProcessor.onaudioprocess = (e) => {
         if (sessionStatus !== 'active' || !ws || ws.readyState !== WebSocket.OPEN) return;
@@ -858,8 +861,15 @@ async function startMicrophone() {
     }
 
     micActive = true;
-    btnToggleMic.textContent = 'Stop Live Mic';
+    btnToggleMic.textContent = '🛑 Stop Live Mic';
     btnToggleMic.className = 'btn btn-danger';
+
+    // When Soniox is active, Soniox handles 100% of speech & translation in real time via PCM audio.
+    // Completely bypass Web Speech API to eliminate delayed OpenRouter batch injection!
+    if (isSonnoxActive) {
+      console.log('[Live Mic] Soniox streaming active — audio piped directly to Soniox (Web Speech API bypassed)');
+      return;
+    }
 
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       if (!isSonnoxActive) {

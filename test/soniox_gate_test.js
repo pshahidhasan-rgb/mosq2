@@ -102,6 +102,7 @@ async function runSonioxGateTests() {
   assert(receivedFinalized !== null, 'sentence_finalized event should have fired');
   assert.strictEqual(receivedFinalized.finalText, 'Indeed, with hardship comes ease.');
   assert.strictEqual(receivedFinalized.translatedText, 'Indeed, with hardship comes ease.');
+  assert.strictEqual(receivedFinalized.originalText, 'إن مع العسر يسرا.');
   console.log('  ✔ Sentence finalized event emitted correctly with full accumulated text.');
 
   // Clean up the listener to avoid interference
