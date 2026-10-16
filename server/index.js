@@ -573,10 +573,10 @@ wss.on('connection', (ws) => {
   let userRole = 'attendee';
   let userLanguage = 'en';
 
-  ws.on('message', async (raw) => {
+  ws.on('message', async (raw, isBinary) => {
     try {
       // Check if message is binary audio chunk from microphone
-      if (Buffer.isBuffer(raw)) {
+      if (isBinary) {
         if (sonioxService.isConfigured()) {
           sonioxService.broadcastAudio(raw);
         } else {
@@ -611,6 +611,8 @@ wss.on('connection', (ws) => {
           deviceType: msg.deviceType
         });
 
+        console.log(`[WS Connection] ${userRole.toUpperCase()} connected | lang: "${userLanguage}" | device: "${msg.deviceType || 'browser'}" | session: "${userSessionId}"`);
+
         // Send confirmation and current session info
         const currentSession = sessionManager.getSession(userSessionId);
         ws.send(JSON.stringify({
@@ -632,6 +634,7 @@ wss.on('connection', (ws) => {
 
       if (msg.type === 'CHANGE_LANGUAGE') {
         userLanguage = msg.language || 'en';
+        console.log(`[WS Language] ${userRole} updated language to "${userLanguage}"`);
         sessionManager.updateSubscriberLanguage(userSessionId, ws, userLanguage);
       }
 

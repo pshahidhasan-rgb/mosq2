@@ -280,6 +280,12 @@ class SonioxGateManager extends EventEmitter {
 
     // Emit live streaming tokens (sub-200ms word-by-word)
     if (originalFull.length > 0 || translatedFull.length > 0) {
+      // Live streaming log: shows speech being processed in real-time
+      this._tokenEmitCount = (this._tokenEmitCount || 0) + 1;
+      if (this._tokenEmitCount % 6 === 1) {
+        console.log(`[Soniox Stream ${gate.lang}] Live words | orig: "${originalFull.slice(-40)}" | trans: "${translatedFull.slice(-40)}"`);
+      }
+
       this.emit('token_stream', {
         lang: gate.lang,
         originalFinal: gate.confirmedOriginalText,
@@ -317,7 +323,7 @@ class SonioxGateManager extends EventEmitter {
           timestamp: new Date().toISOString()
         });
 
-        console.log(`[Soniox Gate ${gate.lang}] Sentence finalized | orig: "${fullFinalOriginal.substring(0, 60)}" | trans: "${fullFinalTranslation.substring(0, 60)}"`);
+        console.log(`[Soniox Finalized ${gate.lang}] Utterance complete | orig: "${fullFinalOriginal}" | trans: "${fullFinalTranslation}"`);
         this.emit('sentence_finalized', {
           lang: gate.lang,
           finalText: fullFinalTranslation,
@@ -343,6 +349,24 @@ class SonioxGateManager extends EventEmitter {
    */
   broadcastAudio(pcmBuffer) {
     if (!this.isOperational || !pcmBuffer || !Buffer.isBuffer(pcmBuffer)) return;
+
+    // Safety 1: Strictly reject accidental text/JSON buffers (JSON starts with '{' [0x7B] or '[' [0x5B])
+    if (pcmBuffer.length > 2 && (pcmBuffer[0] === 0x7B || pcmBuffer[0] === 0x5B)) {
+      console.warn('[Soniox Audio] Rejected text JSON buffer passed to broadcastAudio.');
+      return;
+    }
+
+    // Safety 2: 16-bit PCM MUST be a multiple of 2 bytes
+    if (pcmBuffer.length % 2 !== 0) {
+      pcmBuffer = pcmBuffer.subarray(0, pcmBuffer.length - (pcmBuffer.length % 2));
+    }
+    if (pcmBuffer.length < 2) return;
+
+    // Periodic audio stream log (every 50 chunks = ~2-3 seconds of live mic)
+    this._audioChunkCount = (this._audioChunkCount || 0) + 1;
+    if (this._audioChunkCount % 50 === 1) {
+      console.log(`[Soniox Audio Ingest] Live mic audio stream active (${pcmBuffer.length} bytes/chunk, gates: ${Array.from(this.activeGates.keys()).join(', ') || 'en'})`);
+    }
 
     // Inactivity watchdog: Auto-close all gates if no audio is received for 30 seconds.
     // This strictly prevents credit drain when server runs 24/7 on Railway without active speech.
