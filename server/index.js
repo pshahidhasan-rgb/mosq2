@@ -205,7 +205,7 @@ sessionManager.on('languages_updated', ({ sessionId, languages }) => {
 });
 
 // Broadcast real-time streaming tokens (sub-200ms word-by-word) to all active rooms
-sonioxService.on('token_stream', ({ lang, translatedChunk, originalChunk, originalFull, translatedFull, isReplacement, isFinal, timestamp }) => {
+sonioxService.on('token_stream', ({ lang, translatedChunk, originalChunk, originalFull, translatedFull, originalFinal, originalPartial, translatedFinal, translatedPartial, isReplacement, isFinal, timestamp }) => {
   const targetIds = getTargetSessionIds();
   for (const sid of targetIds) {
     sessionManager.broadcastStreamingToken(sid, {
@@ -214,6 +214,10 @@ sonioxService.on('token_stream', ({ lang, translatedChunk, originalChunk, origin
       originalChunk,
       originalFull,
       translatedFull,
+      originalFinal,
+      originalPartial,
+      translatedFinal,
+      translatedPartial,
       isReplacement,
       isFinal,
       timestamp
@@ -221,22 +225,22 @@ sonioxService.on('token_stream', ({ lang, translatedChunk, originalChunk, origin
   }
 });
 
-// When a sentence is finalized by Soniox, broadcast immediately (0ms delay) to session history and attendees
+// When a sentence is finalized by Soniox, save to session transcript history (for page refresh, polling & exports)
 sonioxService.on('sentence_finalized', ({ lang, translatedText, finalText, originalText, timestamp }) => {
   const targetIds = getTargetSessionIds();
   const resolvedTranslation = translatedText || finalText || '';
   const translations = { [lang]: resolvedTranslation };
+  const ts = timestamp || new Date().toISOString();
 
   for (const sid of targetIds) {
     const session = sessionManager.getSession(sid);
     if (!session || session.status !== 'active') continue;
 
-    sessionManager.broadcastTranslations(sid, {
-      arabicText: originalText,
+    session.transcripts.push({
+      arabic: originalText,
       translations,
-      ayahData: null,
-      audioByLanguage: {},
-      timestamp: timestamp || new Date().toISOString()
+      ayah: null,
+      timestamp: ts
     });
   }
 });

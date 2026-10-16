@@ -866,6 +866,16 @@ async function startMicrophone() {
 
     // When Soniox is active, Soniox handles 100% of speech & translation in real time via PCM audio.
     // Completely bypass Web Speech API to eliminate delayed OpenRouter batch injection!
+    if (!isSonnoxActive) {
+      try {
+        const res = await fetch('/api/status');
+        if (res.ok) {
+          const data = await res.json();
+          isSonnoxActive = data.providers && data.providers.sonioxStreaming === true;
+        }
+      } catch (_) {}
+    }
+
     if (isSonnoxActive) {
       console.log('[Live Mic] Soniox streaming active — audio piped directly to Soniox (Web Speech API bypassed)');
       return;

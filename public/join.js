@@ -404,7 +404,8 @@ function handleStreamingTokenMobile({
   translatedChunk = '',
   translatedFull = '',
   isReplacement = false,
-  isFinal = false
+  isFinal = false,
+  timestamp = null
 }) {
   // Determine which content to use — full replacement or legacy delta chunk
   const content = isReplacement ? translatedFull : translatedChunk;
@@ -433,6 +434,9 @@ function handleStreamingTokenMobile({
   mobileCardsFeed.scrollTop = mobileCardsFeed.scrollHeight;
 
   if (isFinal) {
+    if (timestamp) {
+      renderedTimestamps.add(timestamp);
+    }
     if (currentStreamingCard) {
       currentStreamingCard.classList.remove('streaming');
       const finalText = transContainer ? transContainer.textContent : '';

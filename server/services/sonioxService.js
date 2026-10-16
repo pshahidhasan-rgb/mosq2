@@ -151,13 +151,10 @@ class SonioxGateManager extends EventEmitter {
           sample_rate: SAMPLE_RATE,
           num_channels: NUM_CHANNELS,
           enable_endpoint_detection: true,
-          endpoint_latency_adjustment_level: 3,
-          max_endpoint_delay_ms: 800,
-          endpoint_sensitivity: 0.5,
-          source_language: 'ar',
+          max_endpoint_delay_ms: 600,
+          enable_language_identification: true,
           translation: {
             type: 'one_way',
-            source_language: 'ar',
             target_language: gate.lang
           }
         };
@@ -221,9 +218,7 @@ class SonioxGateManager extends EventEmitter {
    *     words/phrase. Each frame's provisional tokens REPLACE liveOriginalPreview /
    *     liveTranslatedPreview.
    *  3. Independent streams: Transcription (original) and Translation tokens arrive
-   *     independently. We only update original buffers when original tokens are present,
-   *     and translation buffers when translation tokens are present, so neither stream
-   *     wipes the other out.
+   *     independently. Both are tracked cleanly in currentUtt accumulation state.
    *  4. Full replacement display: The UI always receives (confirmed + livePreview) and
    *     SETs the text, giving sub-200ms real-time fluidity with zero duplicates.
    *  5. Sentence boundary: <end>/<fin> triggers finalization and resets the buffer.
@@ -244,101 +239,101 @@ class SonioxGateManager extends EventEmitter {
     const tokens = data.tokens || (data.result && data.result.tokens) || [];
     if (!Array.isArray(tokens) || tokens.length === 0) return;
 
-    // Detect sentence boundary — ONLY <end> or <fin> signals this, not is_final
-    const hasEndpoint = tokens.some(t => isSpecialToken(t.text || ''));
+    let hasEndpoint = false;
 
-    // Filter out special control tokens — keep only speech/translation tokens
-    const userTokens = tokens.filter(t => t.text && !isSpecialToken(t.text));
+    // Reset provisional preview tail on every frame (provisional tokens represent
+    // the current in-flight hypothesis tail sent by Soniox in this frame)
+    gate.liveOriginalPreview = '';
+    gate.liveTranslatedPreview = '';
 
-    if (userTokens.length > 0) {
-      // 1. Separate original tokens vs translation tokens
-      const origTokens  = userTokens.filter(t => t.translation_status !== 'translation');
-      const transTokens = userTokens.filter(t => t.translation_status === 'translation');
+    for (const t of tokens) {
+      if (!t.text) continue;
 
-      // ── Process Original Speech Tokens ─────────────────────────────────────
-      if (origTokens.length > 0) {
-        // Confirmed tokens are sent once — append to permanent buffer
-        for (const t of origTokens) {
-          if (t.is_final) {
-            gate.confirmedOriginalText += t.text;
-          }
-        }
-        // Provisional tokens replace the previous provisional tail
-        const nonFinalOrig = origTokens.filter(t => !t.is_final);
-        gate.liveOriginalPreview = nonFinalOrig.map(t => t.text).join('');
+      if (isSpecialToken(t.text)) {
+        hasEndpoint = true;
+        continue;
       }
 
-      // ── Process Translation Tokens ──────────────────────────────────────────
-      if (transTokens.length > 0) {
-        // Confirmed tokens are sent once — append to permanent buffer
-        for (const t of transTokens) {
-          if (t.is_final) {
-            gate.confirmedTranslatedText += t.text;
-          }
+      const isTranslation = t.translation_status === 'translation';
+      if (isTranslation) {
+        if (t.is_final) {
+          gate.confirmedTranslatedText += t.text;
+        } else {
+          gate.liveTranslatedPreview += t.text;
         }
-        // Provisional tokens replace the previous provisional tail
-        const nonFinalTrans = transTokens.filter(t => !t.is_final);
-        gate.liveTranslatedPreview = nonFinalTrans.map(t => t.text).join('');
+      } else {
+        if (t.is_final) {
+          gate.confirmedOriginalText += t.text;
+        } else {
+          gate.liveOriginalPreview += t.text;
+        }
       }
+    }
 
-      // ── Build full current display state ────────────────────────────────────
-      const originalFull   = gate.confirmedOriginalText   + gate.liveOriginalPreview;
-      const translatedFull = gate.confirmedTranslatedText + gate.liveTranslatedPreview;
+    // Build full current display state
+    const originalFull = gate.confirmedOriginalText + gate.liveOriginalPreview;
+    const translatedFull = gate.confirmedTranslatedText + gate.liveTranslatedPreview;
 
-      // Sync legacy fields (used by some external health-check paths)
-      gate.currentOriginalText   = originalFull;
-      gate.currentTranslatedText = translatedFull;
+    // Sync legacy fields
+    gate.currentOriginalText = originalFull;
+    gate.currentTranslatedText = translatedFull;
 
-      // ── Emit full-replacement token_stream event ────────────────────────────
+    // Emit live streaming tokens (sub-200ms word-by-word)
+    if (originalFull.length > 0 || translatedFull.length > 0) {
       this.emit('token_stream', {
-        lang:            gate.lang,
-        originalFull,        // full current Arabic  — display should SET this
-        translatedFull,      // full current English — display should SET this
-        translatedChunk: '', // kept for backward-compat
-        originalChunk:   '', // kept for backward-compat
-        isReplacement:   true,
-        isFinal:         false,
-        timestamp:       new Date().toISOString()
+        lang: gate.lang,
+        originalFinal: gate.confirmedOriginalText,
+        originalPartial: gate.liveOriginalPreview,
+        translatedFinal: gate.confirmedTranslatedText,
+        translatedPartial: gate.liveTranslatedPreview,
+        originalFull,
+        translatedFull,
+        translatedChunk: '',
+        originalChunk: '',
+        isReplacement: true,
+        isFinal: false,
+        timestamp: new Date().toISOString()
       });
     }
 
-    // ── Sentence boundary: only fire when Soniox sends <end> or <fin> ─────────
+    // Sentence boundary handling (<end> or <fin>)
     if (hasEndpoint) {
-      const fullFinalOriginal    = (gate.confirmedOriginalText   + gate.liveOriginalPreview).trim();
+      const fullFinalOriginal = (gate.confirmedOriginalText + gate.liveOriginalPreview).trim();
       const fullFinalTranslation = (gate.confirmedTranslatedText + gate.liveTranslatedPreview).trim();
 
-      // Emit full-replacement token_stream with isFinal: true so UI locks in the completed sentence immediately
       if (fullFinalOriginal || fullFinalTranslation) {
         this.emit('token_stream', {
-          lang:            gate.lang,
-          originalFull:    fullFinalOriginal,
-          translatedFull:  fullFinalTranslation,
+          lang: gate.lang,
+          originalFinal: fullFinalOriginal,
+          originalPartial: '',
+          translatedFinal: fullFinalTranslation,
+          translatedPartial: '',
+          originalFull: fullFinalOriginal,
+          translatedFull: fullFinalTranslation,
           translatedChunk: '',
-          originalChunk:   '',
-          isReplacement:   true,
-          isFinal:         true,
-          timestamp:       new Date().toISOString()
+          originalChunk: '',
+          isReplacement: true,
+          isFinal: true,
+          timestamp: new Date().toISOString()
+        });
+
+        console.log(`[Soniox Gate ${gate.lang}] Sentence finalized | orig: "${fullFinalOriginal.substring(0, 60)}" | trans: "${fullFinalTranslation.substring(0, 60)}"`);
+        this.emit('sentence_finalized', {
+          lang: gate.lang,
+          finalText: fullFinalTranslation,
+          translatedText: fullFinalTranslation,
+          originalText: fullFinalOriginal,
+          timestamp: new Date().toISOString()
         });
       }
 
       // Reset accumulation state for the next sentence
-      gate.confirmedOriginalText   = '';
+      gate.confirmedOriginalText = '';
       gate.confirmedTranslatedText = '';
-      gate.liveOriginalPreview     = '';
-      gate.liveTranslatedPreview   = '';
-      gate.currentOriginalText     = '';
-      gate.currentTranslatedText   = '';
-
-      if (fullFinalOriginal || fullFinalTranslation) {
-        console.log(`[Soniox Gate ${gate.lang}] Sentence finalized | orig: "${fullFinalOriginal.substring(0, 60)}" | trans: "${fullFinalTranslation.substring(0, 60)}"`);
-        this.emit('sentence_finalized', {
-          lang:           gate.lang,
-          finalText:      fullFinalTranslation,
-          translatedText: fullFinalTranslation,
-          originalText:   fullFinalOriginal,
-          timestamp:      new Date().toISOString()
-        });
-      }
+      gate.liveOriginalPreview = '';
+      gate.liveTranslatedPreview = '';
+      gate.currentOriginalText = '';
+      gate.currentTranslatedText = '';
     }
   }
 

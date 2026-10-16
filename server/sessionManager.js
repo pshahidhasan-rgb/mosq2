@@ -585,6 +585,10 @@ class SessionManager extends EventEmitter {
     originalChunk = '',
     originalFull = '',
     translatedFull = '',
+    originalFinal = '',
+    originalPartial = '',
+    translatedFinal = '',
+    translatedPartial = '',
     isReplacement = false,
     isFinal = false,
     timestamp = new Date().toISOString()
@@ -606,6 +610,10 @@ class SessionManager extends EventEmitter {
             originalChunk:    originalChunk    || '',
             originalFull:     originalFull     || '',
             translatedFull:   translatedFull   || '',
+            originalFinal:    originalFinal    || '',
+            originalPartial:  originalPartial  || '',
+            translatedFinal:  translatedFinal  || '',
+            translatedPartial: translatedPartial || '',
             isReplacement:    Boolean(isReplacement),
             isFinal,
             timestamp
@@ -619,6 +627,8 @@ class SessionManager extends EventEmitter {
             translatedChunk,
             originalChunk:   '',
             translatedFull:  translatedFull  || '',
+            translatedFinal: translatedFinal || '',
+            translatedPartial: translatedPartial || '',
             isReplacement:   Boolean(isReplacement),
             isFinal,
             timestamp
@@ -632,6 +642,10 @@ class SessionManager extends EventEmitter {
           originalChunk,
           originalFull:   originalFull   || '',
           translatedFull: translatedFull || '',
+          originalFinal:  originalFinal  || '',
+          originalPartial: originalPartial || '',
+          translatedFinal: translatedFinal || '',
+          translatedPartial: translatedPartial || '',
           isReplacement:  Boolean(isReplacement),
           isFinal,
           timestamp

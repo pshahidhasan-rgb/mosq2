@@ -550,9 +550,16 @@ function handleIncomingSpeech({ arabic, translations, translated, ayah, timestam
         streamingArabic.remove();
       }
     }
-    if (streamingTrans && displayTrans) {
-      streamingTrans.classList.remove('streaming');
-      streamingTrans.textContent = displayTrans;
+    if (displayTrans) {
+      if (streamingTrans) {
+        streamingTrans.classList.remove('streaming');
+        streamingTrans.textContent = displayTrans;
+      } else {
+        const newTrans = document.createElement('div');
+        newTrans.className = 'para-item current';
+        newTrans.textContent = displayTrans;
+        transFeed.appendChild(newTrans);
+      }
       if (isTvAudioEnabled && isLive) {
         playTvBrowserAudio(displayTrans, targetLang);
       }
@@ -585,20 +592,27 @@ function handleStreamingToken({
   originalChunk = '',
   originalFull = '',
   translatedFull = '',
+  originalFinal = '',
+  originalPartial = '',
+  translatedFinal = '',
+  translatedPartial = '',
   isReplacement = false,
-  isFinal = false
+  isFinal = false,
+  timestamp = null
 }) {
-  // Returns true if text contains at least one Arabic Unicode character.
-  // Used to prevent romanized/Latin pass-through tokens from appearing in the Arabic column.
   const hasArabicScript = (text) => /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/.test(text);
 
-  // ── Left column (Arabic original) ──────────────────────────────────────────
-  // Prefer full-replacement field; fall back to legacy chunk for backwards-compat.
-  const arabicContent = isReplacement ? originalFull : originalChunk;
-  // Only update the Arabic column if the content actually contains Arabic script.
-  // This blocks romanized Latin text (e.g. "Maliki", "Tallinn") from the left side.
-  if (arabicContent && hasArabicScript(arabicContent)) {
-    let currentArabic = arabicFeed.querySelector('.para-item.current.streaming');
+  // Content selection: full replacement text from Soniox state machine
+  const arabicContent = (originalFull || originalChunk || '').trimStart();
+  const transContent = (translatedFull || translatedChunk || '').trimStart();
+
+  // ── Synchronized Dual-Column Row Creation ─────────────────────────────────
+  // When an utterance starts, ensure both Arabic and Translation feeds have a
+  // matching active streaming paragraph with live cursor
+  let currentArabic = arabicFeed.querySelector('.para-item.current.streaming');
+  let currentTrans = transFeed.querySelector('.para-item.current.streaming');
+
+  if ((arabicContent && hasArabicScript(arabicContent)) || transContent) {
     if (!currentArabic) {
       arabicFeed.querySelectorAll('.para-item.current').forEach(el => {
         el.classList.remove('current', 'streaming');
@@ -608,21 +622,7 @@ function handleStreamingToken({
       currentArabic.className = 'para-item current streaming';
       arabicFeed.appendChild(currentArabic);
     }
-    if (isReplacement) {
-      currentArabic.textContent = arabicContent.trimStart();         // SET — full replacement
-    } else {
-      currentArabic.textContent = (currentArabic.textContent + arabicContent).trimStart(); // legacy APPEND
-    }
-    while (arabicFeed.children.length > MAX_HISTORY) arabicFeed.firstElementChild.remove();
-    if (arabicFeed.parentElement) {
-      arabicFeed.parentElement.scrollTo({ top: arabicFeed.parentElement.scrollHeight, behavior: 'smooth' });
-    }
-  }
 
-  // ── Right column (translation) ──────────────────────────────────────────────
-  const transContent = isReplacement ? translatedFull : translatedChunk;
-  if (transContent && transContent.length > 0) {
-    let currentTrans = transFeed.querySelector('.para-item.current.streaming');
     if (!currentTrans) {
       transFeed.querySelectorAll('.para-item.current').forEach(el => {
         el.classList.remove('current', 'streaming');
@@ -632,26 +632,59 @@ function handleStreamingToken({
       currentTrans.className = 'para-item current streaming';
       transFeed.appendChild(currentTrans);
     }
-    if (isReplacement) {
-      currentTrans.textContent = transContent.trimStart();           // SET — full replacement
-    } else {
-      currentTrans.textContent = (currentTrans.textContent + transContent).trimStart(); // legacy APPEND
+  }
+
+  // ── Left Column (Arabic Speech) ───────────────────────────────────────────
+  if (arabicContent && hasArabicScript(arabicContent) && currentArabic) {
+    currentArabic.textContent = arabicContent;
+    while (arabicFeed.children.length > MAX_HISTORY) arabicFeed.firstElementChild.remove();
+    if (arabicFeed.parentElement) {
+      arabicFeed.parentElement.scrollTo({ top: arabicFeed.parentElement.scrollHeight, behavior: 'smooth' });
     }
+  }
+
+  // ── Right Column (Live Translated Text) ────────────────────────────────────
+  if (transContent && currentTrans) {
+    currentTrans.textContent = transContent;
     while (transFeed.children.length > MAX_HISTORY) transFeed.firstElementChild.remove();
     if (transFeed.parentElement) {
       transFeed.parentElement.scrollTo({ top: transFeed.parentElement.scrollHeight, behavior: 'smooth' });
     }
   }
 
+  // ── Sentence Boundary Finalization (<end>) ────────────────────────────────
   if (isFinal) {
-    const currentArabic = arabicFeed.querySelector('.para-item.current.streaming');
-    if (currentArabic) currentArabic.classList.remove('streaming');
-    const currentTrans = transFeed.querySelector('.para-item.current.streaming');
+    if (currentArabic) {
+      currentArabic.classList.remove('streaming');
+      if (arabicContent && hasArabicScript(arabicContent)) {
+        currentArabic.textContent = arabicContent;
+      }
+    }
     if (currentTrans) {
       currentTrans.classList.remove('streaming');
-      if (isTvAudioEnabled && currentTrans.textContent) {
-        playTvBrowserAudio(currentTrans.textContent, targetLang);
+      if (transContent) {
+        currentTrans.textContent = transContent;
+        if (isTvAudioEnabled) {
+          playTvBrowserAudio(transContent, targetLang);
+        }
       }
+    }
+
+    // Keep history record to deduplicate any fallback polling
+    if (arabicContent || transContent) {
+      recentFeedItems.push({
+        arabicText: (arabicContent && hasArabicScript(arabicContent)) ? arabicContent : '',
+        transObj: { [targetLang]: transContent || '' }
+      });
+      while (recentFeedItems.length > MAX_HISTORY) recentFeedItems.shift();
+    }
+
+    // Auto-scroll to lock in position
+    if (arabicFeed.parentElement) {
+      arabicFeed.parentElement.scrollTo({ top: arabicFeed.parentElement.scrollHeight, behavior: 'smooth' });
+    }
+    if (transFeed.parentElement) {
+      transFeed.parentElement.scrollTo({ top: transFeed.parentElement.scrollHeight, behavior: 'smooth' });
     }
   }
 }
