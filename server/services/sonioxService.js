@@ -231,6 +231,16 @@ class SonioxGateManager extends EventEmitter {
   handleSonioxMessage(gate, data) {
     if (!data) return;
 
+    if (data.error_code || data.error_message || data.error) {
+      console.error(`[Soniox Gate ${gate.lang}] Soniox API Error:`, data.error_code, data.error_message || data.error);
+      if (data.error_code === 402 || data.error_type === 'organization_balance_exhausted') {
+        console.error('[Soniox] Balance exhausted. Disabling Soniox gates and closing connections to prevent loops.');
+        this.isOperational = false;
+        this.closeAllGates();
+      }
+      return;
+    }
+
     const tokens = data.tokens || (data.result && data.result.tokens) || [];
     if (!Array.isArray(tokens) || tokens.length === 0) return;
 
@@ -339,7 +349,17 @@ class SonioxGateManager extends EventEmitter {
   broadcastAudio(pcmBuffer) {
     if (!this.isOperational || !pcmBuffer || !Buffer.isBuffer(pcmBuffer)) return;
 
-    // Ensure default English gate is open so initial sermon speech is never discarded
+    // Inactivity watchdog: Auto-close all gates if no audio is received for 30 seconds.
+    // This strictly prevents credit drain when server runs 24/7 on Railway without active speech.
+    if (this._inactivityTimer) clearTimeout(this._inactivityTimer);
+    this._inactivityTimer = setTimeout(() => {
+      if (this.activeGates.size > 0) {
+        console.log('[Soniox] Inactivity timeout: 30s with no microphone audio. Auto-closing all gates to preserve credits ($0 cost).');
+        this.closeAllGates();
+      }
+    }, 30000);
+
+    // Ensure default English gate is open on-demand so sermon speech is never discarded
     if (this.activeGates.size === 0) {
       this.ensureGate('en');
     }
@@ -378,9 +398,13 @@ class SonioxGateManager extends EventEmitter {
   }
 
   /**
-   * Close all active gates (e.g. when session ends)
+   * Close all active gates (e.g. when session ends or audio is inactive)
    */
   closeAllGates() {
+    if (this._inactivityTimer) {
+      clearTimeout(this._inactivityTimer);
+      this._inactivityTimer = null;
+    }
     for (const lang of Array.from(this.activeGates.keys())) {
       this.closeGate(lang);
     }

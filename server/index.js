@@ -58,12 +58,6 @@ let activeLiveSessionId = 'jumuah-live-4b2c1d';
   });
   console.log(`[MosqAI] Ready with secure mosque sessions: myo-youth-8f3a9e, jumuah-live-4b2c1d`);
 
-  // Change 6: Pre-warm the English gate immediately so it's ready before the first word.
-  // This eliminates the 200–500ms first-word delay caused by WebSocket handshake latency.
-  if (sonioxService.isConfigured()) {
-    sonioxService.ensureGate('en');
-    console.log('[Soniox] English gate pre-warmed at startup.');
-  }
 })();
 
 // Initialize STT engine (Deepgram Nova-3 / Gladia / Simulator)
@@ -403,6 +397,9 @@ app.post('/api/session/:id/resume', (req, res) => {
 
 // Pause Session
 app.post('/api/session/:id/pause', (req, res) => {
+  if (sonioxService.isConfigured()) {
+    sonioxService.closeAllGates();
+  }
   const session = sessionManager.pauseSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
   res.json(session);
@@ -410,6 +407,9 @@ app.post('/api/session/:id/pause', (req, res) => {
 
 // End Session
 app.post('/api/session/:id/end', (req, res) => {
+  if (sonioxService.isConfigured()) {
+    sonioxService.closeAllGates();
+  }
   sttService.stopSimulation();
   const session = sessionManager.endSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });

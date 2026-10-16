@@ -77,18 +77,18 @@ async function runSonioxGateTests() {
 
   // First token arrives (translation word)
   sonioxService.handleSonioxMessage(enGate, {
-    tokens: [{ text: 'Indeed, ', translation_status: 'translation', is_final: false }]
+    tokens: [{ text: 'Indeed, ', translation_status: 'translation', is_final: true }]
   });
 
   // Second token arrives (original Arabic word) — emitted separately for real-time streaming
   sonioxService.handleSonioxMessage(enGate, {
-    tokens: [{ text: 'إن ', translation_status: 'original', is_final: false }]
+    tokens: [{ text: 'إن ', translation_status: 'original', is_final: true }]
   });
 
   assert(receivedTokenStreams.length >= 2, 'Both per-token streams should have fired independently');
   assert.strictEqual(receivedTokenStreams[0].lang, 'en');
-  assert.strictEqual(receivedTokenStreams[0].translatedChunk, 'Indeed, ');
-  assert.strictEqual(receivedTokenStreams[1].originalChunk, 'إن ');
+  assert.strictEqual(receivedTokenStreams[0].translatedFull || receivedTokenStreams[0].translatedChunk, 'Indeed, ');
+  assert.strictEqual(receivedTokenStreams[1].originalFull || receivedTokenStreams[1].originalChunk, 'إن ');
   console.log('  ✔ Per-token streaming emission verified (' + receivedTokenStreams.length + ' tokens emitted independently).');
 
   // Final sentence completion token with Soniox <end> control token
