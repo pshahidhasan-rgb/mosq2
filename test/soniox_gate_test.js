@@ -40,15 +40,20 @@ async function runSonioxGateTests() {
     openedLanguages.push(gate.lang);
   };
 
-  // Sync to English (TV) and Bengali (1 attendee)
+  // Cost safeguard test: When mic is idle, syncGates MUST NOT open any live WebSockets ($0 cost)
   sonioxService.syncGates(['en', 'bn']);
-  assert.strictEqual(sonioxService.activeGates.size, 2, 'Should have 2 open gates');
+  assert.strictEqual(sonioxService.activeGates.size, 0, 'Idle syncGates must not open WebSockets ($0 cost safeguard)');
+  console.log('  ✔ Cost safeguard verified: 0 WebSockets opened while mic is idle.');
+
+  // When audio is streaming (or force: true), gates open on-demand
+  sonioxService.syncGates(['en', 'bn'], { force: true });
+  assert.strictEqual(sonioxService.activeGates.size, 2, 'Should have 2 open gates when active');
   assert(sonioxService.activeGates.has('en'), 'English gate should be open');
   assert(sonioxService.activeGates.has('bn'), 'Bengali gate should be open');
   console.log('  ✔ Opened gates for active languages ["en", "bn"].');
 
   // Attendee switches or leaves: sync to English and Urdu
-  sonioxService.syncGates(['en', 'ur']);
+  sonioxService.syncGates(['en', 'ur'], { force: true });
   assert.strictEqual(sonioxService.activeGates.size, 2, 'Should maintain 2 open gates');
   assert(sonioxService.activeGates.has('en'), 'English gate remains open');
   assert(sonioxService.activeGates.has('ur'), 'Urdu gate should be open');

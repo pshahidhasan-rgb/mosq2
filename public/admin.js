@@ -1001,6 +1001,11 @@ let micAudioProcessor = null;
 
 function stopMicrophone() {
   micActive = false;
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    try {
+      ws.send(JSON.stringify({ type: 'STOP_MIC' }));
+    } catch (_) {}
+  }
   if (micAudioProcessor) {
     try { micAudioProcessor.disconnect(); } catch (_) {}
     micAudioProcessor = null;

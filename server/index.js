@@ -661,6 +661,13 @@ wss.on('connection', (ws) => {
         }
       }
 
+      if (msg.type === 'STOP_MIC') {
+        console.log('[Admin] Stop Mic received. Terminating all Soniox gates immediately ($0 cost).');
+        if (sonioxService.isConfigured()) {
+          sonioxService.closeAllGates();
+        }
+      }
+
       if (msg.type === 'DIRECT_SPEECH') {
         // Direct speech from browser Web Speech API
         if (msg.text) {

@@ -1,5 +1,45 @@
 [
   {
+    "id": "hist_test-session-live_1792304717914",
+    "sessionId": "test-session-live",
+    "mosqueName": "Test Masjid",
+    "startedAt": "2026-10-18T06:25:17.842Z",
+    "endedAt": "2026-10-18T06:25:17.877Z",
+    "dateDisplay": "Oct 18, 2026",
+    "timeDisplay": "12:25 PM",
+    "durationSeconds": 0,
+    "durationDisplay": "0s",
+    "totalTranscripts": 3,
+    "totalAyahsDetected": 1,
+    "totalAttendance": 2,
+    "attendance": {
+      "total": 2,
+      "phoneAttendees": 1,
+      "computerDisplays": 1
+    },
+    "phoneAttendees": 1,
+    "computerDisplays": 1,
+    "tvLanguage": "en",
+    "transcripts": [
+      {
+        "original": "إن الحمد لله نحمده ونستعينه ونستغفره",
+        "translation": "All praise is due to Allah; we praise Him, seek His help, and ask for His forgiveness.",
+        "timestamp": "2026-10-18T06:25:17.865Z"
+      },
+      {
+        "original": "فإن مع العسر يسرا",
+        "translation": "For indeed, with hardship [will be] ease.",
+        "timestamp": "2026-10-18T06:25:17.870Z"
+      },
+      {
+        "original": "إن الحمد لله نحمده ونستعينه ونستغفره",
+        "translation": "All praise is due to Allah; we praise Him, seek His help, and ask for His forgiveness.",
+        "timestamp": "2026-10-18T06:25:17.876Z"
+      }
+    ],
+    "createdAt": "2026-10-18T06:25:17.877Z"
+  },
+  {
     "id": "hist_myo-youth_1791225509458",
     "sessionId": "myo-youth",
     "mosqueName": "MYO Youth Center",

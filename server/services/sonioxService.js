@@ -29,6 +29,8 @@ class SonioxGateManager extends EventEmitter {
     super();
     this.apiKey = (apiKey || '').trim();
     this.activeGates = new Map(); // langCode -> GateConnection
+    this.desiredLanguages = new Set(['en']);
+    this._isStreamingAudio = false;
     this.isOperational = this.validateApiKey(this.apiKey);
 
     if (this.isOperational) {
@@ -60,21 +62,40 @@ class SonioxGateManager extends EventEmitter {
    * Synchronize active language gates with the currently required languages.
    * @param {Array<string>|Set<string>} requiredLanguages - List of active language codes
    */
-  syncGates(requiredLanguages) {
+  /**
+   * Synchronize active language gates with the currently required languages.
+   * NOTE: Only opens/maintains live WebSockets when audio is actively streaming.
+   * If mic is idle/off, this merely records the desired languages without opening connections.
+   * @param {Array<string>|Set<string>} requiredLanguages - List of active language codes
+   * @param {object} options - { force: boolean } to force gate opening (for unit testing)
+   */
+  syncGates(requiredLanguages, { force = false } = {}) {
     if (!this.isOperational) return;
 
     const reqSet = new Set(Array.from(requiredLanguages || []).filter(l => l && typeof l === 'string'));
-    
-    // 1. Open new gates for newly requested languages
-    for (const lang of reqSet) {
-      this.ensureGate(lang);
-    }
+    if (reqSet.size === 0) reqSet.add('en');
+    this.desiredLanguages = reqSet;
 
-    // 2. Close gates for languages that are no longer requested
-    for (const [lang, gate] of this.activeGates.entries()) {
-      if (!reqSet.has(lang)) {
-        console.log(`[Soniox Gate] 0 listeners remaining for "${lang}" — closing gate ($0 cost).`);
-        this.closeGate(lang);
+    // CRITICAL COST SAFEGUARD:
+    // Only open/maintain live Soniox WebSockets if microphone audio is actively flowing right now
+    // (or explicitly forced by tests). If mic is idle/off, NEVER open connections ($0 cost).
+    if (this._isStreamingAudio || force) {
+      // 1. Open new gates for newly requested languages
+      for (const lang of reqSet) {
+        this.ensureGate(lang);
+      }
+
+      // 2. Close gates for languages that are no longer requested
+      for (const [lang, gate] of this.activeGates.entries()) {
+        if (!reqSet.has(lang)) {
+          console.log(`[Soniox Gate] 0 listeners remaining for "${lang}" — closing gate ($0 cost).`);
+          this.closeGate(lang);
+        }
+      }
+    } else {
+      // If mic is idle, ensure no background connections remain open
+      if (this.activeGates.size > 0) {
+        this.closeAllGates();
       }
     }
   }
@@ -190,12 +211,12 @@ class SonioxGateManager extends EventEmitter {
         console.log(`[Soniox Gate ${gate.lang}] WS Closed (${code}): ${reason || 'Normal'}`);
         gate.status = 'closed';
 
-        // Auto-reconnect if gate is still desired in active map
-        if (this.activeGates.has(gate.lang) && gate.reconnectAttempts < 5) {
+        // Auto-reconnect ONLY if we are ACTIVELY streaming audio right now
+        if (this._isStreamingAudio && this.activeGates.has(gate.lang) && gate.reconnectAttempts < 5) {
           gate.reconnectAttempts++;
           const delay = Math.min(1000 * Math.pow(2, gate.reconnectAttempts), 10000);
           setTimeout(() => {
-            if (this.activeGates.has(gate.lang)) {
+            if (this._isStreamingAudio && this.activeGates.has(gate.lang)) {
               this.connectGate(gate);
             }
           }, delay);
@@ -368,19 +389,28 @@ class SonioxGateManager extends EventEmitter {
       console.log(`[Soniox Audio Ingest] Live mic audio stream active (${pcmBuffer.length} bytes/chunk, gates: ${Array.from(this.activeGates.keys()).join(', ') || 'en'})`);
     }
 
-    // Inactivity watchdog: Auto-close all gates if no audio is received for 30 seconds.
+    this._isStreamingAudio = true;
+
+    // Inactivity watchdog: Auto-close all gates if no audio is received for 10 seconds.
     // This strictly prevents credit drain when server runs 24/7 on Railway without active speech.
     if (this._inactivityTimer) clearTimeout(this._inactivityTimer);
     this._inactivityTimer = setTimeout(() => {
+      this._isStreamingAudio = false;
       if (this.activeGates.size > 0) {
-        console.log('[Soniox] Inactivity timeout: 30s with no microphone audio. Auto-closing all gates to preserve credits ($0 cost).');
+        console.log('[Soniox] Inactivity timeout: 10s with no microphone audio. Auto-closing all gates to preserve credits ($0 cost).');
         this.closeAllGates();
       }
-    }, 30000);
+    }, 10000);
 
-    // Ensure default English gate is open on-demand so sermon speech is never discarded
-    if (this.activeGates.size === 0) {
-      this.ensureGate('en');
+    // Open gates on-demand for desired languages (defaults to 'en') ONLY when audio is actively flowing
+    const targetLangs = (this.desiredLanguages && this.desiredLanguages.size > 0)
+      ? Array.from(this.desiredLanguages)
+      : ['en'];
+
+    for (const lang of targetLangs) {
+      if (!this.activeGates.has(lang)) {
+        this.ensureGate(lang);
+      }
     }
 
     for (const [lang, gate] of this.activeGates.entries()) {
@@ -408,8 +438,10 @@ class SonioxGateManager extends EventEmitter {
     if (!gate) return;
 
     this.activeGates.delete(langCode);
+    gate.reconnectAttempts = 999; // Prevent any scheduled reconnect
     if (gate.ws) {
       try {
+        gate.ws.removeAllListeners();
         gate.ws.close(1000, 'Gate closed by manager');
       } catch (_) {}
     }
@@ -420,6 +452,7 @@ class SonioxGateManager extends EventEmitter {
    * Close all active gates (e.g. when session ends or audio is inactive)
    */
   closeAllGates() {
+    this._isStreamingAudio = false;
     if (this._inactivityTimer) {
       clearTimeout(this._inactivityTimer);
       this._inactivityTimer = null;
@@ -427,6 +460,7 @@ class SonioxGateManager extends EventEmitter {
     for (const lang of Array.from(this.activeGates.keys())) {
       this.closeGate(lang);
     }
+    console.log('[Soniox] All gates closed. 0 active WebSocket connections ($0/hr cost).');
   }
 
   /**
