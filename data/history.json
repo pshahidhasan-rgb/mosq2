@@ -1,5 +1,65 @@
 [
   {
+    "id": "hist_myo-youth-8f3a9e_1792754039923",
+    "sessionId": "myo-youth-8f3a9e",
+    "mosqueName": "MYO Youth Center",
+    "startedAt": "2026-10-23T11:13:13.148Z",
+    "endedAt": "2026-10-23T11:13:59.865Z",
+    "dateDisplay": "Oct 23, 2026",
+    "timeDisplay": "05:13 PM",
+    "durationSeconds": 47,
+    "durationDisplay": "47s",
+    "totalTranscripts": 7,
+    "totalAyahsDetected": 0,
+    "totalAttendance": 1,
+    "attendance": {
+      "total": 1,
+      "phoneAttendees": 0,
+      "computerDisplays": 1
+    },
+    "phoneAttendees": 0,
+    "computerDisplays": 1,
+    "tvLanguage": "en",
+    "transcripts": [
+      {
+        "original": "أعوذ بالله من الشيطان الرجيم.",
+        "translation": "",
+        "timestamp": "2026-10-23T11:13:25.721Z"
+      },
+      {
+        "original": "بسم الله الرحمن الرحيم.",
+        "translation": "In the name of Allah, the Most Gracious, the Most Merciful.",
+        "timestamp": "2026-10-23T11:13:30.093Z"
+      },
+      {
+        "original": "أعوذ بالله من الشيطان الرجيم.",
+        "translation": "I seek refuge in Allah from Satan, the accursed.",
+        "timestamp": "2026-10-23T11:13:44.183Z"
+      },
+      {
+        "original": "بسم الله الرحمن",
+        "translation": "",
+        "timestamp": "2026-10-23T11:13:45.720Z"
+      },
+      {
+        "original": "طيب، في شيء أقول لكم؟",
+        "translation": "Okay, is there something I can tell you?",
+        "timestamp": "2026-10-23T11:13:48.232Z"
+      },
+      {
+        "original": "الحمد لله إن شاء الله، الشارع شوي ضيّق، قلت لهم ندخل.",
+        "translation": "Praise be to God, God willing, the street is a bit narrow, so I told them we'd go in.",
+        "timestamp": "2026-10-23T11:13:51.800Z"
+      },
+      {
+        "original": "قلت لهم نمنع كويس",
+        "translation": "",
+        "timestamp": "2026-10-23T11:13:55.884Z"
+      }
+    ],
+    "createdAt": "2026-10-23T11:13:59.865Z"
+  },
+  {
     "id": "hist_test-session-live_1792304717914",
     "sessionId": "test-session-live",
     "mosqueName": "Test Masjid",

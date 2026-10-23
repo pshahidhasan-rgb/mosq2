@@ -864,6 +864,17 @@ async function startMicrophone() {
     btnToggleMic.textContent = '🛑 Stop Live Mic';
     btnToggleMic.className = 'btn btn-danger';
 
+    // Auto-activate session if idle when user starts live microphone
+    if (sessionStatus === 'idle') {
+      console.log('[Live Mic] Auto-activating session for live pulpit speech...');
+      setSessionActive(new Date().toISOString());
+      try {
+        await fetch(`/api/session/${currentSessionId}/start`, { method: 'POST' });
+      } catch (e) {
+        console.warn('Auto-start error:', e.message);
+      }
+    }
+
     // When Soniox is active, Soniox handles 100% of speech & translation in real time via PCM audio.
     // Completely bypass Web Speech API to eliminate delayed OpenRouter batch injection!
     if (!isSonnoxActive) {

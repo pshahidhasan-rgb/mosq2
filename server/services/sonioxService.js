@@ -512,6 +512,13 @@ class SonioxGateManager extends EventEmitter {
    */
   broadcastAudio(pcmBuffer) {
     if (!this.isOperational || !pcmBuffer || !Buffer.isBuffer(pcmBuffer)) return;
+    if (pcmBuffer.length < 2) return;
+
+    // Enforce 16-bit PCM even byte alignment
+    if (pcmBuffer.length % 2 !== 0) {
+      pcmBuffer = pcmBuffer.subarray(0, pcmBuffer.length - 1);
+    }
+    if (pcmBuffer.length < 2) return;
 
     // Inactivity watchdog: Auto-close all gates if no audio is received for 30 seconds
     if (this._inactivityTimer) clearTimeout(this._inactivityTimer);

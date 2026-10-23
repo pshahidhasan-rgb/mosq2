@@ -600,14 +600,19 @@ wss.on('connection', (ws) => {
   let userRole = 'attendee';
   let userLanguage = 'en';
 
-  ws.on('message', async (raw) => {
+  ws.on('message', async (raw, isBinary) => {
     try {
       // Check if message is binary audio chunk from microphone
-      if (Buffer.isBuffer(raw)) {
-        if (sonioxService.isConfigured()) {
-          sonioxService.broadcastAudio(raw);
-        } else {
-          sttService.sendAudioChunk(raw);
+      if (isBinary) {
+        if (Buffer.isBuffer(raw) && raw.length >= 2) {
+          const pcm = raw.length % 2 === 0 ? raw : raw.subarray(0, raw.length - 1);
+          if (pcm.length >= 2) {
+            if (sonioxService.isConfigured()) {
+              sonioxService.broadcastAudio(pcm);
+            } else {
+              sttService.sendAudioChunk(pcm);
+            }
+          }
         }
         return;
       }
