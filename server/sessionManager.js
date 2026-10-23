@@ -585,12 +585,9 @@ class SessionManager extends EventEmitter {
     originalChunk = '',
     originalFull = '',
     translatedFull = '',
-    originalFinal = '',
-    originalPartial = '',
-    translatedFinal = '',
-    translatedPartial = '',
     isReplacement = false,
     isFinal = false,
+    seq = 0,
     timestamp = new Date().toISOString()
   }) {
     const subs = this.subscribers.get(sessionId);
@@ -598,6 +595,8 @@ class SessionManager extends EventEmitter {
 
     for (const sub of subs) {
       if (sub.ws.readyState !== 1 /* OPEN */) continue;
+      // Skip lagging clients to prevent slow consumers from creating backpressure
+      if (sub.ws.bufferedAmount > 1024 * 1024) continue;
 
       const clientLang = sub.language || 'en';
       if (sub.role === 'tv') {
@@ -610,12 +609,9 @@ class SessionManager extends EventEmitter {
             originalChunk:    originalChunk    || '',
             originalFull:     originalFull     || '',
             translatedFull:   translatedFull   || '',
-            originalFinal:    originalFinal    || '',
-            originalPartial:  originalPartial  || '',
-            translatedFinal:  translatedFinal  || '',
-            translatedPartial: translatedPartial || '',
             isReplacement:    Boolean(isReplacement),
             isFinal,
+            seq,
             timestamp
           }));
         }
@@ -627,10 +623,9 @@ class SessionManager extends EventEmitter {
             translatedChunk,
             originalChunk:   '',
             translatedFull:  translatedFull  || '',
-            translatedFinal: translatedFinal || '',
-            translatedPartial: translatedPartial || '',
             isReplacement:   Boolean(isReplacement),
             isFinal,
+            seq,
             timestamp
           }));
         }
@@ -642,12 +637,9 @@ class SessionManager extends EventEmitter {
           originalChunk,
           originalFull:   originalFull   || '',
           translatedFull: translatedFull || '',
-          originalFinal:  originalFinal  || '',
-          originalPartial: originalPartial || '',
-          translatedFinal: translatedFinal || '',
-          translatedPartial: translatedPartial || '',
           isReplacement:  Boolean(isReplacement),
           isFinal,
+          seq,
           timestamp
         }));
       }

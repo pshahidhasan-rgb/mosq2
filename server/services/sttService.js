@@ -200,6 +200,7 @@ class GladiaLiveSession {
         languages: ['ar'],
         code_switching: false
       },
+      translation: true,
       translation_config: {
         target_languages: this.targetLangs,
         model: 'base'

@@ -135,7 +135,9 @@ function playTvBrowserAudio(text, langCode) {
   if (!cleanText) return;
 
   try {
-    window.speechSynthesis.cancel();
+    if (window.speechSynthesis.pending) {
+      window.speechSynthesis.cancel();
+    }
     const utterance = new SpeechSynthesisUtterance(cleanText);
     const bcpTag = LANG_BCP47_MAP[langCode] || langCode || 'en-US';
     utterance.lang = bcpTag;
@@ -550,16 +552,9 @@ function handleIncomingSpeech({ arabic, translations, translated, ayah, timestam
         streamingArabic.remove();
       }
     }
-    if (displayTrans) {
-      if (streamingTrans) {
-        streamingTrans.classList.remove('streaming');
-        streamingTrans.textContent = displayTrans;
-      } else {
-        const newTrans = document.createElement('div');
-        newTrans.className = 'para-item current';
-        newTrans.textContent = displayTrans;
-        transFeed.appendChild(newTrans);
-      }
+    if (streamingTrans && displayTrans) {
+      streamingTrans.classList.remove('streaming');
+      streamingTrans.textContent = displayTrans;
       if (isTvAudioEnabled && isLive) {
         playTvBrowserAudio(displayTrans, targetLang);
       }
@@ -592,27 +587,20 @@ function handleStreamingToken({
   originalChunk = '',
   originalFull = '',
   translatedFull = '',
-  originalFinal = '',
-  originalPartial = '',
-  translatedFinal = '',
-  translatedPartial = '',
   isReplacement = false,
-  isFinal = false,
-  timestamp = null
+  isFinal = false
 }) {
+  // Returns true if text contains at least one Arabic Unicode character.
+  // Used to prevent romanized/Latin pass-through tokens from appearing in the Arabic column.
   const hasArabicScript = (text) => /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/.test(text);
 
-  // Content selection: full replacement text from Soniox state machine
-  const arabicContent = (originalFull || originalChunk || '').trimStart();
-  const transContent = (translatedFull || translatedChunk || '').trimStart();
-
-  // ── Synchronized Dual-Column Row Creation ─────────────────────────────────
-  // When an utterance starts, ensure both Arabic and Translation feeds have a
-  // matching active streaming paragraph with live cursor
-  let currentArabic = arabicFeed.querySelector('.para-item.current.streaming');
-  let currentTrans = transFeed.querySelector('.para-item.current.streaming');
-
-  if ((arabicContent && hasArabicScript(arabicContent)) || transContent) {
+  // ── Left column (Arabic original) ──────────────────────────────────────────
+  // Prefer full-replacement field; fall back to legacy chunk for backwards-compat.
+  const arabicContent = isReplacement ? originalFull : originalChunk;
+  // Only update the Arabic column if the content actually contains Arabic script.
+  // This blocks romanized Latin text (e.g. "Maliki", "Tallinn") from the left side.
+  if (arabicContent && hasArabicScript(arabicContent)) {
+    let currentArabic = arabicFeed.querySelector('.para-item.current.streaming');
     if (!currentArabic) {
       arabicFeed.querySelectorAll('.para-item.current').forEach(el => {
         el.classList.remove('current', 'streaming');
@@ -622,7 +610,41 @@ function handleStreamingToken({
       currentArabic.className = 'para-item current streaming';
       arabicFeed.appendChild(currentArabic);
     }
+    if (isReplacement) {
+      currentArabic.textContent = arabicContent.trimStart();         // SET — full replacement
+    } else {
+      currentArabic.textContent = (currentArabic.textContent + arabicContent).trimStart(); // legacy APPEND
+    }
+    while (arabicFeed.children.length > MAX_HISTORY) arabicFeed.firstElementChild.remove();
+    if (arabicFeed.parentElement) {
+      arabicFeed.parentElement.scrollTo({ top: arabicFeed.parentElement.scrollHeight, behavior: 'smooth' });
+    }
 
+    // ── If Arabic is streaming but translation is still empty, ensure a streaming
+    //    placeholder exists on the right column so UI doesn't look dead ──
+    const transContent = isReplacement ? translatedFull : translatedChunk;
+    if ((!transContent || transContent.trim().length === 0) && !isFinal) {
+      let currentTrans = transFeed.querySelector('.para-item.current.streaming');
+      if (!currentTrans) {
+        transFeed.querySelectorAll('.para-item.current').forEach(el => {
+          el.classList.remove('current', 'streaming');
+          el.classList.add('history');
+        });
+        currentTrans = document.createElement('div');
+        currentTrans.className = 'para-item current streaming translating-placeholder';
+        currentTrans.textContent = '…';
+        transFeed.appendChild(currentTrans);
+        if (transFeed.parentElement) {
+          transFeed.parentElement.scrollTo({ top: transFeed.parentElement.scrollHeight, behavior: 'smooth' });
+        }
+      }
+    }
+  }
+
+  // ── Right column (translation) ──────────────────────────────────────────────
+  const transContent = isReplacement ? translatedFull : translatedChunk;
+  if (transContent && transContent.length > 0) {
+    let currentTrans = transFeed.querySelector('.para-item.current.streaming');
     if (!currentTrans) {
       transFeed.querySelectorAll('.para-item.current').forEach(el => {
         el.classList.remove('current', 'streaming');
@@ -631,60 +653,30 @@ function handleStreamingToken({
       currentTrans = document.createElement('div');
       currentTrans.className = 'para-item current streaming';
       transFeed.appendChild(currentTrans);
+    } else {
+      // Remove placeholder class & text if we now have real translation content
+      currentTrans.classList.remove('translating-placeholder');
     }
-  }
-
-  // ── Left Column (Arabic Speech) ───────────────────────────────────────────
-  if (arabicContent && hasArabicScript(arabicContent) && currentArabic) {
-    currentArabic.textContent = arabicContent;
-    while (arabicFeed.children.length > MAX_HISTORY) arabicFeed.firstElementChild.remove();
-    if (arabicFeed.parentElement) {
-      arabicFeed.parentElement.scrollTo({ top: arabicFeed.parentElement.scrollHeight, behavior: 'smooth' });
+    if (isReplacement) {
+      currentTrans.textContent = transContent.trimStart();           // SET — full replacement
+    } else {
+      currentTrans.textContent = (currentTrans.textContent + transContent).trimStart(); // legacy APPEND
     }
-  }
-
-  // ── Right Column (Live Translated Text) ────────────────────────────────────
-  if (transContent && currentTrans) {
-    currentTrans.textContent = transContent;
     while (transFeed.children.length > MAX_HISTORY) transFeed.firstElementChild.remove();
     if (transFeed.parentElement) {
       transFeed.parentElement.scrollTo({ top: transFeed.parentElement.scrollHeight, behavior: 'smooth' });
     }
   }
 
-  // ── Sentence Boundary Finalization (<end>) ────────────────────────────────
   if (isFinal) {
-    if (currentArabic) {
-      currentArabic.classList.remove('streaming');
-      if (arabicContent && hasArabicScript(arabicContent)) {
-        currentArabic.textContent = arabicContent;
-      }
-    }
+    const currentArabic = arabicFeed.querySelector('.para-item.current.streaming');
+    if (currentArabic) currentArabic.classList.remove('streaming');
+    const currentTrans = transFeed.querySelector('.para-item.current.streaming');
     if (currentTrans) {
-      currentTrans.classList.remove('streaming');
-      if (transContent) {
-        currentTrans.textContent = transContent;
-        if (isTvAudioEnabled) {
-          playTvBrowserAudio(transContent, targetLang);
-        }
+      currentTrans.classList.remove('streaming', 'translating-placeholder');
+      if (isTvAudioEnabled && currentTrans.textContent && currentTrans.textContent !== '…') {
+        playTvBrowserAudio(currentTrans.textContent, targetLang);
       }
-    }
-
-    // Keep history record to deduplicate any fallback polling
-    if (arabicContent || transContent) {
-      recentFeedItems.push({
-        arabicText: (arabicContent && hasArabicScript(arabicContent)) ? arabicContent : '',
-        transObj: { [targetLang]: transContent || '' }
-      });
-      while (recentFeedItems.length > MAX_HISTORY) recentFeedItems.shift();
-    }
-
-    // Auto-scroll to lock in position
-    if (arabicFeed.parentElement) {
-      arabicFeed.parentElement.scrollTo({ top: arabicFeed.parentElement.scrollHeight, behavior: 'smooth' });
-    }
-    if (transFeed.parentElement) {
-      transFeed.parentElement.scrollTo({ top: transFeed.parentElement.scrollHeight, behavior: 'smooth' });
     }
   }
 }
@@ -823,11 +815,13 @@ function connectWebSocket() {
         }
       }
       if (data.type === 'STREAMING_TOKEN') {
+        if (data.timestamp) seenTimestamps.add(data.timestamp);
+        if (data.seq) seenTimestamps.add(`seq_${data.seq}`);
         handleStreamingToken(data);
       }
       if (data.type === 'LIVE_SUBTITLE') {
-        // Mark this timestamp as seen so the HTTP fallback won't re-render it
-        if (data.timestamp) seenTimestamps.add(data.timestamp);
+        const key = data.seq ? `seq_${data.seq}` : data.timestamp;
+        if (key) seenTimestamps.add(key);
         handleIncomingSpeech(data, true);
       }
     } catch (e) {}
@@ -866,18 +860,24 @@ function startFeedSync() {
         clearTvFeeds();
       }
       if (data.transcripts && data.transcripts.length > 0) {
-        // Only process items we haven't seen yet (by timestamp)
-        const newItems = data.transcripts.filter(item => item.timestamp && !seenTimestamps.has(item.timestamp));
-        newItems.forEach(item => {
-          seenTimestamps.add(item.timestamp);
-          handleIncomingSpeech({
-            arabic: item.arabic,
-            translations: item.translations,
-            translated: (item.translations && item.translations[targetLang]) || (item.translations && item.translations.en) || item.arabic,
-            ayah: item.ayah,
-            timestamp: item.timestamp
-          }, true);
-        });
+        // Only process historical items via polling if WebSocket is NOT currently open and streaming
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          const newItems = data.transcripts.filter(item => {
+            const key = item.seq ? `seq_${item.seq}` : item.timestamp;
+            return key && !seenTimestamps.has(key);
+          });
+          newItems.forEach(item => {
+            const key = item.seq ? `seq_${item.seq}` : item.timestamp;
+            seenTimestamps.add(key);
+            handleIncomingSpeech({
+              arabic: item.arabic,
+              translations: item.translations,
+              translated: (item.translations && item.translations[targetLang]) || (item.translations && item.translations.en) || item.arabic,
+              ayah: item.ayah,
+              timestamp: item.timestamp
+            }, true);
+          });
+        }
         // Cap the Set size to avoid memory growth in long sessions
         if (seenTimestamps.size > 500) {
           const iter = seenTimestamps.values();

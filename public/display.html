@@ -248,6 +248,21 @@
       50% { opacity: 0; }
     }
 
+    /* Translating placeholder: shown on the translation column while Arabic
+       is actively streaming but translation tokens haven't arrived yet */
+    .translating-placeholder {
+      opacity: 0.35;
+      font-style: italic;
+      animation: pulseTranslate 1.5s ease-in-out infinite;
+    }
+    .translating-placeholder::after {
+      content: '' !important;  /* suppress the blinkCursor on placeholder */
+    }
+    @keyframes pulseTranslate {
+      0%, 100% { opacity: 0.25; }
+      50% { opacity: 0.5; }
+    }
+
     .idle-placeholder {
       color: rgba(255, 255, 255, 0.25);
       font-style: italic;

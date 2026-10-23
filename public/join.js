@@ -404,8 +404,7 @@ function handleStreamingTokenMobile({
   translatedChunk = '',
   translatedFull = '',
   isReplacement = false,
-  isFinal = false,
-  timestamp = null
+  isFinal = false
 }) {
   // Determine which content to use — full replacement or legacy delta chunk
   const content = isReplacement ? translatedFull : translatedChunk;
@@ -434,9 +433,6 @@ function handleStreamingTokenMobile({
   mobileCardsFeed.scrollTop = mobileCardsFeed.scrollHeight;
 
   if (isFinal) {
-    if (timestamp) {
-      renderedTimestamps.add(timestamp);
-    }
     if (currentStreamingCard) {
       currentStreamingCard.classList.remove('streaming');
       const finalText = transContainer ? transContainer.textContent : '';
@@ -516,7 +512,9 @@ function speakSpeech(text, lang) {
   if (!cleanText) return;
 
   try {
-    window.speechSynthesis.cancel();
+    if (window.speechSynthesis.pending) {
+      window.speechSynthesis.cancel();
+    }
     const utterance = new SpeechSynthesisUtterance(cleanText);
     const bcpTag = LANG_BCP47_MAP[lang] || lang || 'en-US';
     utterance.lang = bcpTag;
@@ -592,10 +590,12 @@ function connectWebSocket() {
         updateMobileStatus('ended', 'Session Concluded');
       }
       if (data.type === 'STREAMING_TOKEN') {
+        if (data.timestamp) renderedTimestamps.add(data.timestamp);
+        if (data.seq) renderedTimestamps.add(`seq_${data.seq}`);
         handleStreamingTokenMobile(data);
       }
       if (data.type === 'LIVE_SUBTITLE') {
-        const key = data.timestamp || `${data.arabic}_${Date.now()}`;
+        const key = data.seq ? `seq_${data.seq}` : (data.timestamp || `${data.arabic}_${Date.now()}`);
         if (!renderedTimestamps.has(key)) {
           renderedTimestamps.add(key);
           renderSermonCard(data, true);
@@ -624,18 +624,22 @@ function startFeedSync() {
         clearMobileCards();
       }
       if (data.transcripts && data.transcripts.length > 0) {
-        data.transcripts.forEach(item => {
-          if (!renderedTimestamps.has(item.timestamp)) {
-            renderedTimestamps.add(item.timestamp);
-            renderSermonCard({
-              arabic: item.arabic,
-              translations: item.translations,
-              translated: (item.translations && item.translations[currentLanguage]) || (item.translations && item.translations.en) || item.arabic,
-              ayah: item.ayah,
-              timestamp: item.timestamp
-            }, true);
-          }
-        });
+        // Only process historical items via polling if WebSocket is NOT currently open and streaming
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          data.transcripts.forEach(item => {
+            const key = item.seq ? `seq_${item.seq}` : item.timestamp;
+            if (key && !renderedTimestamps.has(key)) {
+              renderedTimestamps.add(key);
+              renderSermonCard({
+                arabic: item.arabic,
+                translations: item.translations,
+                translated: (item.translations && item.translations[currentLanguage]) || (item.translations && item.translations.en) || item.arabic,
+                ayah: item.ayah,
+                timestamp: item.timestamp
+              }, true);
+            }
+          });
+        }
       }
     } catch (e) {}
   }, 2000);

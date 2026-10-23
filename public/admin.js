@@ -868,10 +868,10 @@ async function startMicrophone() {
     // Completely bypass Web Speech API to eliminate delayed OpenRouter batch injection!
     if (!isSonnoxActive) {
       try {
-        const res = await fetch('/api/status');
-        if (res.ok) {
-          const data = await res.json();
-          isSonnoxActive = data.providers && data.providers.sonioxStreaming === true;
+        const statusRes = await fetch('/api/status');
+        if (statusRes.ok) {
+          const sData = await statusRes.json();
+          isSonnoxActive = sData.providers && sData.providers.sonioxStreaming === true;
         }
       } catch (_) {}
     }
@@ -1001,11 +1001,6 @@ let micAudioProcessor = null;
 
 function stopMicrophone() {
   micActive = false;
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    try {
-      ws.send(JSON.stringify({ type: 'STOP_MIC' }));
-    } catch (_) {}
-  }
   if (micAudioProcessor) {
     try { micAudioProcessor.disconnect(); } catch (_) {}
     micAudioProcessor = null;

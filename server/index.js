@@ -21,7 +21,7 @@ const PORT = process.env.PORT || 3000;
 const app = express();
 app.set('trust proxy', 1);
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ server, perMessageDeflate: false });
 
 // Middleware
 app.use(cors());
@@ -60,8 +60,12 @@ let activeLiveSessionId = 'jumuah-live-4b2c1d';
 
 })();
 
-// Initialize STT engine (Deepgram Nova-3 / Gladia / Simulator)
-sttService.initSession();
+// Initialize STT engine (Deepgram Nova-3 / Gladia / Simulator) only when Soniox is not active
+if (!sonioxService.isConfigured()) {
+  sttService.initSession();
+} else {
+  console.log('[STT] Soniox Dynamic Language Gates configured — Gladia standby mode (0 duplicate audio streams)');
+}
 
 /**
  * Main Real-time Processing Pipeline:
@@ -146,6 +150,9 @@ sttService.on('transcript', (data) => {
  * and broadcast immediately. This is the primary fast path for the live display.
  */
 sttService.on('translation', async (data) => {
+  // Suppress Gladia translation events when Soniox is configured to eliminate slow overwriting/collision
+  if (sonioxService.isConfigured()) return;
+
   const { arabic, translations, sessionLabel } = data;
   if (!arabic && (!translations || Object.keys(translations).length === 0)) return;
 
@@ -205,7 +212,7 @@ sessionManager.on('languages_updated', ({ sessionId, languages }) => {
 });
 
 // Broadcast real-time streaming tokens (sub-200ms word-by-word) to all active rooms
-sonioxService.on('token_stream', ({ lang, translatedChunk, originalChunk, originalFull, translatedFull, originalFinal, originalPartial, translatedFinal, translatedPartial, isReplacement, isFinal, timestamp }) => {
+sonioxService.on('token_stream', ({ lang, translatedChunk, originalChunk, originalFull, translatedFull, isReplacement, isFinal, seq, timestamp }) => {
   const targetIds = getTargetSessionIds();
   for (const sid of targetIds) {
     sessionManager.broadcastStreamingToken(sid, {
@@ -214,19 +221,20 @@ sonioxService.on('token_stream', ({ lang, translatedChunk, originalChunk, origin
       originalChunk,
       originalFull,
       translatedFull,
-      originalFinal,
-      originalPartial,
-      translatedFinal,
-      translatedPartial,
       isReplacement,
       isFinal,
+      seq,
       timestamp
     });
   }
 });
 
-// When a sentence is finalized by Soniox, save to session transcript history (for page refresh, polling & exports)
-sonioxService.on('sentence_finalized', ({ lang, translatedText, finalText, originalText, timestamp }) => {
+// When a sentence is finalized by Soniox, save to session history ONLY.
+// DO NOT broadcast LIVE_SUBTITLE here — the STREAMING_TOKEN with isFinal:true
+// already finalized the display paragraph. Broadcasting LIVE_SUBTITLE on top of it
+// causes a visual collision (text flashes/overwrites/duplicates on the TV display).
+// Session transcripts are still saved so HTTP polling fallback and refresh recovery work.
+sonioxService.on('sentence_finalized', ({ lang, translatedText, finalText, originalText, seq, timestamp }) => {
   const targetIds = getTargetSessionIds();
   const resolvedTranslation = translatedText || finalText || '';
   const translations = { [lang]: resolvedTranslation };
@@ -236,12 +244,31 @@ sonioxService.on('sentence_finalized', ({ lang, translatedText, finalText, origi
     const session = sessionManager.getSession(sid);
     if (!session || session.status !== 'active') continue;
 
+    // Save to session history for refresh/reconnect/polling recovery
     session.transcripts.push({
+      seq: seq || session.transcripts.length + 1,
       arabic: originalText,
       translations,
       ayah: null,
       timestamp: ts
     });
+
+    // Also broadcast to admin panel so ADMIN_TRANSCRIPT events still work
+    const subs = sessionManager.subscribers.get(sid);
+    if (subs) {
+      for (const sub of subs) {
+        if (sub.ws.readyState === 1 && sub.role === 'admin') {
+          sub.ws.send(JSON.stringify({
+            type: 'ADMIN_TRANSCRIPT',
+            seq,
+            arabic: originalText,
+            translations,
+            ayah: null,
+            timestamp: ts
+          }));
+        }
+      }
+    }
   }
 });
 
@@ -573,10 +600,10 @@ wss.on('connection', (ws) => {
   let userRole = 'attendee';
   let userLanguage = 'en';
 
-  ws.on('message', async (raw, isBinary) => {
+  ws.on('message', async (raw) => {
     try {
       // Check if message is binary audio chunk from microphone
-      if (isBinary) {
+      if (Buffer.isBuffer(raw)) {
         if (sonioxService.isConfigured()) {
           sonioxService.broadcastAudio(raw);
         } else {
@@ -611,8 +638,6 @@ wss.on('connection', (ws) => {
           deviceType: msg.deviceType
         });
 
-        console.log(`[WS Connection] ${userRole.toUpperCase()} connected | lang: "${userLanguage}" | device: "${msg.deviceType || 'browser'}" | session: "${userSessionId}"`);
-
         // Send confirmation and current session info
         const currentSession = sessionManager.getSession(userSessionId);
         ws.send(JSON.stringify({
@@ -634,7 +659,6 @@ wss.on('connection', (ws) => {
 
       if (msg.type === 'CHANGE_LANGUAGE') {
         userLanguage = msg.language || 'en';
-        console.log(`[WS Language] ${userRole} updated language to "${userLanguage}"`);
         sessionManager.updateSubscriberLanguage(userSessionId, ws, userLanguage);
       }
 
@@ -658,13 +682,6 @@ wss.on('connection', (ws) => {
           } else {
             sttService.sendAudioChunk(audioBuffer);
           }
-        }
-      }
-
-      if (msg.type === 'STOP_MIC') {
-        console.log('[Admin] Stop Mic received. Terminating all Soniox gates immediately ($0 cost).');
-        if (sonioxService.isConfigured()) {
-          sonioxService.closeAllGates();
         }
       }
 
