@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>Live Khutbah Audio & Subtitles — MosqAI</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -20,698 +20,268 @@
       --text-muted: rgba(255, 255, 255, 0.6);
       --gold: #f59e0b;
     }
-
     html, body {
-      min-height: 100vh;
+      height: 100%;
       background: var(--bg);
       color: var(--text);
       font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
       -webkit-tap-highlight-color: transparent;
     }
+    body { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
 
-    body {
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      overflow: hidden;
-    }
-
-    /* ─── STEP CONTAINERS ─── */
     .step-screen {
-      display: none;
-      flex-direction: column;
-      height: 100vh;
-      width: 100%;
-      position: absolute;
-      top: 0; left: 0; right: 0; bottom: 0;
-      overflow-y: auto;
+      display: none; flex-direction: column; width: 100%;
+      position: absolute; inset: 0; overflow-y: auto;
     }
-    .step-screen.active {
-      display: flex;
-    }
+    .step-screen.active { display: flex; }
 
-    /* ══════════════════════════════════════════════
-       STEP 1 — WELCOME / LANDING
-    ══════════════════════════════════════════════ */
+    /* ── STEP 1: WELCOME / LANDING ── */
     #step1 {
-      align-items: center;
-      justify-content: center;
-      padding: 2.5rem 1.5rem;
-      text-align: center;
-      gap: 1.5rem;
-      background: radial-gradient(circle at 50% 15%, rgba(16, 185, 129, 0.15) 0%, transparent 70%), var(--bg);
+      align-items: center; justify-content: center;
+      padding: 2.5rem 1.5rem; text-align: center; gap: 1.5rem;
+      background: radial-gradient(circle at 50% 15%, rgba(16,185,129,0.15) 0%, transparent 70%), var(--bg);
     }
-
     .brand-avatar {
-      width: 64px;
-      height: 64px;
-      border-radius: 18px;
-      background: #10b981;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 900;
-      font-size: 2rem;
-      color: #071510;
-      box-shadow: 0 0 30px var(--emerald-glow);
+      width: 64px; height: 64px; border-radius: 18px; background: var(--emerald);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 2rem; color: #071510; box-shadow: 0 0 30px var(--emerald-glow);
     }
-
-    #s1-mosque-name {
-      font-size: 1.75rem;
-      font-weight: 800;
-      line-height: 1.2;
-      letter-spacing: -0.02em;
-    }
+    #s1-mosque-name { font-size: 1.75rem; font-weight: 800; line-height: 1.2; letter-spacing: -0.02em; }
     #s1-mosque-name span { color: var(--emerald); }
-
     .live-indicator-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      background: rgba(16, 185, 129, 0.15);
-      border: 1px solid rgba(16, 185, 129, 0.4);
-      color: #34d399;
-      padding: 0.35rem 0.95rem;
-      border-radius: 999px;
-      font-size: 0.78rem;
-      font-weight: 800;
-      letter-spacing: 0.06em;
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.4); color: #34d399;
+      padding: 0.35rem 0.95rem; border-radius: 999px; font-size: 0.78rem; font-weight: 800; letter-spacing: 0.06em;
     }
-    .pulsing-dot {
-      width: 7px; height: 7px;
-      border-radius: 50%;
-      background: #34d399;
-      animation: pulseDot 1.4s infinite ease-in-out;
-    }
-    @keyframes pulseDot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.75); } }
-
-    .s1-desc {
-      font-size: 0.92rem;
-      color: var(--text-muted);
-      max-width: 300px;
-      line-height: 1.5;
-    }
-
+    .pulsing-dot { width: 7px; height: 7px; border-radius: 50%; background: #34d399; animation: pulseDot 1.4s infinite ease-in-out; }
+    @keyframes pulseDot { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .4; transform: scale(.75); } }
+    .s1-desc { font-size: 0.92rem; color: var(--text-muted); max-width: 300px; line-height: 1.5; }
     .btn-main-join {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.6rem;
-      background: #10b981;
-      color: #071510;
-      font-size: 1.1rem;
-      font-weight: 800;
-      padding: 1rem 2rem;
-      border-radius: 16px;
-      border: none;
-      cursor: pointer;
-      width: 100%;
-      max-width: 320px;
-      box-shadow: 0 10px 25px rgba(16, 185, 129, 0.35);
-      transition: transform 0.15s;
+      display: flex; align-items: center; justify-content: center; gap: .6rem;
+      background: var(--emerald); color: #071510; font-size: 1.1rem; font-weight: 800;
+      padding: 1rem 2rem; border-radius: 16px; border: none; cursor: pointer;
+      width: 100%; max-width: 320px; box-shadow: 0 10px 25px rgba(16,185,129,.35); transition: transform .15s;
     }
-    .btn-main-join:active { transform: scale(0.98); }
+    .btn-main-join:active { transform: scale(.98); }
 
-    /* ══════════════════════════════════════════════
-       STEP 2 — LANGUAGE SELECTION CARDS
-    ══════════════════════════════════════════════ */
-    #step2 {
-      padding: 1.5rem 1.25rem 2rem;
-      gap: 1.1rem;
-    }
-    .s2-header {
-      text-align: center;
-      margin-bottom: 0.25rem;
-    }
-    .s2-header h2 {
-      font-size: 1.35rem;
-      font-weight: 800;
-      margin-bottom: 0.25rem;
-    }
-    .s2-header p {
-      font-size: 0.82rem;
-      color: var(--text-muted);
-    }
-
-    .lang-card-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0.75rem;
-      flex: 1;
-    }
+    /* ── STEP 2: LANGUAGE SELECTION ── */
+    #step2 { padding: 1.5rem 1.25rem 2rem; gap: 1.1rem; }
+    .s2-header { text-align: center; }
+    .s2-header h2 { font-size: 1.35rem; font-weight: 800; margin-bottom: .25rem; }
+    .s2-header p { font-size: .82rem; color: var(--text-muted); }
+    .lang-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
     .lang-card-item {
-      background: var(--card-bg);
-      border: 1.5px solid var(--card-border);
-      border-radius: 14px;
-      padding: 0.95rem 0.85rem;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0.3rem;
-      cursor: pointer;
-      text-align: center;
-      transition: all 0.2s ease;
-      user-select: none;
+      background: var(--card-bg); border: 1.5px solid var(--card-border); border-radius: 14px;
+      padding: .95rem .85rem; display: flex; flex-direction: column; align-items: center; gap: .3rem;
+      cursor: pointer; text-align: center; transition: all .2s ease; user-select: none;
     }
-    .lang-card-item:hover, .lang-card-item:active {
-      border-color: var(--emerald);
-      background: rgba(16, 185, 129, 0.1);
-      transform: translateY(-2px);
-    }
-    .lang-card-item.selected {
-      border-color: #10b981;
-      background: rgba(16, 185, 129, 0.18);
-      box-shadow: 0 0 15px rgba(16, 185, 129, 0.25);
-    }
+    .lang-card-item:active { border-color: var(--emerald); background: rgba(16,185,129,.1); }
+    .lang-card-item.selected { border-color: var(--emerald); background: rgba(16,185,129,.18); box-shadow: 0 0 15px rgba(16,185,129,.25); }
     .lang-flag { font-size: 1.75rem; }
-    .lang-title { font-size: 0.92rem; font-weight: 700; color: #fff; }
-    .lang-sub { font-size: 0.75rem; color: var(--text-muted); }
-
+    .lang-title { font-size: .92rem; font-weight: 700; color: #fff; }
+    .lang-sub { font-size: .75rem; color: var(--text-muted); }
     .btn-submit-lang {
-      background: var(--emerald);
-      color: #071510;
-      font-size: 1rem;
-      font-weight: 800;
-      padding: 0.9rem;
-      border-radius: 14px;
-      border: none;
-      cursor: pointer;
-      width: 100%;
-      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.3);
-      transition: opacity 0.2s;
+      background: var(--emerald); color: #071510; font-size: 1rem; font-weight: 800;
+      padding: .9rem; border-radius: 14px; border: none; cursor: pointer; width: 100%;
+      box-shadow: 0 6px 20px rgba(16,185,129,.3); transition: opacity .2s;
     }
-    .btn-submit-lang:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
+    .btn-submit-lang:disabled { opacity: .4; cursor: not-allowed; }
 
-    /* ══════════════════════════════════════════════
-       STEP 3 — MOBILE LIVE STREAM (Clean Header without Competitor Title)
-    ══════════════════════════════════════════════ */
-    #step3 {
-      background: var(--bg);
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      overflow: hidden;
-    }
-
-    /* Top Bar: Clean icon & Live badge (No competitor name) */
+    /* ── STEP 3: LIVE MANUSCRIPT ── */
+    #step3 { background: var(--bg); overflow: hidden; }
     .comp-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0.75rem 1rem;
-      background: rgba(7, 21, 16, 0.95);
-      backdrop-filter: blur(12px);
-      border-bottom: 1px solid rgba(16, 185, 129, 0.15);
-      z-index: 50;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: .75rem 1rem; padding-top: calc(.75rem + env(safe-area-inset-top));
+      background: rgba(7,21,16,.95); backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(16,185,129,.15); z-index: 50; flex-shrink: 0;
     }
-
-    .comp-header .left-meta {
-      display: flex;
-      align-items: center;
-      gap: 0.6rem;
-    }
-
-    .btn-back-step {
-      background: none;
-      border: none;
-      color: rgba(255, 255, 255, 0.75);
-      font-size: 1.3rem;
-      cursor: pointer;
-      padding: 0.2rem;
-      display: flex;
-      align-items: center;
-    }
-
+    .comp-header .left-meta { display: flex; align-items: center; gap: .6rem; }
+    .btn-back-step { background: none; border: none; color: rgba(255,255,255,.75); font-size: 1.3rem; cursor: pointer; padding: .2rem; }
     .comp-logo-glyph {
-      width: 22px;
-      height: 22px;
-      border-radius: 6px;
-      background: #10b981;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 900;
-      font-size: 0.8rem;
-      color: #071510;
+      width: 22px; height: 22px; border-radius: 6px; background: var(--emerald);
+      display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: .8rem; color: #071510;
     }
-
     .comp-live-badge {
-      display: flex;
-      align-items: center;
-      gap: 0.35rem;
-      background: rgba(16, 185, 129, 0.15);
-      border: 1px solid rgba(16, 185, 129, 0.4);
-      color: #34d399;
-      padding: 0.2rem 0.6rem;
-      border-radius: 999px;
-      font-size: 0.7rem;
-      font-weight: 800;
-      letter-spacing: 0.05em;
+      display: flex; align-items: center; gap: .35rem;
+      background: rgba(16,185,129,.15); border: 1px solid rgba(16,185,129,.4); color: #34d399;
+      padding: .2rem .6rem; border-radius: 999px; font-size: .7rem; font-weight: 800; letter-spacing: .05em;
     }
-
-    /* Sub-header Language Switcher Bar */
+    #mobile-session-banner {
+      display: none; padding: .4rem 1rem; font-size: .75rem; font-weight: 700; text-align: center; flex-shrink: 0;
+    }
     .lang-switcher-bar {
-      padding: 0.5rem 1rem;
-      background: rgba(10, 31, 23, 0.6);
-      border-bottom: 1px solid rgba(16, 185, 129, 0.1);
-      display: flex;
-      align-items: center;
+      padding: .5rem 1rem; background: rgba(10,31,23,.6);
+      border-bottom: 1px solid rgba(16,185,129,.1); display: flex; align-items: center; flex-shrink: 0;
     }
-
     .lang-pill-selector {
-      display: flex;
-      align-items: center;
-      gap: 0.45rem;
-      background: rgba(16, 185, 129, 0.12);
-      border: 1px solid rgba(16, 185, 129, 0.25);
-      color: #e2e8f0;
-      padding: 0.3rem 0.75rem;
-      border-radius: 999px;
-      font-size: 0.78rem;
-      font-weight: 600;
+      display: flex; align-items: center; gap: .45rem;
+      background: rgba(16,185,129,.12); border: 1px solid rgba(16,185,129,.25); color: #e2e8f0;
+      padding: .3rem .75rem; border-radius: 999px; font-size: .78rem; font-weight: 600; cursor: pointer;
+    }
+
+    /* Continuous manuscript — mirrors TV .para-item model */
+    #manuscript-feed {
+      flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+      padding: 1.1rem 1.25rem 7.5rem;
+      overscroll-behavior: contain;
+    }
+    #manuscript-feed::-webkit-scrollbar { width: 3px; }
+    #manuscript-feed::-webkit-scrollbar-thumb { background: rgba(16,185,129,.2); border-radius: 4px; }
+
+    .para-item {
+      font-size: 1.08rem; line-height: 1.7; font-weight: 500;
+      letter-spacing: -0.005em; margin-bottom: 1.1rem;
+      overflow-wrap: anywhere;
+    }
+    .para-item.history { color: rgba(248,250,252,.85); }
+    .para-item.history .sent { transition: color .6s ease; }
+    .para-item.history .sent.fresh { color: #ffffff; }
+    .para-item.current { color: #ffffff; font-weight: 600; }
+    .para-item.current:empty { display: none; }
+    .para-item.current.streaming::after {
+      content: ' ▍'; color: var(--emerald); font-size: .8em;
+      animation: blinkCursor .75s infinite ease-in-out;
+    }
+    @keyframes blinkCursor { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+    .para-item.rtl { direction: rtl; text-align: right; font-size: 1.18rem; font-family: 'Amiri', serif; }
+
+    #listening-indicator {
+      display: flex; align-items: center; gap: .6rem;
+      color: rgba(255,255,255,.55); font-size: .82rem; font-weight: 600; padding: .35rem 0 1rem;
+    }
+    .pulse-wave-dots { display: flex; gap: 3px; align-items: center; }
+    .wave-dot { width: 3px; height: 10px; background: var(--emerald); border-radius: 2px; animation: wavePulse 1s infinite ease-in-out; }
+    .wave-dot:nth-child(2) { animation-delay: .15s; height: 15px; }
+    .wave-dot:nth-child(3) { animation-delay: .3s; height: 12px; }
+    @keyframes wavePulse { 0%,100% { transform: scaleY(.4); opacity: .5; } 50% { transform: scaleY(1); opacity: 1; } }
+
+    #jump-latest {
+      position: fixed; right: 1rem; bottom: 5.6rem; z-index: 90; display: none;
+      background: var(--emerald); color: #071510; border: none; border-radius: 999px;
+      padding: .45rem .85rem; font-weight: 800; font-size: .75rem; box-shadow: 0 6px 16px rgba(0,0,0,.35);
       cursor: pointer;
-      transition: background 0.2s;
-    }
-    .lang-pill-selector:hover {
-      background: rgba(16, 185, 129, 0.2);
     }
 
-    /* ─── SCROLLABLE FEED OF SERMON CARDS (Proportional & Compact) ─── */
-    #mobile-cards-feed {
-      flex: 1;
-      overflow-y: auto;
-      padding: 0.75rem 1rem 6.5rem; /* space for fixed audio footer */
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-      -webkit-overflow-scrolling: touch;
-    }
-    #mobile-cards-feed::-webkit-scrollbar { width: 3px; }
-    #mobile-cards-feed::-webkit-scrollbar-thumb { background: rgba(16, 185, 129, 0.2); border-radius: 4px; }
-
-    /* Balanced Card Dimensions */
-    .sermon-card {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 14px;
-      padding: 0.85rem 1rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.45rem;
-      animation: cardFadeUp 0.3s ease;
-      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
-      position: relative;
-    }
-
-    @keyframes cardFadeUp {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    .sermon-card .card-brand-glyph {
-      width: 17px;
-      height: 17px;
-      border-radius: 4px;
-      background: #10b981;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 900;
-      font-size: 0.65rem;
-      color: #071510;
-      margin-bottom: 0.15rem;
-    }
-
-    /* Main Translated Text (Compact, Readable) */
-    .sermon-card .card-translated-text {
-      font-size: 1rem;
-      font-weight: 600;
-      line-height: 1.4;
-      color: #ffffff;
-      letter-spacing: -0.01em;
-    }
-
-    .sermon-card .card-translated-text.streaming::after {
-      content: ' ▍';
-      color: #10b981;
-      font-size: 0.8em;
-      display: inline-block;
-      animation: mobileBlinkCursor 0.75s infinite ease-in-out;
-    }
-    @keyframes mobileBlinkCursor {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0; }
-    }
-
-    .sermon-card .stream-word {
-      display: inline;
-      animation: mobileWordFade 0.18s ease-out forwards;
-    }
-    @keyframes mobileWordFade {
-      from { opacity: 0; transform: translateY(3px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    /* Arabic Source Text (Proportional, Not Huge) */
-    .sermon-card .card-arabic-text {
-      font-family: 'Amiri', serif;
-      font-size: 0.96rem;
-      line-height: 1.5;
-      color: rgba(255, 255, 255, 0.65);
-      direction: rtl;
-      text-align: right;
-    }
-
-    /* Card Badge Tag */
-    .card-tag-pill {
-      align-self: flex-start;
-      display: inline-flex;
-      align-items: center;
-      gap: 0.3rem;
-      background: rgba(16, 185, 129, 0.12);
-      border: 1px solid rgba(16, 185, 129, 0.3);
-      color: #6ee7b7;
-      font-size: 0.65rem;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      padding: 0.15rem 0.45rem;
-      border-radius: 5px;
-      text-transform: uppercase;
-      margin-top: 0.15rem;
-    }
-    .card-tag-pill.quran {
-      background: rgba(245, 158, 11, 0.15);
-      border-color: rgba(245, 158, 11, 0.4);
-      color: #fde68a;
-    }
-
-    /* Active "Listening..." Card (Compact) */
-    #active-listening-card {
-      background: rgba(14, 41, 30, 0.65);
-      border: 1px dashed rgba(16, 185, 129, 0.35);
-      border-radius: 14px;
-      padding: 0.7rem 0.95rem;
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      animation: cardFadeUp 0.3s ease;
-    }
-    .listening-title {
-      font-size: 0.88rem;
-      font-weight: 600;
-      color: rgba(255, 255, 255, 0.7);
-    }
-    .pulse-wave-dots {
-      display: flex;
-      gap: 3px;
-      align-items: center;
-    }
-    .wave-dot {
-      width: 3px; height: 10px;
-      background: #10b981;
-      border-radius: 2px;
-      animation: wavePulse 1s infinite ease-in-out;
-    }
-    .wave-dot:nth-child(2) { animation-delay: 0.15s; height: 15px; }
-    .wave-dot:nth-child(3) { animation-delay: 0.3s; height: 12px; }
-    @keyframes wavePulse { 0%, 100% { transform: scaleY(0.4); opacity: 0.5; } 50% { transform: scaleY(1); opacity: 1; } }
-
-    /* ─── FIXED BOTTOM AUDIO PLAYER BAR (Refined) ─── */
+    /* ── AUDIO BAR ── */
     .comp-player-bar {
-      position: fixed;
-      bottom: 0; left: 0; right: 0;
-      background: rgba(6, 20, 14, 0.95);
-      backdrop-filter: blur(18px);
-      border-top: 1px solid rgba(16, 185, 129, 0.2);
-      padding: 0.75rem 1rem;
-      display: flex;
-      align-items: center;
-      gap: 0.85rem;
-      z-index: 100;
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: rgba(6,20,14,.95); backdrop-filter: blur(18px);
+      border-top: 1px solid rgba(16,185,129,.2);
+      padding: .75rem 1rem; padding-bottom: calc(.75rem + env(safe-area-inset-bottom));
+      display: flex; align-items: center; gap: .85rem; z-index: 100; cursor: pointer;
     }
-
-    /* Round Green Button */
     .btn-circle-play {
-      width: 44px;
-      height: 44px;
-      border-radius: 50%;
-      background: #10b981;
-      border: none;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #071510;
-      font-size: 1.15rem;
-      cursor: pointer;
-      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
-      transition: transform 0.15s;
-      flex-shrink: 0;
+      width: 44px; height: 44px; border-radius: 50%; background: var(--emerald); border: none;
+      display: flex; align-items: center; justify-content: center; color: #071510; font-size: 1.15rem;
+      cursor: pointer; box-shadow: 0 4px 12px rgba(16,185,129,.35); transition: transform .15s; flex-shrink: 0;
     }
-    .btn-circle-play:active {
-      transform: scale(0.94);
-    }
+    .btn-circle-play:active { transform: scale(.94); }
+    .player-meta { flex: 1; min-width: 0; }
+    #player-title { font-size: .9rem; font-weight: 700; color: #fff; }
+    #player-subtitle { font-size: .74rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .freq-bars { display: flex; align-items: center; gap: 3px; height: 18px; }
+    .freq-bar { width: 2.5px; background: var(--emerald); border-radius: 2px; animation: soundWave 1.2s infinite ease-in-out; }
+    .freq-bar:nth-child(1) { height: 7px; animation-delay: .1s; }
+    .freq-bar:nth-child(2) { height: 14px; animation-delay: .3s; }
+    .freq-bar:nth-child(3) { height: 18px; animation-delay: .15s; }
+    .freq-bar:nth-child(4) { height: 12px; animation-delay: .25s; }
+    .freq-bar:nth-child(5) { height: 5px; animation-delay: .05s; }
+    @keyframes soundWave { 0%,100% { transform: scaleY(.5); } 50% { transform: scaleY(1); } }
+    .freq-bars.idle .freq-bar { animation: none; height: 3px; opacity: .5; }
 
-    /* Frequency Wave Graphic */
-    .freq-bars {
-      display: flex;
-      align-items: center;
-      gap: 3px;
-      height: 18px;
-    }
-    .freq-bar {
-      width: 2.5px;
-      height: 100%;
-      background: #10b981;
-      border-radius: 2px;
-      transform-origin: bottom;
-      animation: soundWave 1.2s infinite ease-in-out;
-    }
-    .freq-bar:nth-child(1) { height: 7px; animation-delay: 0.1s; }
-    .freq-bar:nth-child(2) { height: 14px; animation-delay: 0.3s; }
-    .freq-bar:nth-child(3) { height: 18px; animation-delay: 0.15s; }
-    .freq-bar:nth-child(4) { height: 12px; animation-delay: 0.25s; }
-    .freq-bar:nth-child(5) { height: 5px; animation-delay: 0.05s; }
-
-    .freq-bars.idle .freq-bar {
-      animation: none;
-      height: 3px;
-      opacity: 0.4;
-    }
-
-    @keyframes soundWave {
-      0%, 100% { transform: scaleY(0.3); opacity: 0.5; }
-      50% { transform: scaleY(1); opacity: 1; }
-    }
-
-    /* Player Status Text */
-    .player-text-block {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-    }
-    .player-top-title {
-      font-size: 0.88rem;
-      font-weight: 700;
-      color: #ffffff;
-    }
-    .player-sub-title {
-      font-size: 0.72rem;
-      color: rgba(255, 255, 255, 0.55);
-      margin-top: 0.1rem;
-    }
-
-    /* ─── MODAL: IN-STREAM LANGUAGE PICKER ─── */
+    /* ── LANGUAGE MODAL ── */
     #lang-modal {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.75);
-      backdrop-filter: blur(8px);
-      z-index: 200;
-      align-items: flex-end;
+      position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 200;
+      display: none; align-items: flex-end; justify-content: center;
     }
-    #lang-modal.open {
-      display: flex;
+    #lang-modal.open { display: flex; }
+    .modal-sheet {
+      background: #0a1f17; width: 100%; max-height: 80vh; overflow-y: auto;
+      border-radius: 20px 20px 0 0; padding: 1.1rem 1.1rem calc(1.5rem + env(safe-area-inset-bottom));
+      border-top: 1px solid var(--card-border);
     }
-    .lang-sheet {
-      background: #0a1f17;
-      border-top: 1px solid rgba(16, 185, 129, 0.3);
-      border-radius: 20px 20px 0 0;
-      width: 100%;
-      max-height: 80vh;
-      overflow-y: auto;
-      padding: 1.25rem 1rem 2.25rem;
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-      animation: slideUpSheet 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-    @keyframes slideUpSheet {
-      from { transform: translateY(100%); }
-      to { transform: translateY(0); }
-    }
-    .sheet-handle {
-      width: 40px; height: 4px;
-      background: rgba(255, 255, 255, 0.2);
-      border-radius: 999px;
-      align-self: center;
-      margin-bottom: 0.25rem;
-    }
+    .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: .9rem; }
+    .modal-head h3 { font-size: 1.05rem; font-weight: 800; color: #fff; }
+    #btn-close-modal { background: none; border: none; color: #fff; font-size: 1.4rem; cursor: pointer; padding: 0.2rem; }
   </style>
 </head>
 <body>
 
-  <!-- ═══════════ STEP 1: LANDING SCREEN ═══════════ -->
-  <div class="step-screen active" id="step1">
-    <div class="brand-avatar">T</div>
-    <div>
-      <div id="s1-mosque-name"><span>Masjid</span> Live Khutbah</div>
-    </div>
-    <div class="live-indicator-pill">
-      <div class="pulsing-dot"></div>
-      LIVE SERMON
-    </div>
-    <p class="s1-desc">Instant real-time translation on your phone and live earbuds audio.</p>
-    <button class="btn-main-join" id="btn-join">
-      <span>▶</span> Join Live Khutbah
-    </button>
-  </div>
+  <!-- STEP 1: WELCOME SCREEN -->
+  <section id="step1" class="step-screen active">
+    <div class="brand-avatar">🕌</div>
+    <h1 id="s1-mosque-name"><span>Live</span> Sermon</h1>
+    <div class="live-indicator-pill"><div class="pulsing-dot"></div> LIVE KHUTBAH</div>
+    <p class="s1-desc">Follow the Khutbah live in your language, with optional audio in your earbuds.</p>
+    <button id="btn-join" class="btn-main-join">Join Live Translation →</button>
+  </section>
 
-  <!-- ═══════════ STEP 2: LANGUAGE SELECTION ═══════════ -->
-  <div class="step-screen" id="step2">
+  <!-- STEP 2: LANGUAGE PICKER -->
+  <section id="step2" class="step-screen">
     <div class="s2-header">
-      <h2>Select Your Language</h2>
+      <h2>Choose your language</h2>
       <p>Translations and audio will stream in your choice</p>
     </div>
-    <div class="lang-card-grid" id="step2-lang-grid">
-      <div class="lang-card-item" data-lang="en">
-        <div class="lang-flag">🇬🇧</div>
-        <div class="lang-title">English</div>
-        <div class="lang-sub">English</div>
-      </div>
-      <div class="lang-card-item" data-lang="uz">
-        <div class="lang-flag">🇺🇿</div>
-        <div class="lang-title">Uzbek</div>
-        <div class="lang-sub">O‘zbekcha</div>
-      </div>
-      <div class="lang-card-item" data-lang="tr">
-        <div class="lang-flag">🇹🇷</div>
-        <div class="lang-title">Turkish</div>
-        <div class="lang-sub">Türkçe</div>
-      </div>
-      <div class="lang-card-item" data-lang="ur">
-        <div class="lang-flag">🇵🇰</div>
-        <div class="lang-title">Urdu</div>
-        <div class="lang-sub">اردو</div>
-      </div>
-      <div class="lang-card-item" data-lang="bn">
-        <div class="lang-flag">🇧🇩</div>
-        <div class="lang-title">Bengali</div>
-        <div class="lang-sub">বাংলা</div>
-      </div>
-      <div class="lang-card-item" data-lang="fr">
-        <div class="lang-flag">🇫🇷</div>
-        <div class="lang-title">French</div>
-        <div class="lang-sub">Français</div>
-      </div>
-      <div class="lang-card-item" data-lang="zh">
-        <div class="lang-flag">🇨🇳</div>
-        <div class="lang-title">Chinese (Mandarin)</div>
-        <div class="lang-sub">中文 (普通话)</div>
-      </div>
-      <div class="lang-card-item" data-lang="zh-TW">
-        <div class="lang-flag">🇹🇼</div>
-        <div class="lang-title">Traditional Chinese</div>
-        <div class="lang-sub">中文 (繁體)</div>
-      </div>
-      <div class="lang-card-item" data-lang="id">
-        <div class="lang-flag">🇮🇩</div>
-        <div class="lang-title">Indonesian</div>
-        <div class="lang-sub">Bahasa</div>
-      </div>
-      <div class="lang-card-item" data-lang="so">
-        <div class="lang-flag">🇸🇴</div>
-        <div class="lang-title">Somali</div>
-        <div class="lang-sub">Soomaali</div>
-      </div>
+    <div id="step2-lang-grid" class="lang-card-grid">
+      <div class="lang-card-item" data-lang="en"><div class="lang-flag">🇬🇧</div><div class="lang-title">English</div><div class="lang-sub">English</div></div>
+      <div class="lang-card-item" data-lang="uz"><div class="lang-flag">🇺🇿</div><div class="lang-title">Uzbek</div><div class="lang-sub">O‘zbekcha</div></div>
+      <div class="lang-card-item" data-lang="tr"><div class="lang-flag">🇹🇷</div><div class="lang-title">Turkish</div><div class="lang-sub">Türkçe</div></div>
+      <div class="lang-card-item" data-lang="ur"><div class="lang-flag">🇵🇰</div><div class="lang-title">Urdu</div><div class="lang-sub">اردو</div></div>
+      <div class="lang-card-item" data-lang="bn"><div class="lang-flag">🇧🇩</div><div class="lang-title">Bengali</div><div class="lang-sub">বাংলা</div></div>
+      <div class="lang-card-item" data-lang="fr"><div class="lang-flag">🇫🇷</div><div class="lang-title">French</div><div class="lang-sub">Français</div></div>
+      <div class="lang-card-item" data-lang="zh"><div class="lang-flag">🇨🇳</div><div class="lang-title">Chinese</div><div class="lang-sub">中文 (普通话)</div></div>
+      <div class="lang-card-item" data-lang="zh-TW"><div class="lang-flag">🇹🇼</div><div class="lang-title">Trad. Chinese</div><div class="lang-sub">中文 (繁體)</div></div>
+      <div class="lang-card-item" data-lang="id"><div class="lang-flag">🇮🇩</div><div class="lang-title">Indonesian</div><div class="lang-sub">Bahasa</div></div>
+      <div class="lang-card-item" data-lang="so"><div class="lang-flag">🇸🇴</div><div class="lang-title">Somali</div><div class="lang-sub">Soomaali</div></div>
     </div>
-    <button class="btn-submit-lang" id="btn-confirm-lang" disabled>Continue to Sermon →</button>
-  </div>
+    <button id="btn-confirm-lang" class="btn-submit-lang" disabled>Continue to Sermon →</button>
+  </section>
 
-  <!-- ═══════════ STEP 3: LIVE STREAM (No Competitor Title) ═══════════ -->
-  <div class="step-screen" id="step3">
-    <!-- Top Header (Clean back button, glyph, and live badge) -->
+  <!-- STEP 3: LIVE MANUSCRIPT VIEW -->
+  <section id="step3" class="step-screen">
     <header class="comp-header">
       <div class="left-meta">
-        <button class="btn-back-step" id="btn-back" title="Back to languages">‹</button>
-        <div class="comp-logo-glyph">T</div>
+        <button id="btn-back" class="btn-back-step" aria-label="Change language">‹</button>
+        <div class="comp-logo-glyph">🕌</div>
       </div>
-      <div class="comp-live-badge">
-        <div class="pulsing-dot"></div>
-        LIVE
-      </div>
+      <div class="comp-live-badge"><div class="pulsing-dot"></div> LIVE</div>
     </header>
-
-    <!-- Language Selector Bar -->
+    <div id="mobile-session-banner"><span id="mobile-session-banner-text"></span></div>
     <div class="lang-switcher-bar">
-      <div class="lang-pill-selector" id="btn-open-lang-modal">
-        <span>🌐 Arabic ➔ <strong id="current-lang-name">English</strong></span>
-        <span style="font-size: 0.7rem; opacity: 0.7;">▾</span>
-      </div>
+      <button id="btn-open-lang-modal" class="lang-pill-selector">🌐 <span id="current-lang-name">English</span> ▾</button>
     </div>
 
-    <!-- Status Banner (Paused / Ended) -->
-    <div id="mobile-session-banner" style="display: none; padding: 0.35rem 1rem; background: rgba(245, 158, 11, 0.2); border-bottom: 1px solid rgba(245, 158, 11, 0.35); color: #fde68a; font-size: 0.74rem; font-weight: 700; text-align: center;">
-      <span id="mobile-session-banner-text">Live Sermon Paused</span>
-    </div>
-
-    <!-- Scrollable Feed of Sermon Cards -->
-    <main id="mobile-cards-feed">
-      <!-- Active Listening Pulse Card -->
-      <div id="active-listening-card">
-        <div class="comp-logo-glyph">🎙️</div>
-        <div class="listening-title">Listening...</div>
-        <div class="pulse-wave-dots">
-          <div class="wave-dot"></div>
-          <div class="wave-dot"></div>
-          <div class="wave-dot"></div>
-        </div>
+    <main id="manuscript-feed" aria-live="polite">
+      <div id="manuscript-history"></div>
+      <p id="manuscript-current" class="para-item current"></p>
+      <div id="listening-indicator">
+        <div class="pulse-wave-dots"><div class="wave-dot"></div><div class="wave-dot"></div><div class="wave-dot"></div></div>
+        <span>Listening…</span>
       </div>
     </main>
 
-    <!-- Fixed Bottom Audio Player Bar (Initially OFF) -->
+    <button id="jump-latest">↓ Latest</button>
+
     <footer class="comp-player-bar">
-      <button class="btn-circle-play" id="btn-toggle-audio" title="Play or Pause Audio">
-        <span id="play-pause-icon">▶</span>
-      </button>
-
-      <div class="freq-bars idle" id="audio-freq-bars">
-        <div class="freq-bar"></div>
-        <div class="freq-bar"></div>
-        <div class="freq-bar"></div>
-        <div class="freq-bar"></div>
-        <div class="freq-bar"></div>
+      <button id="btn-toggle-audio" class="btn-circle-play" aria-label="Toggle audio"><span id="play-pause-icon">▶</span></button>
+      <div class="player-meta">
+        <div id="player-title">Audio off</div>
+        <div id="player-subtitle">Tap play to stream audio to earbuds</div>
       </div>
-
-      <div class="player-text-block">
-        <div class="player-top-title" id="player-title">Audio off</div>
-        <div class="player-sub-title" id="player-subtitle">Tap play to stream audio to earbuds</div>
+      <div id="audio-freq-bars" class="freq-bars idle">
+        <div class="freq-bar"></div><div class="freq-bar"></div><div class="freq-bar"></div><div class="freq-bar"></div><div class="freq-bar"></div>
       </div>
     </footer>
-  </div>
+  </section>
 
-  <!-- ═══════════ LANGUAGE MODAL / BOTTOM SHEET ═══════════ -->
+  <!-- LANGUAGE MODAL -->
   <div id="lang-modal">
-    <div class="lang-sheet">
-      <div class="sheet-handle"></div>
-      <h3 style="font-size: 1.05rem; font-weight: 800;">Switch Translation Language</h3>
-      <div class="lang-card-grid" id="modal-lang-grid">
-        <!-- Reusable cards injected via JS -->
+    <div class="modal-sheet">
+      <div class="modal-head">
+        <h3>Translation language</h3>
+        <button id="btn-close-modal" aria-label="Close">×</button>
       </div>
-      <button class="btn-submit-lang" id="btn-close-modal">Done</button>
+      <div id="modal-lang-grid" class="lang-card-grid"></div>
     </div>
   </div>
 

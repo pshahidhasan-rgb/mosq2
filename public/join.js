@@ -1,4 +1,7 @@
-// MosqAI - Attendee Mobile App Script (Competitor Layout with History Persistence & Audio Off by Default)
+// MosqAI — Attendee Mobile App
+// Continuous manuscript view · persistent history · first-sentence-reliable audio
+'use strict';
+
 const urlParams = new URLSearchParams(window.location.search);
 const sessionId = urlParams.get('session') || 'myo-youth';
 let currentLanguage = urlParams.get('lang') || 'en';
@@ -16,131 +19,84 @@ const LANGUAGES = [
   { code: 'id', name: 'Indonesian', native: 'Bahasa', flag: '🇮🇩' },
   { code: 'so', name: 'Somali', native: 'Soomaali', flag: '🇸🇴' }
 ];
+const RTL_LANGS = new Set(['ur', 'ar']);
 
-let ws = null;
-let isAudioEnabled = false; // INITIALLY COMPLETELY OFF!
-let audioCtx = null;
-const audioQueue = [];
-let isPlayingAudio = false;
-const renderedTimestamps = new Set();
+const LANG_BCP47_MAP = {
+  en: 'en-US', uz: 'uz-UZ', tr: 'tr-TR', ur: 'ur-PK', bn: 'bn-BD', fr: 'fr-FR',
+  zh: 'zh-CN', 'zh-TW': 'zh-TW', id: 'id-ID', so: 'so-SO', ar: 'ar-SA'
+};
+const MALE_VOICE_KEYWORDS = ['male','david','mark','george','guy','paul','daniel','thomas','alex','fred','oliver','arthur','aaron','james','nathan','rishi','tarik','mehdi','salman','ali','hakan','berk','cem','deep','baritone'];
+const FEMALE_VOICE_KEYWORDS = ['female','zira','susan','samantha','victoria','karen','moira','fiona','tessa','veena','yelda','filiz','amira','zeina','salma','camille','clara','marie','anna','helena','eva','laura','lucia'];
+
+// Paragraph grouping (manuscript feel)
+const SENTENCES_PER_PARAGRAPH = 4;
+const PARAGRAPH_PAUSE_MS = 6000;
+
+// ═════════════════════════════════════════════
+// STATE — Single Source of Truth
+// ═════════════════════════════════════════════
+const segments = new Map();      // key -> { key, translations:{}, text, arabic, ayah, ts, order }
+const keyAlias = new Map();      // alternate key (timestamp) -> canonical key
+let segmentOrder = 0;
+let liveText = '';               // current provisional hypothesis (current language)
 let lastSyncTime = null;
 
-// BCP-47 language tag mappings for supported languages
-const LANG_BCP47_MAP = {
-  en: 'en-US',
-  uz: 'uz-UZ',
-  tr: 'tr-TR',
-  ur: 'ur-PK',
-  bn: 'bn-BD',
-  fr: 'fr-FR',
-  zh: 'zh-CN',
-  'zh-TW': 'zh-TW',
-  id: 'id-ID',
-  so: 'so-SO',
-  ar: 'ar-SA'
-};
+let ws = null;
 
-const MALE_VOICE_KEYWORDS = [
-  'male', 'david', 'mark', 'george', 'guy', 'paul', 'daniel', 'thomas',
-  'alex', 'fred', 'oliver', 'arthur', 'aaron', 'james', 'nathan', 'rishi',
-  'tarik', 'mehdi', 'salman', 'ali', 'hakan', 'berk', 'cem', 'deep', 'baritone'
-];
+// DOM Helpers
+const $ = (id) => document.getElementById(id);
+const step1 = $('step1'), step2 = $('step2'), step3 = $('step3');
+const s1MosqueName = $('s1-mosque-name');
+const btnJoin = $('btn-join');
+const btnConfirmLang = $('btn-confirm-lang');
+const btnBack = $('btn-back');
+const btnOpenLangModal = $('btn-open-lang-modal');
+const langModal = $('lang-modal');
+const btnCloseModal = $('btn-close-modal');
+const modalLangGrid = $('modal-lang-grid');
+const currentLangNameEl = $('current-lang-name');
+const feedEl = $('manuscript-feed');
+const historyEl = $('manuscript-history');
+const currentEl = $('manuscript-current');
+const listeningEl = $('listening-indicator');
+const jumpLatestBtn = $('jump-latest');
+const compLiveBadge = document.querySelector('.comp-live-badge');
+const mobileSessionBanner = $('mobile-session-banner');
+const mobileSessionBannerText = $('mobile-session-banner-text');
+const btnToggleAudio = $('btn-toggle-audio');
+const playPauseIcon = $('play-pause-icon');
+const audioFreqBars = $('audio-freq-bars');
+const playerTitle = $('player-title');
+const playerSubtitle = $('player-subtitle');
 
-const FEMALE_VOICE_KEYWORDS = [
-  'female', 'zira', 'susan', 'samantha', 'victoria', 'karen', 'moira',
-  'fiona', 'tessa', 'veena', 'yelda', 'filiz', 'amira', 'zeina', 'salma',
-  'camille', 'clara', 'marie', 'anna', 'helena', 'eva', 'laura', 'lucia'
-];
-
-function getBestMaleVoice(langCode) {
-  if (!('speechSynthesis' in window)) return null;
-  const voices = window.speechSynthesis.getVoices() || [];
-  if (!voices.length) return null;
-
-  const targetPrefix = (langCode || 'en').toLowerCase().split('-')[0];
-
-  const matchingVoices = voices.filter(v => {
-    const vLang = (v.lang || '').toLowerCase().replace('_', '-');
-    return vLang.startsWith(targetPrefix);
-  });
-
-  const pool = matchingVoices.length > 0 ? matchingVoices : voices;
-
-  for (const voice of pool) {
-    const nameLower = voice.name.toLowerCase();
-    const uriLower = (voice.voiceURI || '').toLowerCase();
-    const isExplicitMale = MALE_VOICE_KEYWORDS.some(kw => nameLower.includes(kw) || uriLower.includes(kw));
-    const isExplicitFemale = FEMALE_VOICE_KEYWORDS.some(kw => nameLower.includes(kw) || uriLower.includes(kw));
-    if (isExplicitMale && !isExplicitFemale) {
-      return voice;
-    }
-  }
-
-  for (const voice of pool) {
-    const nameLower = voice.name.toLowerCase();
-    const uriLower = (voice.voiceURI || '').toLowerCase();
-    const isExplicitFemale = FEMALE_VOICE_KEYWORDS.some(kw => nameLower.includes(kw) || uriLower.includes(kw));
-    if (!isExplicitFemale) {
-      return voice;
-    }
-  }
-
-  return pool[0] || null;
-}
-
+// ═════════════════════════════════════════════
+// IDENTITY & DEVICE HELPERS
+// ═════════════════════════════════════════════
 function detectDeviceType() {
   const ua = navigator.userAgent || '';
-  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|mobile/i.test(ua)
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(ua)
     || (window.innerWidth <= 800 && (navigator.maxTouchPoints > 0 || 'ontouchstart' in window));
   return isMobile ? 'phone' : 'computer';
 }
 
 function getClientId() {
-  let cid = '';
   try {
-    cid = localStorage.getItem('mosq_client_id');
+    let cid = localStorage.getItem('mosq_client_id');
     if (!cid) {
-      cid = 'att_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+      cid = 'att_' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
       localStorage.setItem('mosq_client_id', cid);
     }
+    return cid;
   } catch (e) {
-    cid = 'att_' + Math.random().toString(36).substring(2, 9);
+    return 'att_' + Math.random().toString(36).slice(2, 9);
   }
-  return cid;
 }
-
 const myClientId = getClientId();
 const myDeviceType = detectDeviceType();
 
-// DOM Elements
-const step1 = document.getElementById('step1');
-const step2 = document.getElementById('step2');
-const step3 = document.getElementById('step3');
-const s1MosqueName = document.getElementById('s1-mosque-name');
-const btnJoin = document.getElementById('btn-join');
-const btnConfirmLang = document.getElementById('btn-confirm-lang');
-const btnBack = document.getElementById('btn-back');
-const btnOpenLangModal = document.getElementById('btn-open-lang-modal');
-const langModal = document.getElementById('lang-modal');
-const btnCloseModal = document.getElementById('btn-close-modal');
-const modalLangGrid = document.getElementById('modal-lang-grid');
-const currentLangNameEl = document.getElementById('current-lang-name');
-const mobileCardsFeed = document.getElementById('mobile-cards-feed');
-const activeListeningCard = document.getElementById('active-listening-card');
-const compLiveBadge = document.querySelector('.comp-live-badge');
-const mobileSessionBanner = document.getElementById('mobile-session-banner');
-const mobileSessionBannerText = document.getElementById('mobile-session-banner-text');
-
-// Audio elements
-const btnToggleAudio = document.getElementById('btn-toggle-audio');
-const playPauseIcon = document.getElementById('play-pause-icon');
-const audioFreqBars = document.getElementById('audio-freq-bars');
-const playerTitle = document.getElementById('player-title');
-const playerSubtitle = document.getElementById('player-subtitle');
-
 function getLangName(code) {
   const item = LANGUAGES.find(l => l.code === code);
-  return item ? item.name : code.toUpperCase();
+  return item ? item.name : (code ? code.toUpperCase() : 'English');
 }
 
 function updateLangDisplay() {
@@ -150,6 +106,320 @@ function updateLangDisplay() {
   }
 }
 
+// ═════════════════════════════════════════════
+// KEYS & DEDUPLICATION
+// ═════════════════════════════════════════════
+function segKey(obj) {
+  if (!obj) return null;
+  if (obj.seq !== undefined && obj.seq !== null) return `seq_${obj.seq}`;
+  if (obj.timestamp) return `ts_${obj.timestamp}`;
+  return null;
+}
+
+function registerAlias(key, obj) {
+  if (obj && obj.timestamp) keyAlias.set(`ts_${obj.timestamp}`, key);
+  if (obj && obj.seq) keyAlias.set(`seq_${obj.seq}`, key);
+}
+
+// ═════════════════════════════════════════════
+// TEXT EXTRACTION
+// ═════════════════════════════════════════════
+function pickText(item, lang) {
+  if (!item) return '';
+  if (item.ayah) {
+    if (item.ayah.translations && (item.ayah.translations[lang] || item.ayah.translations.en)) {
+      return item.ayah.translations[lang] || item.ayah.translations.en;
+    }
+    if (item.ayah.translation) return item.ayah.translation;
+  }
+  if (item.translations && typeof item.translations === 'object') {
+    return item.translations[lang] || item.translations.en || Object.values(item.translations)[0] || '';
+  }
+  return item.translated || item.text || item.arabic || '';
+}
+
+// ═════════════════════════════════════════════
+// MANUSCRIPT RENDERING (Continuous Flow)
+// ═════════════════════════════════════════════
+function renderManuscript() {
+  if (!historyEl) return;
+  historyEl.innerHTML = '';
+
+  const sorted = Array.from(segments.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
+  if (sorted.length === 0) {
+    return;
+  }
+
+  let currentP = null;
+  let sentenceCount = 0;
+  let lastTime = null;
+
+  sorted.forEach((seg) => {
+    const text = pickText(seg, currentLanguage).trim();
+    if (!text) return;
+
+    const segTime = seg.ts ? new Date(seg.ts).getTime() : 0;
+    const isNewParagraph = (sentenceCount >= SENTENCES_PER_PARAGRAPH) || 
+                          (lastTime && segTime && (segTime - lastTime > PARAGRAPH_PAUSE_MS));
+
+    if (!currentP || isNewParagraph) {
+      currentP = document.createElement('p');
+      currentP.className = `para-item history ${RTL_LANGS.has(currentLanguage) ? 'rtl' : ''}`;
+      historyEl.appendChild(currentP);
+      sentenceCount = 0;
+    }
+
+    const span = document.createElement('span');
+    span.className = 'sent';
+    span.textContent = (sentenceCount === 0 ? '' : ' ') + text;
+    currentP.appendChild(span);
+
+    sentenceCount++;
+    lastTime = segTime;
+  });
+
+  scrollFeedToBottom();
+}
+
+function updateLiveStreamView() {
+  if (!currentEl) return;
+  if (!liveText || !liveText.trim()) {
+    currentEl.textContent = '';
+    currentEl.classList.remove('streaming');
+    return;
+  }
+  currentEl.className = `para-item current streaming ${RTL_LANGS.has(currentLanguage) ? 'rtl' : ''}`;
+  currentEl.textContent = liveText.trim();
+  scrollFeedToBottom();
+}
+
+function scrollFeedToBottom(force = false) {
+  if (!feedEl) return;
+  const isNearBottom = feedEl.scrollHeight - feedEl.scrollTop - feedEl.clientHeight < 140;
+  if (force || isNearBottom) {
+    feedEl.scrollTo({ top: feedEl.scrollHeight, behavior: 'smooth' });
+    if (jumpLatestBtn) jumpLatestBtn.style.display = 'none';
+  } else {
+    if (jumpLatestBtn) jumpLatestBtn.style.display = 'block';
+  }
+}
+
+if (jumpLatestBtn) {
+  jumpLatestBtn.addEventListener('click', () => {
+    scrollFeedToBottom(true);
+  });
+}
+
+if (feedEl) {
+  feedEl.addEventListener('scroll', () => {
+    const isNearBottom = feedEl.scrollHeight - feedEl.scrollTop - feedEl.clientHeight < 140;
+    if (jumpLatestBtn) {
+      jumpLatestBtn.style.display = isNearBottom ? 'none' : 'block';
+    }
+  });
+}
+
+// ═════════════════════════════════════════════
+// AUDIO SYNTHESIS & ROBUST QUEUE
+// ═════════════════════════════════════════════
+let isAudioEnabled = false;
+let audioCtx = null;
+const audioQueue = [];
+let isPlayingAudio = false;
+const spokenKeys = new Set();
+let cachedVoices = [];
+
+function loadVoices() {
+  if (!('speechSynthesis' in window)) return;
+  try {
+    cachedVoices = window.speechSynthesis.getVoices() || [];
+  } catch (_) {}
+}
+if ('speechSynthesis' in window) {
+  loadVoices();
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+}
+
+function getBestVoice(langCode) {
+  if (!cachedVoices.length) loadVoices();
+  const targetPrefix = (langCode || 'en').toLowerCase().split('-')[0];
+  const matching = cachedVoices.filter(v => (v.lang || '').toLowerCase().replace('_', '-').startsWith(targetPrefix));
+  const pool = matching.length ? matching : cachedVoices;
+
+  for (const voice of pool) {
+    const nameLower = voice.name.toLowerCase();
+    const isMale = MALE_VOICE_KEYWORDS.some(kw => nameLower.includes(kw));
+    const isFemale = FEMALE_VOICE_KEYWORDS.some(kw => nameLower.includes(kw));
+    if (isMale && !isFemale) return voice;
+  }
+  return pool[0] || null;
+}
+
+function enqueueSpeech(text, lang, key = null) {
+  if (!isAudioEnabled) return;
+  if (key && spokenKeys.has(key)) return;
+  if (key) spokenKeys.add(key);
+
+  const clean = (text || '').trim();
+  if (!clean) return;
+
+  audioQueue.push({ text: clean, lang: lang || currentLanguage });
+  processAudioQueue();
+}
+
+function processAudioQueue() {
+  if (isPlayingAudio || audioQueue.length === 0 || !isAudioEnabled) return;
+  if (!('speechSynthesis' in window)) return;
+
+  const item = audioQueue.shift();
+  isPlayingAudio = true;
+
+  try {
+    window.speechSynthesis.resume();
+    const utterance = new SpeechSynthesisUtterance(item.text);
+    utterance.lang = LANG_BCP47_MAP[item.lang] || item.lang || 'en-US';
+    const voice = getBestVoice(item.lang);
+    if (voice) utterance.voice = voice;
+    utterance.rate = 1.0;
+    utterance.pitch = 0.95;
+
+    // Chrome 12-second speech synthesis stall watchdog
+    const watchdog = setTimeout(() => {
+      if (window.speechSynthesis.speaking) {
+        window.speechSynthesis.pause();
+        window.speechSynthesis.resume();
+      }
+    }, 12000);
+
+    const onFinish = () => {
+      clearTimeout(watchdog);
+      isPlayingAudio = false;
+      processAudioQueue();
+    };
+
+    utterance.onend = onFinish;
+    utterance.onerror = onFinish;
+
+    window.speechSynthesis.speak(utterance);
+  } catch (err) {
+    isPlayingAudio = false;
+    processAudioQueue();
+  }
+}
+
+async function toggleAudio() {
+  isAudioEnabled = !isAudioEnabled;
+
+  if (isAudioEnabled) {
+    if (playPauseIcon) playPauseIcon.textContent = '⏸';
+    if (audioFreqBars) audioFreqBars.classList.remove('idle');
+    if (playerTitle) playerTitle.textContent = 'Translating live';
+    if (playerSubtitle) playerSubtitle.textContent = `Streaming in ${getLangName(currentLanguage)}`;
+
+    // 1. Synchronously prime SpeechSynthesis inside the tap gesture
+    try {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.resume();
+        const prime = new SpeechSynthesisUtterance(' ');
+        prime.volume = 0.01;
+        window.speechSynthesis.speak(prime);
+      }
+    } catch (_) {}
+
+    // 2. Resume AudioContext if suspended
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') await audioCtx.resume();
+    } catch (_) {}
+
+    // 3. Play latest finalized sentence if available
+    const sorted = Array.from(segments.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
+    if (sorted.length > 0) {
+      const lastSeg = sorted[sorted.length - 1];
+      const text = pickText(lastSeg, currentLanguage);
+      if (text) enqueueSpeech(text, currentLanguage, lastSeg.key);
+    }
+  } else {
+    if (playPauseIcon) playPauseIcon.textContent = '▶';
+    if (audioFreqBars) audioFreqBars.classList.add('idle');
+    if (playerTitle) playerTitle.textContent = 'Audio off';
+    if (playerSubtitle) playerSubtitle.textContent = 'Tap play to stream audio to earbuds';
+    audioQueue.length = 0;
+    isPlayingAudio = false;
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  }
+}
+
+if (btnToggleAudio) {
+  btnToggleAudio.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleAudio();
+  });
+}
+const compPlayerBar = document.querySelector('.comp-player-bar');
+if (compPlayerBar) {
+  compPlayerBar.addEventListener('click', (e) => {
+    if (e.target.closest('#btn-toggle-audio')) return;
+    toggleAudio();
+  });
+}
+
+// ═════════════════════════════════════════════
+// SENTENCE COMMIT & STREAMING INGEST
+// ═════════════════════════════════════════════
+function commitSentence(data) {
+  const key = segKey(data) || `gen_${Date.now()}_${++segmentOrder}`;
+  registerAlias(key, data);
+
+  const translations = data.translations || (data.translated ? { [currentLanguage]: data.translated } : {});
+  const text = pickText({ translations, translated: data.translated, arabic: data.arabic }, currentLanguage);
+
+  segments.set(key, {
+    key,
+    translations,
+    arabic: data.arabic || '',
+    ayah: data.ayah || null,
+    ts: data.timestamp || new Date().toISOString(),
+    order: ++segmentOrder
+  });
+
+  liveText = '';
+  updateLiveStreamView();
+  renderManuscript();
+
+  if (isAudioEnabled && text) {
+    enqueueSpeech(text, currentLanguage, key);
+  }
+}
+
+function handleStreamingTokenMobile(data) {
+  if (data.lang && data.lang !== currentLanguage) return;
+
+  if (data.isFinal) {
+    commitSentence(data);
+    return;
+  }
+
+  liveText = data.isReplacement ? (data.translatedFull || '') : (liveText + (data.translatedChunk || ''));
+  updateLiveStreamView();
+}
+
+function clearSessionData() {
+  segments.clear();
+  keyAlias.clear();
+  liveText = '';
+  segmentOrder = 0;
+  audioQueue.length = 0;
+  spokenKeys.clear();
+  isPlayingAudio = false;
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  renderManuscript();
+  updateLiveStreamView();
+}
+
+// ═════════════════════════════════════════════
+// SESSION STATUS & BANNERS
+// ═════════════════════════════════════════════
 function updateMobileStatus(status, mosqueName) {
   if (mosqueName) currentMosqueName = mosqueName;
 
@@ -189,350 +459,11 @@ function updateMobileStatus(status, mosqueName) {
   }
 }
 
-// ─── STEP NAVIGATION ───
-function showStep(num) {
-  step1.classList.remove('active');
-  step2.classList.remove('active');
-  step3.classList.remove('active');
-
-  const target = document.getElementById(`step${num}`);
-  if (target) target.classList.add('active');
-}
-
-// Step 1: Join Click
-if (btnJoin) {
-  btnJoin.addEventListener('click', () => {
-    if (urlParams.has('lang')) {
-      showStep(3);
-      initLiveSession();
-    } else {
-      showStep(2);
-    }
-  });
-}
-
-// Step 2: Language Card Selection
-let tempSelectedLang = currentLanguage;
-document.querySelectorAll('#step2-lang-grid .lang-card-item').forEach(card => {
-  card.addEventListener('click', () => {
-    document.querySelectorAll('#step2-lang-grid .lang-card-item').forEach(c => c.classList.remove('selected'));
-    card.classList.add('selected');
-    tempSelectedLang = card.dataset.lang;
-    btnConfirmLang.disabled = false;
-  });
-});
-
-if (btnConfirmLang) {
-  btnConfirmLang.addEventListener('click', () => {
-    currentLanguage = tempSelectedLang;
-    updateLangDisplay();
-    showStep(3);
-    initLiveSession();
-  });
-}
-
-// Back Button in Step 3
-if (btnBack) {
-  btnBack.addEventListener('click', () => {
-    openLangModal();
-  });
-}
-
-// ─── IN-STREAM LANGUAGE MODAL ───
-function renderModalLangs() {
-  if (!modalLangGrid) return;
-  modalLangGrid.innerHTML = '';
-  LANGUAGES.forEach(l => {
-    const card = document.createElement('div');
-    card.className = `lang-card-item ${l.code === currentLanguage ? 'selected' : ''}`;
-    card.innerHTML = `
-      <div class="lang-flag">${l.flag}</div>
-      <div class="lang-title">${l.name}</div>
-      <div class="lang-sub">${l.native}</div>
-    `;
-    card.addEventListener('click', () => {
-      currentLanguage = l.code;
-      updateLangDisplay();
-      closeLangModal();
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
-          type: 'JOIN_ROOM',
-          sessionId,
-          role: 'attendee',
-          language: currentLanguage
-        }));
-      }
-    });
-    modalLangGrid.appendChild(card);
-  });
-}
-
-function openLangModal() {
-  renderModalLangs();
-  langModal.classList.add('open');
-}
-
-function closeLangModal() {
-  langModal.classList.remove('open');
-}
-
-if (btnOpenLangModal) btnOpenLangModal.addEventListener('click', openLangModal);
-if (btnCloseModal) btnCloseModal.addEventListener('click', closeLangModal);
-if (langModal) {
-  langModal.addEventListener('click', (e) => {
-    if (e.target === langModal) closeLangModal();
-  });
-}
-
-// ─── AUDIO TOGGLE & SYNTHESIS (Off by default, Turn on when clicked) ───
-function speakLatestCardIfAvailable() {
-  if (!isAudioEnabled) return;
-  const cards = mobileCardsFeed ? mobileCardsFeed.querySelectorAll('.sermon-card') : [];
-  if (cards.length > 0) {
-    const lastCard = cards[cards.length - 1];
-    const textEl = lastCard.querySelector('.card-translated-text') || lastCard.querySelector('.card-text');
-    if (textEl && textEl.textContent && textEl.textContent.trim()) {
-      speakSpeech(textEl.textContent.trim(), currentLanguage);
-    }
-  }
-}
-
-async function toggleAudio() {
-  isAudioEnabled = !isAudioEnabled;
-  if (isAudioEnabled) {
-    if (playPauseIcon) playPauseIcon.textContent = '⏸';
-    if (audioFreqBars) audioFreqBars.classList.remove('idle');
-    if (playerTitle) playerTitle.textContent = 'Translating live';
-    if (playerSubtitle) playerSubtitle.textContent = `Streaming in ${getLangName(currentLanguage)}`;
-
-    try {
-      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      if (audioCtx.state === 'suspended') await audioCtx.resume();
-    } catch (e) {}
-
-    try {
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.resume();
-        const warmUp = new SpeechSynthesisUtterance('');
-        warmUp.volume = 0;
-        window.speechSynthesis.speak(warmUp);
-      }
-    } catch (e) {}
-
-    speakLatestCardIfAvailable();
-  } else {
-    if (playPauseIcon) playPauseIcon.textContent = '▶';
-    if (audioFreqBars) audioFreqBars.classList.add('idle');
-    if (playerTitle) playerTitle.textContent = 'Audio off';
-    if (playerSubtitle) playerSubtitle.textContent = 'Tap play to stream audio to earbuds';
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-  }
-}
-
-if (btnToggleAudio) {
-  btnToggleAudio.addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggleAudio();
-  });
-}
-const compPlayerBar = document.querySelector('.comp-player-bar');
-if (compPlayerBar) {
-  compPlayerBar.addEventListener('click', (e) => {
-    if (e.target.closest('#btn-toggle-audio')) return;
-    toggleAudio();
-  });
-}
-
-let activeMobileStreamCleanups = [];
-
-function clearActiveMobileStreams() {
-  activeMobileStreamCleanups.forEach(fn => {
-    try { fn(); } catch (e) {}
-  });
-  activeMobileStreamCleanups = [];
-}
-
-function clearMobileCards() {
-  clearActiveMobileStreams();
-  renderedTimestamps.clear();
-  lastSyncTime = null;
-  if ('speechSynthesis' in window) {
-    try { window.speechSynthesis.cancel(); } catch (e) {}
-  }
-  if (mobileCardsFeed) {
-    const cards = mobileCardsFeed.querySelectorAll('.sermon-card');
-    cards.forEach(c => c.remove());
-  }
-}
-
-function streamWordsToMobileCard(element, fullText, delayMs = 85, onComplete = null) {
-  const words = fullText.split(/\s+/).filter(Boolean);
-  element.textContent = '';
-  element.classList.add('streaming');
-  let idx = 0;
-
-  const timer = setInterval(() => {
-    if (idx < words.length) {
-      const span = document.createElement('span');
-      span.className = 'stream-word';
-      span.textContent = (idx === 0 ? '' : ' ') + words[idx];
-      element.appendChild(span);
-      idx++;
-      if (mobileCardsFeed) {
-        mobileCardsFeed.scrollTop = mobileCardsFeed.scrollHeight;
-      }
-    } else {
-      clearInterval(timer);
-      element.classList.remove('streaming');
-      if (onComplete) onComplete();
-    }
-  }, delayMs);
-
-  const cleanup = () => {
-    clearInterval(timer);
-    element.classList.remove('streaming');
-    element.textContent = fullText;
-  };
-  activeMobileStreamCleanups.push(cleanup);
-  return cleanup;
-}
-
-let currentStreamingCard = null;
-
-function handleStreamingTokenMobile({
-  lang,
-  translatedChunk = '',
-  translatedFull = '',
-  isReplacement = false,
-  isFinal = false
-}) {
-  // Determine which content to use — full replacement or legacy delta chunk
-  const content = isReplacement ? translatedFull : translatedChunk;
-  if (lang !== currentLanguage || !content || content.trim().length === 0) return;
-
-  if (!currentStreamingCard) {
-    const card = document.createElement('div');
-    card.className = 'sermon-card streaming';
-    card.innerHTML = `
-      <div class="card-brand-glyph">🎙️</div>
-      <div class="card-translated-text"></div>
-      <span class="card-tag-pill">Aa LIVE STREAM</span>
-    `;
-    currentStreamingCard = card;
-    mobileCardsFeed.insertBefore(card, activeListeningCard);
-  }
-
-  const transContainer = currentStreamingCard.querySelector('.card-translated-text');
-  if (transContainer) {
-    if (isReplacement) {
-      transContainer.textContent = content.trimStart();                           // SET
-    } else {
-      transContainer.textContent = (transContainer.textContent + content).trimStart(); // legacy APPEND
-    }
-  }
-  mobileCardsFeed.scrollTop = mobileCardsFeed.scrollHeight;
-
-  if (isFinal) {
-    if (currentStreamingCard) {
-      currentStreamingCard.classList.remove('streaming');
-      const finalText = transContainer ? transContainer.textContent : '';
-      if (isAudioEnabled && finalText) {
-        speakSpeech(finalText, currentLanguage);
-      }
-      currentStreamingCard = null;
-    }
-  }
-}
-
-// ─── RENDERING SERMON CARDS (Word-by-Word Live Streaming) ───
-function renderSermonCard({ arabic, translations, translated, ayah, timestamp }, isLive = false) {
-  if (!arabic && !translated) return;
-
-  let displayText = '';
-  if (ayah) {
-    displayText = (ayah.translations && (ayah.translations[currentLanguage] || ayah.translations['en'])) ||
-                  ayah.translation || translated || '';
-  } else if (translations && typeof translations === 'object') {
-    displayText = translations[currentLanguage] || translations['en'] || Object.values(translations)[0] || translated || '';
-  } else {
-    displayText = translated || '';
-  }
-
-  // If streaming card was active, promote it in-place
-  if (currentStreamingCard) {
-    currentStreamingCard.classList.remove('streaming');
-    const transContainer = currentStreamingCard.querySelector('.card-translated-text');
-    if (transContainer && displayText) transContainer.textContent = displayText;
-    if (isAudioEnabled && displayText) speakSpeech(displayText, currentLanguage);
-    currentStreamingCard = null;
-    return;
-  }
-
-  const card = document.createElement('div');
-  card.className = 'sermon-card';
-
-  let tagHtml = '';
-  if (ayah) {
-    const ref = ayah.reference || `Quran ${ayah.surahNumber || ''}:${ayah.ayahNumber || ''}`;
-    tagHtml = `<span class="card-tag-pill quran">📖 ${ref}</span>`;
-  } else if (arabic && (arabic.includes('قال رسول الله') || arabic.includes('صلى الله عليه وسلم'))) {
-    tagHtml = `<span class="card-tag-pill">Aa HADITH</span>`;
-  } else {
-    tagHtml = `<span class="card-tag-pill">Aa SERMON</span>`;
-  }
-
-  card.innerHTML = `
-    <div class="card-brand-glyph">🎙️</div>
-    <div class="card-translated-text"></div>
-    ${arabic ? `<div class="card-arabic-text" dir="rtl">${ayah && ayah.arabicUthmani ? ayah.arabicUthmani : arabic}</div>` : ''}
-    ${tagHtml}
-  `;
-
-  const transContainer = card.querySelector('.card-translated-text');
-  if (isLive && displayText) {
-    streamWordsToMobileCard(transContainer, displayText, 85);
-  } else {
-    transContainer.textContent = displayText;
-  }
-
-  mobileCardsFeed.insertBefore(card, activeListeningCard);
-  mobileCardsFeed.scrollTop = mobileCardsFeed.scrollHeight;
-
-  // Speak only if user explicitly turned audio on
-  if (isAudioEnabled && displayText) {
-    speakSpeech(displayText, currentLanguage);
-  }
-}
-
-function speakSpeech(text, lang) {
-  if (!isAudioEnabled) return;
-  if (!('speechSynthesis' in window)) return;
-  if (!text || typeof text !== 'string') return;
-  const cleanText = text.trim();
-  if (!cleanText) return;
-
-  try {
-    if (window.speechSynthesis.pending) {
-      window.speechSynthesis.cancel();
-    }
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    const bcpTag = LANG_BCP47_MAP[lang] || lang || 'en-US';
-    utterance.lang = bcpTag;
-
-    const maleVoice = getBestMaleVoice(lang);
-    if (maleVoice) {
-      utterance.voice = maleVoice;
-    }
-    utterance.pitch = 0.92;
-    utterance.rate = 1.0;
-    window.speechSynthesis.speak(utterance);
-  } catch (err) {
-    console.warn('[Mobile Audio] Speech error:', err);
-  }
-}
-
-// ─── WEBSOCKET & SYNC ───
+// ═════════════════════════════════════════════
+// WEBSOCKET & BACKGROUND SYNC (Zero-Wipe Guarantee)
+// ═════════════════════════════════════════════
 let heartbeatInterval = null;
+
 function startAttendeeHeartbeat() {
   if (heartbeatInterval) clearInterval(heartbeatInterval);
   heartbeatInterval = setInterval(() => {
@@ -546,7 +477,6 @@ function startAttendeeHeartbeat() {
         deviceType: myDeviceType
       }));
     }
-    // Also ping HTTP endpoint to guarantee attendance count on all network types
     fetch(`/api/session/${sessionId}/ping`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -583,22 +513,19 @@ function connectWebSocket() {
         updateMobileStatus(data.status, data.mosqueName);
       }
       if (data.type === 'SESSION_CLEAR_TEXT') {
-        clearMobileCards();
+        clearSessionData();
       }
       if (data.type === 'SESSION_DELETED') {
-        clearMobileCards();
+        clearSessionData();
         updateMobileStatus('ended', 'Session Concluded');
       }
       if (data.type === 'STREAMING_TOKEN') {
-        if (data.timestamp) renderedTimestamps.add(data.timestamp);
-        if (data.seq) renderedTimestamps.add(`seq_${data.seq}`);
         handleStreamingTokenMobile(data);
       }
       if (data.type === 'LIVE_SUBTITLE') {
-        const key = data.seq ? `seq_${data.seq}` : (data.timestamp || `${data.arabic}_${Date.now()}`);
-        if (!renderedTimestamps.has(key)) {
-          renderedTimestamps.add(key);
-          renderSermonCard(data, true);
+        const key = segKey(data);
+        if (!segments.has(key)) {
+          commitSentence(data);
         }
       }
     } catch (e) {}
@@ -609,6 +536,7 @@ function connectWebSocket() {
   };
 }
 
+// Poll fallback for offline recovery (Strictly NON-DESTRUCTIVE)
 function startFeedSync() {
   setInterval(async () => {
     try {
@@ -620,31 +548,124 @@ function startFeedSync() {
         updateMobileStatus(data.status, data.mosqueName);
       }
       if (data.serverTime) lastSyncTime = data.serverTime;
-      if (data.transcripts && data.transcripts.length === 0 && renderedTimestamps.size > 0) {
-        clearMobileCards();
-      }
+
+      // DO NOT clear if transcripts length === 0! Empty delta is expected during speaking pauses.
       if (data.transcripts && data.transcripts.length > 0) {
-        // Only process historical items via polling if WebSocket is NOT currently open and streaming
         if (!ws || ws.readyState !== WebSocket.OPEN) {
           data.transcripts.forEach(item => {
-            const key = item.seq ? `seq_${item.seq}` : item.timestamp;
-            if (key && !renderedTimestamps.has(key)) {
-              renderedTimestamps.add(key);
-              renderSermonCard({
-                arabic: item.arabic,
-                translations: item.translations,
-                translated: (item.translations && item.translations[currentLanguage]) || (item.translations && item.translations.en) || item.arabic,
-                ayah: item.ayah,
-                timestamp: item.timestamp
-              }, true);
+            const key = segKey(item);
+            if (!segments.has(key)) {
+              commitSentence(item);
             }
           });
         }
       }
     } catch (e) {}
-  }, 2000);
+  }, 2500);
 }
 
+// ═════════════════════════════════════════════
+// STEP NAVIGATION & IN-STREAM LANGUAGE MODAL
+// ═════════════════════════════════════════════
+function showStep(num) {
+  step1.classList.remove('active');
+  step2.classList.remove('active');
+  step3.classList.remove('active');
+
+  const target = $('step' + num);
+  if (target) target.classList.add('active');
+}
+
+if (btnJoin) {
+  btnJoin.addEventListener('click', () => {
+    if (urlParams.has('lang')) {
+      showStep(3);
+      initLiveSession();
+    } else {
+      showStep(2);
+    }
+  });
+}
+
+let tempSelectedLang = currentLanguage;
+document.querySelectorAll('#step2-lang-grid .lang-card-item').forEach(card => {
+  card.addEventListener('click', () => {
+    document.querySelectorAll('#step2-lang-grid .lang-card-item').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    tempSelectedLang = card.dataset.lang;
+    btnConfirmLang.disabled = false;
+  });
+});
+
+if (btnConfirmLang) {
+  btnConfirmLang.addEventListener('click', () => {
+    currentLanguage = tempSelectedLang;
+    updateLangDisplay();
+    showStep(3);
+    initLiveSession();
+  });
+}
+
+if (btnBack) {
+  btnBack.addEventListener('click', () => {
+    openLangModal();
+  });
+}
+
+function renderModalLangs() {
+  if (!modalLangGrid) return;
+  modalLangGrid.innerHTML = '';
+  LANGUAGES.forEach(l => {
+    const card = document.createElement('div');
+    card.className = `lang-card-item ${l.code === currentLanguage ? 'selected' : ''}`;
+    card.innerHTML = `
+      <div class="lang-flag">${l.flag}</div>
+      <div class="lang-title">${l.name}</div>
+      <div class="lang-sub">${l.native}</div>
+    `;
+    card.addEventListener('click', () => {
+      currentLanguage = l.code;
+      updateLangDisplay();
+      closeLangModal();
+
+      // Instantly switch language in WebSocket gate
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'JOIN_ROOM',
+          sessionId,
+          role: 'attendee',
+          language: currentLanguage
+        }));
+      }
+
+      // Re-render whole manuscript in new language
+      renderManuscript();
+      updateLiveStreamView();
+    });
+    modalLangGrid.appendChild(card);
+  });
+}
+
+function openLangModal() {
+  renderModalLangs();
+  langModal.classList.add('open');
+}
+
+function closeLangModal() {
+  langModal.classList.remove('open');
+}
+
+if (btnOpenLangModal) btnOpenLangModal.addEventListener('click', openLangModal);
+if (btnCloseModal) btnCloseModal.addEventListener('click', closeLangModal);
+if (langModal) {
+  langModal.addEventListener('click', (e) => {
+    if (e.target === langModal) closeLangModal();
+  });
+}
+
+// ═════════════════════════════════════════════
+// SESSION INITIALIZATION
+// ═════════════════════════════════════════════
 async function fetchMosqueDetails() {
   try {
     const res = await fetch(`/api/session/${sessionId}`);
@@ -657,9 +678,7 @@ async function fetchMosqueDetails() {
           s1MosqueName.innerHTML = `<span>${parts[0]}</span> ${parts.slice(1).join(' ')}`;
         }
       }
-      if (data.status) {
-        updateMobileStatus(data.status, data.mosqueName);
-      }
+      if (data.status) updateMobileStatus(data.status, data.mosqueName);
       return data;
     }
   } catch (err) {}
@@ -671,20 +690,23 @@ async function initLiveSession() {
   updateLangDisplay();
   const sessionData = await fetchMosqueDetails();
 
-  // ─── RESTORE PREVIOUS CARDS ON PAGE REFRESH ───
+  // Restore existing history on join/refresh
   if (sessionData && sessionData.transcripts && sessionData.transcripts.length > 0) {
     sessionData.transcripts.forEach(item => {
-      if (!renderedTimestamps.has(item.timestamp)) {
-        renderedTimestamps.add(item.timestamp);
-        renderSermonCard({
-          arabic: item.arabic,
-          translations: item.translations,
-          translated: (item.translations && item.translations[currentLanguage]) || (item.translations && item.translations.en) || item.arabic,
-          ayah: item.ayah,
-          timestamp: item.timestamp
+      const key = segKey(item);
+      if (!segments.has(key)) {
+        segments.set(key, {
+          key,
+          translations: item.translations || {},
+          arabic: item.arabic || '',
+          ayah: item.ayah || null,
+          ts: item.timestamp || new Date().toISOString(),
+          order: ++segmentOrder
         });
+        registerAlias(key, item);
       }
     });
+    renderManuscript();
   }
 
   connectWebSocket();
