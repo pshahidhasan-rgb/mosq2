@@ -204,17 +204,17 @@ function getTargetSessionIds() {
   return activeIds;
 }
 
-// Synchronize open Soniox language gates when attendee/TV language selection changes in any room
+// Synchronize open Soniox language gates when attendee/TV language selection changes in a room
 sessionManager.on('languages_updated', ({ sessionId, languages }) => {
-  if (sonioxService.isConfigured()) {
-    sonioxService.syncGates(languages);
+  if (sonioxService.isConfigured() && sessionId) {
+    sonioxService.syncGates(sessionId, languages);
   }
 });
 
-// Broadcast real-time streaming tokens (sub-200ms word-by-word) to all active rooms
-sonioxService.on('token_stream', ({ lang, translatedChunk, originalChunk, originalFull, translatedFull, isReplacement, isFinal, seq, timestamp }) => {
-  const targetIds = getTargetSessionIds();
-  for (const sid of targetIds) {
+// Broadcast real-time streaming tokens (sub-200ms word-by-word) strictly to the target session room
+sonioxService.on('token_stream', ({ sessionId, lang, translatedChunk, originalChunk, originalFull, translatedFull, isReplacement, isFinal, seq, timestamp }) => {
+  const sid = sessionId || activeLiveSessionId;
+  if (sid) {
     sessionManager.broadcastStreamingToken(sid, {
       lang,
       translatedChunk,
@@ -229,44 +229,44 @@ sonioxService.on('token_stream', ({ lang, translatedChunk, originalChunk, origin
   }
 });
 
-// When a sentence is finalized by Soniox, save to session history ONLY.
+// When a sentence is finalized by Soniox, save to session history for that specific session ONLY.
 // DO NOT broadcast LIVE_SUBTITLE here — the STREAMING_TOKEN with isFinal:true
 // already finalized the display paragraph. Broadcasting LIVE_SUBTITLE on top of it
 // causes a visual collision (text flashes/overwrites/duplicates on the TV display).
 // Session transcripts are still saved so HTTP polling fallback and refresh recovery work.
-sonioxService.on('sentence_finalized', ({ lang, translatedText, finalText, originalText, seq, timestamp }) => {
-  const targetIds = getTargetSessionIds();
+sonioxService.on('sentence_finalized', ({ sessionId, lang, translatedText, finalText, originalText, seq, timestamp }) => {
+  const sid = sessionId || activeLiveSessionId;
+  if (!sid) return;
+
+  const session = sessionManager.getSession(sid);
+  if (!session || session.status !== 'active') return;
+
   const resolvedTranslation = translatedText || finalText || '';
   const translations = { [lang]: resolvedTranslation };
   const ts = timestamp || new Date().toISOString();
 
-  for (const sid of targetIds) {
-    const session = sessionManager.getSession(sid);
-    if (!session || session.status !== 'active') continue;
+  // Save to session history for refresh/reconnect/polling recovery
+  session.transcripts.push({
+    seq: seq || session.transcripts.length + 1,
+    arabic: originalText,
+    translations,
+    ayah: null,
+    timestamp: ts
+  });
 
-    // Save to session history for refresh/reconnect/polling recovery
-    session.transcripts.push({
-      seq: seq || session.transcripts.length + 1,
-      arabic: originalText,
-      translations,
-      ayah: null,
-      timestamp: ts
-    });
-
-    // Also broadcast to admin panel so ADMIN_TRANSCRIPT events still work
-    const subs = sessionManager.subscribers.get(sid);
-    if (subs) {
-      for (const sub of subs) {
-        if (sub.ws.readyState === 1 && sub.role === 'admin') {
-          sub.ws.send(JSON.stringify({
-            type: 'ADMIN_TRANSCRIPT',
-            seq,
-            arabic: originalText,
-            translations,
-            ayah: null,
-            timestamp: ts
-          }));
-        }
+  // Also broadcast to admin panel of that specific session
+  const subs = sessionManager.subscribers.get(sid);
+  if (subs) {
+    for (const sub of subs) {
+      if (sub.ws.readyState === 1 && sub.role === 'admin') {
+        sub.ws.send(JSON.stringify({
+          type: 'ADMIN_TRANSCRIPT',
+          seq,
+          arabic: originalText,
+          translations,
+          ayah: null,
+          timestamp: ts
+        }));
       }
     }
   }
@@ -429,7 +429,7 @@ app.post('/api/session/:id/resume', (req, res) => {
 // Pause Session
 app.post('/api/session/:id/pause', (req, res) => {
   if (sonioxService.isConfigured()) {
-    sonioxService.closeAllGates();
+    sonioxService.closeSessionGates(req.params.id);
   }
   const session = sessionManager.pauseSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
@@ -439,7 +439,7 @@ app.post('/api/session/:id/pause', (req, res) => {
 // End Session
 app.post('/api/session/:id/end', (req, res) => {
   if (sonioxService.isConfigured()) {
-    sonioxService.closeAllGates();
+    sonioxService.closeSessionGates(req.params.id);
   }
   sttService.stopSimulation();
   const session = sessionManager.endSession(req.params.id);
@@ -607,8 +607,9 @@ wss.on('connection', (ws) => {
         if (Buffer.isBuffer(raw) && raw.length >= 2) {
           const pcm = raw.length % 2 === 0 ? raw : raw.subarray(0, raw.length - 1);
           if (pcm.length >= 2) {
+            const sid = userSessionId || activeLiveSessionId;
             if (sonioxService.isConfigured()) {
-              sonioxService.broadcastAudio(pcm);
+              sonioxService.broadcastAudio(pcm, sid);
             } else {
               sttService.sendAudioChunk(pcm);
             }
@@ -683,7 +684,7 @@ wss.on('connection', (ws) => {
           currentSession.sourceLanguage = sourceLang;
         }
         if (sonioxService.isConfigured()) {
-          sonioxService.setSourceLanguage(sourceLang);
+          sonioxService.setSourceLanguage(targetSessionId, sourceLang);
         }
         // Broadcast to all connected clients in the session to keep TV screens synced
         sessionManager.broadcastToSession(targetSessionId, {
@@ -707,8 +708,9 @@ wss.on('connection', (ws) => {
         // Base64 audio chunk from browser WebRTC/MediaRecorder
         if (msg.base64Audio) {
           const audioBuffer = Buffer.from(msg.base64Audio, 'base64');
+          const sid = msg.sessionId || userSessionId || activeLiveSessionId;
           if (sonioxService.isConfigured()) {
-            sonioxService.broadcastAudio(audioBuffer);
+            sonioxService.broadcastAudio(audioBuffer, sid);
           } else {
             sttService.sendAudioChunk(audioBuffer);
           }

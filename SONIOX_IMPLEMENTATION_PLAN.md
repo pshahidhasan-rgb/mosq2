@@ -277,6 +277,8 @@ These are **100% operational production features** — any regression is a failu
 | 2026-10-06 | Codebase deep read | ✅ Inspected `server/index.js`, `server/quranMatcher.js`, `public/join.js`, `test/autonomous_e2e_test.js`, `server/services/*`, `.env`, `.env.example`, `package.json` — confirmed actual file layout vs roadmap expectations |
 | 2026-10-06 | Core Soniox Engine (Phases 1-4) | ✅ Built `server/services/sonioxService.js` (Dynamic Gates manager), integrated gate sync & streaming tokens into `server/sessionManager.js` & `server/index.js`, added raw 16kHz PCM streamer to `public/admin.js`, added in-place token buffering to `public/display.js` & `public/join.js` |
 | 2026-10-06 | Testing & Verification (Phase 5) | ✅ Created & passed `test/soniox_gate_test.js` (100% green), verified full e2e test suite `npm run test:e2e` (100% green) |
+| 2026-10-26 | Traditional Chinese & TV Source Dropdown | ✅ Mapped `zh-TW` to Soniox `zh` with `chinese-s2t` Traditional Chinese converter; added interactive source language dropdown to TV display matching target language selector |
+| 2026-10-26 | Multi-Session Isolation & TV Idle Placeholder | ✅ Scoped all Soniox gates, audio ingest, and streaming tokens strictly per `sessionId` (zero crosstalk between simultaneous laptop sessions); suppressed "Waiting for sermon to begin" placeholder on TV display when session is live |
 
 > **Next up:** Checkmark items sequentially as work proceeds. When an agent resumes after interruption, read this Progress Log + Roadmap table to continue exactly where left off.
 

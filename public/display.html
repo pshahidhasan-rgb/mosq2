@@ -299,6 +299,11 @@
       font-size: 1.15rem;
     }
 
+    /* Never show "waiting for sermon/ceremony to begin" text when session is live */
+    body.session-active .idle-placeholder {
+      display: none !important;
+    }
+
     /* ─── BOTTOM RIGHT QR CODE WIDGET (Fixed Coordinates & Safeguarded) ─── */
     #qr-widget {
       position: fixed;

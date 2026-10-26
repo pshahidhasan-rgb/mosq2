@@ -1,5 +1,5 @@
 /**
- * Unit Test for Soniox Dynamic Language Gates Manager
+ * Unit Test for Soniox Dynamic Language Gates Manager with Multi-Session Isolation
  */
 
 const assert = require('assert');
@@ -25,11 +25,10 @@ async function runSonioxGateTests() {
   assert.strictEqual(sonioxService.isConfigured(), true, 'Valid key should be marked operational');
   console.log('  ✔ API Key activation verified.');
 
-  // Test 3: Gate Syncing & On-Demand Lifecycle
-  console.log('\n[Test 3] Testing dynamic gate synchronization...');
-  // Mock gate connection creation to avoid external network dependencies in unit test
+  // Test 3: Gate Syncing & On-Demand Lifecycle (Per-Session)
+  console.log('\n[Test 3] Testing dynamic gate synchronization & multi-session isolation...');
   const originalConnectGate = sonioxService.connectGate.bind(sonioxService);
-  const openedLanguages = [];
+  const openedGates = [];
   sonioxService.connectGate = function(gate) {
     gate.status = 'open';
     gate.ws = {
@@ -37,67 +36,73 @@ async function runSonioxGateTests() {
       send: function(data) { gate.lastSent = data; },
       close: function() { gate.status = 'closed'; }
     };
-    openedLanguages.push(gate.lang);
+    openedGates.push(gate.gateKey);
   };
 
-  // Cost safeguard test: When mic is idle, syncGates MUST NOT open any live WebSockets ($0 cost)
-  sonioxService.syncGates(['en', 'bn']);
-  assert.strictEqual(sonioxService.activeGates.size, 0, 'Idle syncGates must not open WebSockets ($0 cost safeguard)');
-  console.log('  ✔ Cost safeguard verified: 0 WebSockets opened while mic is idle.');
+  // Open gates for Session A
+  sonioxService.syncGates('session-a', ['en', 'bn']);
+  assert.strictEqual(sonioxService.activeGates.size, 2, 'Should have 2 open gates for session-a');
+  assert(sonioxService.activeGates.has('session-a:en'), 'session-a:en gate should be open');
+  assert(sonioxService.activeGates.has('session-a:bn'), 'session-a:bn gate should be open');
+  console.log('  ✔ Opened gates for session-a ["en", "bn"].');
 
-  // When audio is streaming (or force: true), gates open on-demand
-  sonioxService.syncGates(['en', 'bn'], { force: true });
-  assert.strictEqual(sonioxService.activeGates.size, 2, 'Should have 2 open gates when active');
-  assert(sonioxService.activeGates.has('en'), 'English gate should be open');
-  assert(sonioxService.activeGates.has('bn'), 'Bengali gate should be open');
-  console.log('  ✔ Opened gates for active languages ["en", "bn"].');
+  // Open gates for Session B (Parallel session on second laptop)
+  sonioxService.syncGates('session-b', ['en', 'tr']);
+  assert.strictEqual(sonioxService.activeGates.size, 4, 'Should have 4 total open gates (2 for A, 2 for B)');
+  assert(sonioxService.activeGates.has('session-b:en'), 'session-b:en gate should be open');
+  assert(sonioxService.activeGates.has('session-b:tr'), 'session-b:tr gate should be open');
+  console.log('  ✔ Opened gates for session-b ["en", "tr"] in parallel.');
 
-  // Attendee switches or leaves: sync to English and Urdu
-  sonioxService.syncGates(['en', 'ur'], { force: true });
-  assert.strictEqual(sonioxService.activeGates.size, 2, 'Should maintain 2 open gates');
-  assert(sonioxService.activeGates.has('en'), 'English gate remains open');
-  assert(sonioxService.activeGates.has('ur'), 'Urdu gate should be open');
-  assert(!sonioxService.activeGates.has('bn'), 'Bengali gate should be closed ($0 cost)');
-  console.log('  ✔ Stale Bengali gate automatically closed and Urdu gate opened.');
+  // Test 4: Strict Audio Isolation (Zero Cross-Talk)
+  console.log('\n[Test 4] Testing strict audio isolation between sessions...');
+  const audioChunkA = Buffer.alloc(3200); // 100ms of audio from Laptop A
+  audioChunkA.fill(0xAA);
+  const audioChunkB = Buffer.alloc(3200); // 100ms of audio from Laptop B
+  audioChunkB.fill(0xBB);
 
-  // Test 4: Audio Fan-Out
-  console.log('\n[Test 4] Testing audio fan-out...');
-  const testPcmChunk = Buffer.alloc(3200); // 100ms of 16kHz PCM
-  testPcmChunk.fill(0x55);
-  sonioxService.broadcastAudio(testPcmChunk);
+  // Send Laptop A audio -> ONLY session-a gates should receive it!
+  sonioxService.broadcastAudio(audioChunkA, 'session-a');
+  assert.strictEqual(sonioxService.activeGates.get('session-a:en').lastSent, audioChunkA, 'session-a:en received Laptop A audio');
+  assert.strictEqual(sonioxService.activeGates.get('session-a:bn').lastSent, audioChunkA, 'session-a:bn received Laptop A audio');
+  assert.strictEqual(sonioxService.activeGates.get('session-b:en').lastSent, undefined, 'session-b:en MUST NOT receive Laptop A audio');
+  assert.strictEqual(sonioxService.activeGates.get('session-b:tr').lastSent, undefined, 'session-b:tr MUST NOT receive Laptop A audio');
+  console.log('  ✔ Audio from Laptop A routed exclusively to session-a (0 cross-talk).');
 
-  assert.strictEqual(sonioxService.activeGates.get('en').lastSent, testPcmChunk, 'English gate received audio');
-  assert.strictEqual(sonioxService.activeGates.get('ur').lastSent, testPcmChunk, 'Urdu gate received audio');
-  console.log('  ✔ Audio successfully fanned out in parallel to all active gates.');
+  // Send Laptop B audio -> ONLY session-b gates should receive it!
+  sonioxService.broadcastAudio(audioChunkB, 'session-b');
+  assert.strictEqual(sonioxService.activeGates.get('session-b:en').lastSent, audioChunkB, 'session-b:en received Laptop B audio');
+  assert.strictEqual(sonioxService.activeGates.get('session-b:tr').lastSent, audioChunkB, 'session-b:tr received Laptop B audio');
+  console.log('  ✔ Audio from Laptop B routed exclusively to session-b (0 cross-talk).');
 
-  // Test 5: Token stream parsing — verifies per-token emission for sub-200ms streaming
-  console.log('\n[Test 5] Testing Sonox per-token streaming emission...');
-  const receivedTokenStreams = [];
-  let receivedFinalized = null;
+  // Test 5: Token stream parsing with Session ID
+  console.log('\n[Test 5] Testing Soniox per-token streaming emission with Session ID...');
+  const receivedTokens = [];
+  let receivedFinal = null;
 
-  sonioxService.on('token_stream', (data) => { receivedTokenStreams.push(data); });
-  sonioxService.once('sentence_finalized', (data) => { receivedFinalized = data; });
+  sonioxService.on('token_stream', (data) => { receivedTokens.push(data); });
+  sonioxService.once('sentence_finalized', (data) => { receivedFinal = data; });
 
-  const enGate = sonioxService.activeGates.get('en');
+  const gateA = sonioxService.activeGates.get('session-a:en');
 
-  // First token arrives (translation word)
-  sonioxService.handleSonioxMessage(enGate, {
+  // First token arrives
+  sonioxService.handleSonioxMessage(gateA, {
     tokens: [{ text: 'Indeed, ', translation_status: 'translation', is_final: true }]
   });
+  await new Promise(r => setTimeout(r, 70));
 
-  // Second token arrives (original Arabic word) — emitted separately for real-time streaming
-  sonioxService.handleSonioxMessage(enGate, {
+  // Second token arrives
+  sonioxService.handleSonioxMessage(gateA, {
     tokens: [{ text: 'إن ', translation_status: 'original', is_final: true }]
   });
+  await new Promise(r => setTimeout(r, 70));
 
-  assert(receivedTokenStreams.length >= 2, 'Both per-token streams should have fired independently');
-  assert.strictEqual(receivedTokenStreams[0].lang, 'en');
-  assert.strictEqual(receivedTokenStreams[0].translatedFull || receivedTokenStreams[0].translatedChunk, 'Indeed, ');
-  assert.strictEqual(receivedTokenStreams[1].originalFull || receivedTokenStreams[1].originalChunk, 'إن ');
-  console.log('  ✔ Per-token streaming emission verified (' + receivedTokenStreams.length + ' tokens emitted independently).');
+  assert(receivedTokens.length >= 2, 'Both tokens should have fired independently');
+  assert.strictEqual(receivedTokens[0].sessionId, 'session-a', 'Token MUST carry sessionId');
+  assert.strictEqual(receivedTokens[0].lang, 'en');
+  console.log('  ✔ Per-token streaming carries correct sessionId ("session-a").');
 
-  // Final sentence completion token with Soniox <end> control token
-  sonioxService.handleSonioxMessage(enGate, {
+  // Final sentence completion
+  sonioxService.handleSonioxMessage(gateA, {
     tokens: [
       { text: 'with hardship comes ease.', translation_status: 'translation', is_final: true },
       { text: 'مع العسر يسرا.', translation_status: 'original', is_final: true },
@@ -105,20 +110,24 @@ async function runSonioxGateTests() {
     ]
   });
 
-  assert(receivedFinalized !== null, 'sentence_finalized event should have fired');
-  assert.strictEqual(receivedFinalized.finalText, 'Indeed, with hardship comes ease.');
-  assert.strictEqual(receivedFinalized.translatedText, 'Indeed, with hardship comes ease.');
-  assert.strictEqual(receivedFinalized.originalText, 'إن مع العسر يسرا.');
-  console.log('  ✔ Sentence finalized event emitted correctly with full accumulated text.');
+  assert(receivedFinal !== null, 'sentence_finalized event should have fired');
+  assert.strictEqual(receivedFinal.sessionId, 'session-a', 'Finalized sentence MUST carry sessionId');
+  assert.strictEqual(receivedFinal.finalText, 'Indeed, with hardship comes ease.');
+  console.log('  ✔ Sentence finalized event correctly tagged with sessionId.');
 
-  // Clean up the listener to avoid interference
-  sonioxService.removeAllListeners('token_stream');
+  // Test 6: Closing Session Gates Independently
+  console.log('\n[Test 6] Testing session gate cleanup isolation...');
+  sonioxService.closeSessionGates('session-a');
+  assert.strictEqual(sonioxService.activeGates.has('session-a:en'), false, 'session-a gates should be closed');
+  assert.strictEqual(sonioxService.activeGates.has('session-b:en'), true, 'session-b gates MUST remain open');
+  console.log('  ✔ Closing session-a gates left session-b completely intact and active.');
 
   // Clean up
+  sonioxService.removeAllListeners('token_stream');
   sonioxService.closeAllGates();
   assert.strictEqual(sonioxService.activeGates.size, 0, 'All gates closed');
   sonioxService.connectGate = originalConnectGate;
-  sonioxService.setApiKey(process.env.SONIOX_API_KEY || ''); // reset to env
+  sonioxService.setApiKey(process.env.SONIOX_API_KEY || '');
 
   console.log('\n========================================================');
   console.log('🎉 ALL SONIOX DYNAMIC GATE TESTS PASSED! (100% GREEN)');

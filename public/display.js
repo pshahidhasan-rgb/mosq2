@@ -276,6 +276,12 @@ function updateSourceColumnStyling() {
   arabicCol.style.direction = isRtl ? 'rtl' : (sourceLang === 'auto' ? 'auto' : 'ltr');
   arabicCol.style.textAlign = isRtl ? 'right' : (sourceLang === 'auto' ? 'inherit' : 'left');
 
+  if (document.body.classList.contains('session-active')) {
+    const placeholder = arabicFeed ? arabicFeed.querySelector('.idle-placeholder') : null;
+    if (placeholder) placeholder.remove();
+    return;
+  }
+
   const placeholder = arabicFeed ? arabicFeed.querySelector('.idle-placeholder') : null;
   if (placeholder) {
     if (sourceLang === 'ar') placeholder.textContent = 'في انتظار بدء الخطبة...';
@@ -320,12 +326,13 @@ function clearTvFeeds() {
   if ('speechSynthesis' in window) {
     try { window.speechSynthesis.cancel(); } catch (e) {}
   }
+  const isLive = document.body.classList.contains('session-active');
   if (arabicFeed) {
-    arabicFeed.innerHTML = '<div class="idle-placeholder">في انتظار بدء الخطبة...</div>';
-    updateSourceColumnStyling();
+    arabicFeed.innerHTML = isLive ? '' : '<div class="idle-placeholder">في انتظار بدء الخطبة...</div>';
+    if (!isLive) updateSourceColumnStyling();
   }
   if (transFeed) {
-    transFeed.innerHTML = '<div class="idle-placeholder">Waiting for sermon to begin...</div>';
+    transFeed.innerHTML = isLive ? '' : '<div class="idle-placeholder">Waiting for sermon to begin...</div>';
   }
 }
 const qrImg = document.getElementById('qr-img');
@@ -361,6 +368,9 @@ function updateTVStatusUI(status, mosqueName) {
   if (mosqueNameEl) mosqueNameEl.textContent = currentMosqueName;
 
   if (status === 'active') {
+    document.body.classList.add('session-active');
+    // Session is live: immediately remove all "waiting for sermon/ceremony to begin" placeholders
+    document.querySelectorAll('.idle-placeholder').forEach(el => el.remove());
     if (liveDotIndicator) liveDotIndicator.style.display = 'block';
     if (stageStatusBanner) {
       stageStatusBanner.style.display = 'block';
@@ -369,28 +379,31 @@ function updateTVStatusUI(status, mosqueName) {
       stageStatusBanner.style.color = '#34d399';
       stageStatusText.textContent = `${currentMosqueName} — LIVE`;
     }
-  } else if (status === 'paused') {
-    if (liveDotIndicator) liveDotIndicator.style.display = 'none';
-    if (stageStatusBanner) {
-      stageStatusBanner.style.display = 'block';
-      stageStatusBanner.style.background = 'rgba(245, 158, 11, 0.25)';
-      stageStatusBanner.style.border = '1px solid rgba(245, 158, 11, 0.4)';
-      stageStatusBanner.style.color = '#fde68a';
-      stageStatusText.textContent = `${currentMosqueName} — Live Translation Paused`;
-    }
-  } else if (status === 'ended') {
-    if (liveDotIndicator) liveDotIndicator.style.display = 'none';
-    if (stageStatusBanner) {
-      stageStatusBanner.style.display = 'block';
-      stageStatusBanner.style.background = 'rgba(239, 68, 68, 0.25)';
-      stageStatusBanner.style.border = '1px solid rgba(239, 68, 68, 0.4)';
-      stageStatusBanner.style.color = '#fca5a5';
-      stageStatusText.textContent = `${currentMosqueName} — Session Ended`;
-    }
   } else {
-    // idle
-    if (liveDotIndicator) liveDotIndicator.style.display = 'none';
-    if (stageStatusBanner) stageStatusBanner.style.display = 'none';
+    document.body.classList.remove('session-active');
+    if (status === 'paused') {
+      if (liveDotIndicator) liveDotIndicator.style.display = 'none';
+      if (stageStatusBanner) {
+        stageStatusBanner.style.display = 'block';
+        stageStatusBanner.style.background = 'rgba(245, 158, 11, 0.25)';
+        stageStatusBanner.style.border = '1px solid rgba(245, 158, 11, 0.4)';
+        stageStatusBanner.style.color = '#fde68a';
+        stageStatusText.textContent = `${currentMosqueName} — Live Translation Paused`;
+      }
+    } else if (status === 'ended') {
+      if (liveDotIndicator) liveDotIndicator.style.display = 'none';
+      if (stageStatusBanner) {
+        stageStatusBanner.style.display = 'block';
+        stageStatusBanner.style.background = 'rgba(239, 68, 68, 0.25)';
+        stageStatusBanner.style.border = '1px solid rgba(239, 68, 68, 0.4)';
+        stageStatusBanner.style.color = '#fca5a5';
+        stageStatusText.textContent = `${currentMosqueName} — Session Ended`;
+      }
+    } else {
+      // idle
+      if (liveDotIndicator) liveDotIndicator.style.display = 'none';
+      if (stageStatusBanner) stageStatusBanner.style.display = 'none';
+    }
   }
 }
 
@@ -457,8 +470,11 @@ function streamWordsIntoElement(element, fullText, delayMs = 85, onComplete = nu
 function reRenderTranslationFeed() {
   clearActiveStreams();
   transFeed.innerHTML = '';
+  const isLive = document.body.classList.contains('session-active');
   if (recentFeedItems.length === 0) {
-    transFeed.innerHTML = '<div class="idle-placeholder">Waiting for sermon to begin...</div>';
+    if (!isLive) {
+      transFeed.innerHTML = '<div class="idle-placeholder">Waiting for sermon to begin...</div>';
+    }
   } else {
     recentFeedItems.forEach((item, idx) => {
       const isCurrent = (idx === recentFeedItems.length - 1);
@@ -503,6 +519,12 @@ const hasArabicScript = (text) => /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE7
  */
 function appendToFeed(arabicText, transObj, isLive = true) {
   if (!arabicText && !transObj) return;
+
+  // Clear idle placeholders on speech arrival
+  const phA = arabicFeed ? arabicFeed.querySelector('.idle-placeholder') : null;
+  if (phA) phA.remove();
+  const phT = transFeed ? transFeed.querySelector('.idle-placeholder') : null;
+  if (phT) phT.remove();
 
   // Track in recentFeedItems for re-rendering on language switch
   recentFeedItems.push({ arabicText, transObj });
@@ -667,6 +689,12 @@ function handleStreamingToken({
   isReplacement = false,
   isFinal = false
 }) {
+  // Clear idle placeholders as soon as live streaming tokens arrive
+  const phA = arabicFeed ? arabicFeed.querySelector('.idle-placeholder') : null;
+  if (phA) phA.remove();
+  const phT = transFeed ? transFeed.querySelector('.idle-placeholder') : null;
+  if (phT) phT.remove();
+
   // Returns true if text contains at least one Arabic Unicode character.
   // Used to prevent romanized/Latin pass-through tokens from appearing in the Arabic column.
   const hasArabicScript = (text) => /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/.test(text);
