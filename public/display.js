@@ -3,12 +3,10 @@ const urlParams = new URLSearchParams(window.location.search);
 const sessionId = urlParams.get('session') || 'myo-youth';
 
 const VALID_LANGS = ['en', 'uz', 'tr', 'ur', 'bn', 'fr', 'zh', 'zh-TW', 'id', 'so'];
+const VALID_SOURCE_LANGS = ['auto', 'ar', 'en', 'uz', 'tr', 'ur', 'bn', 'fr', 'zh', 'zh-TW', 'id', 'so'];
 let userExplicitlySelectedLang = false;
 
-// Determine initial language:
-// 1. URL param (?lang=)
-// 2. Saved preference in localStorage ('mosq_tv_lang')
-// 3. Default fallback: 'en'
+// Determine initial translation target language:
 let targetLang = 'en';
 if (urlParams.get('lang') && VALID_LANGS.includes(urlParams.get('lang'))) {
   targetLang = urlParams.get('lang');
@@ -19,6 +17,19 @@ if (urlParams.get('lang') && VALID_LANGS.includes(urlParams.get('lang'))) {
     if (saved && VALID_LANGS.includes(saved)) {
       targetLang = saved;
       userExplicitlySelectedLang = true;
+    }
+  } catch (e) {}
+}
+
+// Determine initial source (speech) language:
+let sourceLang = 'auto'; // Default: Detect Any
+if (urlParams.get('sourceLang') && VALID_SOURCE_LANGS.includes(urlParams.get('sourceLang'))) {
+  sourceLang = urlParams.get('sourceLang');
+} else {
+  try {
+    const savedSource = localStorage.getItem('mosq_tv_source_lang');
+    if (savedSource && VALID_SOURCE_LANGS.includes(savedSource)) {
+      sourceLang = savedSource;
     }
   } catch (e) {}
 }
@@ -253,9 +264,55 @@ const mosqueNameEl = document.getElementById('mosque-name');
 const stageStatusBanner = document.getElementById('stage-status-banner');
 const stageStatusText = document.getElementById('stage-status-text');
 const liveDotIndicator = document.getElementById('live-dot-indicator');
+const sourceLangSelect = document.getElementById('source-lang-select');
 const targetLangSelect = document.getElementById('target-lang-select');
+const arabicCol = document.getElementById('arabic-col');
 const arabicFeed = document.getElementById('arabic-feed');
 const transFeed = document.getElementById('trans-feed');
+
+function updateSourceColumnStyling() {
+  if (!arabicCol) return;
+  const isRtl = sourceLang === 'ar' || sourceLang === 'ur';
+  arabicCol.style.direction = isRtl ? 'rtl' : (sourceLang === 'auto' ? 'auto' : 'ltr');
+  arabicCol.style.textAlign = isRtl ? 'right' : (sourceLang === 'auto' ? 'inherit' : 'left');
+
+  const placeholder = arabicFeed ? arabicFeed.querySelector('.idle-placeholder') : null;
+  if (placeholder) {
+    if (sourceLang === 'ar') placeholder.textContent = 'في انتظار بدء الخطبة...';
+    else if (sourceLang === 'ur') placeholder.textContent = 'خطبہ شروع ہونے کا انتظار ہے...';
+    else if (sourceLang === 'tr') placeholder.textContent = 'Hutbenin başlaması bekleniyor...';
+    else if (sourceLang === 'uz') placeholder.textContent = 'Xutba boshlanishini kuting...';
+    else if (sourceLang === 'fr') placeholder.textContent = 'En attente du début du sermon...';
+    else if (sourceLang === 'zh' || sourceLang === 'zh-TW') placeholder.textContent = '等待演讲开始...';
+    else if (sourceLang === 'bn') placeholder.textContent = 'বক্তব্য শুরু হওয়ার অপেক্ষায়...';
+    else if (sourceLang === 'id') placeholder.textContent = 'Menunggu khutbah dimulai...';
+    else if (sourceLang === 'so') placeholder.textContent = 'Sugitaanka khudbada...';
+    else if (sourceLang === 'en') placeholder.textContent = 'Waiting for speech to begin...';
+    else placeholder.textContent = 'في انتظار بدء الخطبة... / Listening...';
+  }
+}
+
+// Initialize Source Language Dropdown Selection & Handler
+if (sourceLangSelect) {
+  sourceLangSelect.value = sourceLang;
+  updateSourceColumnStyling();
+
+  sourceLangSelect.addEventListener('change', () => {
+    sourceLang = sourceLangSelect.value;
+    try {
+      localStorage.setItem('mosq_tv_source_lang', sourceLang);
+    } catch (e) {}
+    updateSourceColumnStyling();
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'SET_SOURCE_LANGUAGE',
+        sessionId,
+        sourceLang
+      }));
+    }
+  });
+}
 
 function clearTvFeeds() {
   recentFeedItems.length = 0;
@@ -265,6 +322,7 @@ function clearTvFeeds() {
   }
   if (arabicFeed) {
     arabicFeed.innerHTML = '<div class="idle-placeholder">في انتظار بدء الخطبة...</div>';
+    updateSourceColumnStyling();
   }
   if (transFeed) {
     transFeed.innerHTML = '<div class="idle-placeholder">Waiting for sermon to begin...</div>';
@@ -452,8 +510,11 @@ function appendToFeed(arabicText, transObj, isLive = true) {
     recentFeedItems.shift();
   }
 
-  // 1. Arabic Column — only render if text actually contains Arabic script
-  if (arabicText && hasArabicScript(arabicText)) {
+  // 1. Source Column (original speech)
+  const isSourceRtl = hasArabicScript(arabicText) || sourceLang === 'ar' || sourceLang === 'ur';
+  const isValidSource = arabicText && (sourceLang === 'ar' ? hasArabicScript(arabicText) : arabicText.trim().length > 0);
+
+  if (isValidSource) {
     const existingCurrent = arabicFeed.querySelectorAll('.para-item.current');
     existingCurrent.forEach(el => {
       el.classList.remove('current');
@@ -462,6 +523,15 @@ function appendToFeed(arabicText, transObj, isLive = true) {
 
     const pArabic = document.createElement('div');
     pArabic.className = 'para-item current';
+    if (isSourceRtl) {
+      pArabic.style.direction = 'rtl';
+      pArabic.style.textAlign = 'right';
+      pArabic.style.fontFamily = "'Amiri', serif";
+    } else {
+      pArabic.style.direction = 'ltr';
+      pArabic.style.textAlign = 'left';
+      pArabic.style.fontFamily = "'Plus Jakarta Sans', sans-serif";
+    }
     arabicFeed.appendChild(pArabic);
 
     if (isLive) {
@@ -545,7 +615,12 @@ function handleIncomingSpeech({ arabic, translations, translated, ayah, timestam
   // 1. If a streaming paragraph is currently active on screen, finalize it in-place
   if (streamingArabic || streamingTrans) {
     if (streamingArabic && arabic) {
-      if (hasArabicScript(arabic)) {
+      const isValid = (sourceLang === 'ar' ? hasArabicScript(arabic) : arabic.trim().length > 0);
+      if (isValid) {
+        const isRtl = hasArabicScript(arabic) || sourceLang === 'ar' || sourceLang === 'ur';
+        streamingArabic.style.direction = isRtl ? 'rtl' : 'ltr';
+        streamingArabic.style.textAlign = isRtl ? 'right' : 'left';
+        streamingArabic.style.fontFamily = isRtl ? "'Amiri', serif" : "'Plus Jakarta Sans', sans-serif";
         streamingArabic.classList.remove('streaming');
         streamingArabic.textContent = arabic;
       } else {
@@ -559,7 +634,8 @@ function handleIncomingSpeech({ arabic, translations, translated, ayah, timestam
         playTvBrowserAudio(displayTrans, targetLang);
       }
     }
-    recentFeedItems.push({ arabicText: (arabic && hasArabicScript(arabic)) ? arabic : '', transObj });
+    const shouldKeepArabic = arabic && (sourceLang === 'ar' ? hasArabicScript(arabic) : arabic.trim().length > 0);
+    recentFeedItems.push({ arabicText: shouldKeepArabic ? arabic : '', transObj });
     while (recentFeedItems.length > MAX_HISTORY) recentFeedItems.shift();
     return;
   }
@@ -568,13 +644,14 @@ function handleIncomingSpeech({ arabic, translations, translated, ayah, timestam
   const arabicMatch = currentArabic && arabic && currentArabic.textContent.trim() === arabic.trim();
   const transMatch = currentTrans && displayTrans && currentTrans.textContent.trim() === displayTrans.trim();
   if (arabicMatch || transMatch) {
-    recentFeedItems.push({ arabicText: (arabic && hasArabicScript(arabic)) ? arabic : '', transObj });
+    const shouldKeepArabic = arabic && (sourceLang === 'ar' ? hasArabicScript(arabic) : arabic.trim().length > 0);
+    recentFeedItems.push({ arabicText: shouldKeepArabic ? arabic : '', transObj });
     while (recentFeedItems.length > MAX_HISTORY) recentFeedItems.shift();
     return;
   }
 
   // 3. Otherwise (restoring history / polling fallback), append to feeds directly
-  const validArabic = (arabic && hasArabicScript(arabic)) ? arabic : '';
+  const validArabic = arabic && (sourceLang === 'ar' ? (hasArabicScript(arabic) ? arabic : '') : arabic);
   appendToFeed(validArabic, transObj, isLive);
 }
 
@@ -594,12 +671,13 @@ function handleStreamingToken({
   // Used to prevent romanized/Latin pass-through tokens from appearing in the Arabic column.
   const hasArabicScript = (text) => /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/.test(text);
 
-  // ── Left column (Arabic original) ──────────────────────────────────────────
+  // ── Left column (Source speech) ──────────────────────────────────────────
   // Prefer full-replacement field; fall back to legacy chunk for backwards-compat.
-  const arabicContent = isReplacement ? originalFull : originalChunk;
-  // Only update the Arabic column if the content actually contains Arabic script.
-  // This blocks romanized Latin text (e.g. "Maliki", "Tallinn") from the left side.
-  if (arabicContent && hasArabicScript(arabicContent)) {
+  const sourceContent = isReplacement ? originalFull : originalChunk;
+  const isSourceRtl = hasArabicScript(sourceContent) || sourceLang === 'ar' || sourceLang === 'ur';
+  const isValidSource = sourceContent && (sourceLang === 'ar' ? hasArabicScript(sourceContent) : sourceContent.trim().length > 0);
+
+  if (isValidSource) {
     let currentArabic = arabicFeed.querySelector('.para-item.current.streaming');
     if (!currentArabic) {
       arabicFeed.querySelectorAll('.para-item.current').forEach(el => {
@@ -610,10 +688,19 @@ function handleStreamingToken({
       currentArabic.className = 'para-item current streaming';
       arabicFeed.appendChild(currentArabic);
     }
-    if (isReplacement) {
-      currentArabic.textContent = arabicContent.trimStart();         // SET — full replacement
+    if (isSourceRtl) {
+      currentArabic.style.direction = 'rtl';
+      currentArabic.style.textAlign = 'right';
+      currentArabic.style.fontFamily = "'Amiri', serif";
     } else {
-      currentArabic.textContent = (currentArabic.textContent + arabicContent).trimStart(); // legacy APPEND
+      currentArabic.style.direction = 'ltr';
+      currentArabic.style.textAlign = 'left';
+      currentArabic.style.fontFamily = "'Plus Jakarta Sans', sans-serif";
+    }
+    if (isReplacement) {
+      currentArabic.textContent = sourceContent.trimStart();         // SET — full replacement
+    } else {
+      currentArabic.textContent = (currentArabic.textContent + sourceContent).trimStart(); // legacy APPEND
     }
     while (arabicFeed.children.length > MAX_HISTORY) arabicFeed.firstElementChild.remove();
     if (arabicFeed.parentElement) {
@@ -780,8 +867,15 @@ function connectWebSocket() {
       sessionId,
       role: 'tv',
       language: targetLang,
+      sourceLanguage: sourceLang,
       clientId: tvClientId,
       deviceType: 'computer'
+    }));
+    // Sync selected source language with server
+    ws.send(JSON.stringify({
+      type: 'SET_SOURCE_LANGUAGE',
+      sessionId,
+      sourceLang
     }));
     startTvHeartbeat();
   };
@@ -792,7 +886,21 @@ function connectWebSocket() {
       if (data.type === 'SESSION_STATUS') {
         updateTVStatusUI(data.status, data.mosqueName);
       }
+      if (data.type === 'SOURCE_LANGUAGE_CHANGED' && data.sourceLang) {
+        if (sourceLang !== data.sourceLang) {
+          sourceLang = data.sourceLang;
+          if (sourceLangSelect) sourceLangSelect.value = sourceLang;
+          try { localStorage.setItem('mosq_tv_source_lang', sourceLang); } catch (e) {}
+          updateSourceColumnStyling();
+        }
+      }
       if (data.type === 'JOINED_SUCCESS' && data.session) {
+        if (data.session.sourceLanguage && !urlParams.get('sourceLang')) {
+          sourceLang = data.session.sourceLanguage;
+          if (sourceLangSelect) sourceLangSelect.value = sourceLang;
+          try { localStorage.setItem('mosq_tv_source_lang', sourceLang); } catch (e) {}
+          updateSourceColumnStyling();
+        }
         if (data.session.tvFontSize) applyTvFontSize(data.session.tvFontSize, data.session.tvCapacity, false);
         if (data.session.tvAudioEnabled !== undefined) setTvAudioState(data.session.tvAudioEnabled);
         if (data.session.tvShowQr !== undefined) setTvQrVisibility(data.session.tvShowQr);

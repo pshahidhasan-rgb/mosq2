@@ -24,6 +24,17 @@ const DEFAULT_MODEL = process.env.SONIOX_MODEL || 'stt-rt-v5';
 const SAMPLE_RATE = 16000;
 const NUM_CHANNELS = 1;
 
+// Soniox only accepts base ISO-639-1 codes (no regional subtags like zh-TW).
+// Map app language codes → Soniox accepted translation target codes.
+const SONIOX_LANG_MAP = {
+  'zh-TW': 'zh',  // Traditional Chinese → same Soniox zh gate (Mandarin model handles both scripts)
+};
+
+let s2t = null;
+try {
+  s2t = require('chinese-s2t').s2t;
+} catch (_) {}
+
 const PARTIAL_THROTTLE_MS = 60;
 const KEEPALIVE_MS = 5000;
 const MAX_QUEUE_BYTES = 16000 * 2 * 15; // 15 seconds of 16kHz 16-bit PCM (480,000 bytes)
@@ -68,6 +79,8 @@ class SonioxGateManager extends EventEmitter {
     this.gateRemovalTimers = new Map(); // langCode -> timer (debounce gate closing)
     this.isOperational = this.validateApiKey(this.apiKey);
     this._inactivityTimer = null;
+    this.sourceLanguage = 'auto'; // Default: Detect Any
+    this.sourceLanguageHints = []; // empty = auto-detect any language
 
     if (this.isOperational) {
       console.log('[Soniox] Dynamic Language Gates initialized with active API key.');
@@ -97,13 +110,13 @@ class SonioxGateManager extends EventEmitter {
    * and uses language_hints: ['ar'] per Soniox RT API spec.
    */
   buildConfig(lang) {
-    return {
+    const sonioxLang = SONIOX_LANG_MAP[lang] || lang;
+    const config = {
       api_key: this.apiKey,
       model: DEFAULT_MODEL,
       audio_format: 'pcm_s16le',
       sample_rate: SAMPLE_RATE,
       num_channels: NUM_CHANNELS,
-      language_hints: ['ar'],
       enable_endpoint_detection: true, // Used as commit hint, never as display gate
       context: {
         general: [
@@ -115,9 +128,13 @@ class SonioxGateManager extends EventEmitter {
       },
       translation: {
         type: 'one_way',
-        target_language: lang
+        target_language: sonioxLang
       }
     };
+    if (this.sourceLanguageHints && this.sourceLanguageHints.length > 0) {
+      config.language_hints = this.sourceLanguageHints;
+    }
+    return config;
   }
 
   /**
@@ -159,6 +176,9 @@ class SonioxGateManager extends EventEmitter {
   ensureGate(langCode) {
     if (!this.isOperational || !langCode) return null;
 
+    // Normalize to Soniox-accepted lang code, but keep using the app's langCode as the gate key
+    // so language filtering in broadcastStreamingToken still uses the app code (e.g. 'zh-TW').
+    // The sonioxLang is only used in buildConfig when opening the WS.
     const existing = this.activeGates.get(langCode);
     if (existing && (existing.status === 'open' || existing.status === 'connecting')) {
       return existing;
@@ -328,14 +348,18 @@ class SonioxGateManager extends EventEmitter {
       if (isSpecialToken(t.text)) continue;
 
       const isTr = t.translation_status === 'translation';
+      let tokenText = t.text;
+      if (isTr && gate.lang === 'zh-TW' && s2t) {
+        tokenText = s2t(tokenText);
+      }
       if (t.is_final) {
         // FINAL: append permanently once
-        if (isTr) gate.stableTr += t.text;
-        else gate.stableOr += t.text;
+        if (isTr) gate.stableTr += tokenText;
+        else gate.stableOr += tokenText;
       } else {
         // NON-FINAL: provisional tail, replaced every message
-        if (isTr) liveTr += t.text;
-        else liveOr += t.text;
+        if (isTr) liveTr += tokenText;
+        else liveOr += tokenText;
       }
     }
 
@@ -613,11 +637,38 @@ class SonioxGateManager extends EventEmitter {
   /**
    * Get current gate status for monitoring and health check.
    */
+  /**
+   * Change the source language hints used by all Soniox gates.
+   * Called when the TV operator changes the source language dropdown.
+   * @param {string|null} langCode - ISO language code (e.g. 'ar', 'en') or null/'auto' for auto-detect
+   */
+  setSourceLanguage(langCode) {
+    if (!langCode || langCode === 'auto') {
+      this.sourceLanguageHints = [];  // Soniox auto-detect
+      console.log('[Soniox] Source language set to: auto-detect (empty language_hints)');
+    } else {
+      const normalised = SONIOX_LANG_MAP[langCode] || langCode;
+      this.sourceLanguageHints = [normalised];
+      console.log(`[Soniox] Source language set to: ${normalised} (from ${langCode})`);
+    }
+
+    // Reconnect all active gates to apply the new language_hints config
+    for (const [lang, gate] of this.activeGates.entries()) {
+      if (gate.status === 'open' || gate.status === 'connecting') {
+        console.log(`[Soniox Gate ${lang}] Reconnecting to apply new source language...`);
+        // Commit pending text first so nothing is lost
+        this.commit(gate, 'source-language-change', true);
+        try { gate.ws && gate.ws.close(1000, 'Source language changed'); } catch (_) {}
+      }
+    }
+  }
+
   getStatus() {
     return {
       operational: this.isOperational,
       activeGateCount: this.activeGates.size,
       activeLanguages: Array.from(this.activeGates.keys()),
+      sourceLang: this.sourceLanguageHints ? this.sourceLanguageHints[0] || 'auto' : 'ar',
       estimatedHourlyCost: (this.activeGates.size * 0.18).toFixed(2) + ' USD/hr'
     };
   }

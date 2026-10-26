@@ -674,6 +674,24 @@ wss.on('connection', (ws) => {
         sessionManager.updateSubscriberLanguage(userSessionId, ws, userLanguage);
       }
 
+      if (msg.type === 'SET_SOURCE_LANGUAGE') {
+        // TV operator changed the source (input) language dropdown
+        const sourceLang = msg.sourceLang || 'auto';
+        const targetSessionId = msg.sessionId || userSessionId;
+        const currentSession = sessionManager.getSession(targetSessionId);
+        if (currentSession) {
+          currentSession.sourceLanguage = sourceLang;
+        }
+        if (sonioxService.isConfigured()) {
+          sonioxService.setSourceLanguage(sourceLang);
+        }
+        // Broadcast to all connected clients in the session to keep TV screens synced
+        sessionManager.broadcastToSession(targetSessionId, {
+          type: 'SOURCE_LANGUAGE_CHANGED',
+          sourceLang
+        });
+      }
+
       if (msg.type === 'UPDATE_TV_SETTINGS') {
         const { fontSize, capacity, audioEnabled, showQr, sessionId } = msg;
         const targetSessionId = sessionId || userSessionId;
