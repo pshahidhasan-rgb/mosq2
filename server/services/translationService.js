@@ -223,8 +223,8 @@ class TranslationService {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${this.openrouterKey}`,
-            'HTTP-Referer': 'https://mosq.ai',
-            'X-Title': 'MosqAI Khutbah Translation'
+            'HTTP-Referer': 'https://mishkah.ai',
+            'X-Title': 'Mishkah AI Khutbah Translation'
           },
           body: JSON.stringify({
             model: this.model,

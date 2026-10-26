@@ -28,7 +28,7 @@
     "quran-detection",
     "realtime-tts"
   ],
-  "author": "MosqAI",
+  "author": "Mishkah AI",
   "license": "MIT",
   "devDependencies": {
     "vercel": "^62.2.0"

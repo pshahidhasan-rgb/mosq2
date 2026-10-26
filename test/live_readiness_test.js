@@ -91,9 +91,9 @@ async function runLiveReadinessTests() {
 
   const publicDir = path.join(__dirname, '../public');
 
-  check('index.html exists and has MosqAI branding', () => {
+  check('index.html exists and has Mishkah AI branding', () => {
     const html = fs.readFileSync(path.join(publicDir, 'index.html'), 'utf8');
-    assert(html.includes('MosqAI'), 'Missing MosqAI branding');
+    assert(html.includes('Mishkah AI'), 'Missing Mishkah AI branding');
     assert(html.includes('admin.html'), 'Missing link to admin console');
     assert(html.includes('display.html'), 'Missing link to TV display');
     assert(html.includes('join.html'), 'Missing link to join page');
@@ -651,7 +651,7 @@ async function runLiveReadinessTests() {
         res.on('data', c => data += c);
         res.on('end', () => {
           assert.strictEqual(res.statusCode, 200);
-          assert(data.includes('MosqAI'), 'Should contain MosqAI');
+          assert(data.includes('Mishkah AI'), 'Should contain Mishkah AI');
           resolve();
         });
       }).on('error', reject);

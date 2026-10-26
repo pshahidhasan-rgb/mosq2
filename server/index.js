@@ -1,5 +1,5 @@
 /**
- * MosqAI - Live Khutbah Translation, TV Display, and Earbuds System
+ * Mishkah AI - Live Khutbah Translation, TV Display, and Earbuds System
  * Core Server & WebSocket Engine
  */
 
@@ -56,7 +56,7 @@ let activeLiveSessionId = 'jumuah-live-4b2c1d';
     primaryLanguage: process.env.DEFAULT_PRIMARY_LANGUAGE || 'en',
     hostUrl: `http://localhost:${PORT}`
   });
-  console.log(`[MosqAI] Ready with secure mosque sessions: myo-youth-8f3a9e, jumuah-live-4b2c1d`);
+  console.log(`[Mishkah AI] Ready with secure mosque sessions: myo-youth-8f3a9e, jumuah-live-4b2c1d`);
 
 })();
 
@@ -740,7 +740,7 @@ wss.on('connection', (ws) => {
 if (!process.env.VERCEL) {
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`====================================================`);
-    console.log(` MosqAI Live Khutbah Translation Prototype is LIVE `);
+    console.log(` Mishkah AI Live Khutbah Translation Platform is LIVE `);
     console.log(` Port: http://0.0.0.0:${PORT}                         `);
     console.log(` Admin Control Panel: http://localhost:${PORT}/admin.html`);
     console.log(` Live TV Display:     http://localhost:${PORT}/display.html`);

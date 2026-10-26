@@ -181,7 +181,7 @@ function setupViewRouting() {
     if (viewSessionsList) viewSessionsList.style.display = 'block';
     if (viewSessionConsole) viewSessionConsole.style.display = 'none';
     if (btnNavSessions) btnNavSessions.style.display = 'none';
-    mosqueTitle.textContent = 'MosqAI — Mosque Sessions';
+    mosqueTitle.textContent = 'Mishkah AI — Mosque Sessions';
     mosqueSubtitle.textContent = 'Multi-Mosque Live Khutbah Manager';
     loadAllSessionsList();
   } else {
