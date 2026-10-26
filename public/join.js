@@ -367,12 +367,36 @@ if (compPlayerBar) {
 // ═════════════════════════════════════════════
 // SENTENCE COMMIT & STREAMING INGEST
 // ═════════════════════════════════════════════
+
+/**
+ * Commit a finalized sentence into the segments map.
+ * The server sends attendees: { translatedFull, translatedChunk, isReplacement, isFinal, lang, seq, timestamp }
+ * It does NOT send data.translations or data.translated — so we build the translations map from translatedFull.
+ */
 function commitSentence(data) {
+  // Resolve the finalized text — prefer translatedFull (set by server on isFinal),
+  // then fall back to translated, then liveText (which was built from streaming chunks)
+  const finalText = (data.translatedFull || '').trim()
+    || (data.translated || '').trim()
+    || liveText.trim();
+
+  if (!finalText) {
+    // Nothing to commit; just clear the live stream indicator
+    liveText = '';
+    updateLiveStreamView();
+    return;
+  }
+
   const key = segKey(data) || `gen_${Date.now()}_${++segmentOrder}`;
   registerAlias(key, data);
 
-  const translations = data.translations || (data.translated ? { [currentLanguage]: data.translated } : {});
-  const text = pickText({ translations, translated: data.translated, arabic: data.arabic }, currentLanguage);
+  // Build translations from the data we have:
+  // 1. If the server sent a full translations object, use it.
+  // 2. Otherwise build one from translatedFull / translated.
+  const translations =
+    (data.translations && Object.keys(data.translations).length > 0)
+      ? data.translations
+      : { [currentLanguage]: finalText };
 
   segments.set(key, {
     key,
@@ -387,20 +411,35 @@ function commitSentence(data) {
   updateLiveStreamView();
   renderManuscript();
 
-  if (isAudioEnabled && text) {
-    enqueueSpeech(text, currentLanguage, key);
+  if (isAudioEnabled && finalText) {
+    enqueueSpeech(finalText, currentLanguage, key);
   }
 }
 
+/**
+ * Handle sub-200ms word-by-word streaming tokens from the server.
+ * Server payload for attendees: { type, lang, translatedChunk, translatedFull, isReplacement, isFinal, seq, timestamp }
+ */
 function handleStreamingTokenMobile(data) {
+  // Server only sends tokens for our language (filtered server-side), but guard anyway
   if (data.lang && data.lang !== currentLanguage) return;
 
   if (data.isFinal) {
+    // On final, the server sets translatedFull to the complete sentence text.
+    // If translatedFull is empty (translation still processing), use accumulated liveText.
+    if (!data.translatedFull && liveText) {
+      data = Object.assign({}, data, { translatedFull: liveText });
+    }
     commitSentence(data);
     return;
   }
 
-  liveText = data.isReplacement ? (data.translatedFull || '') : (liveText + (data.translatedChunk || ''));
+  // Accumulate streaming chunks into liveText for real-time display
+  if (data.isReplacement) {
+    liveText = data.translatedFull || data.translatedChunk || '';
+  } else {
+    liveText = liveText + (data.translatedChunk || '');
+  }
   updateLiveStreamView();
 }
 
