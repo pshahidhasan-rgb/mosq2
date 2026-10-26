@@ -620,20 +620,27 @@ wss.on('connection', (ws) => {
       const msg = JSON.parse(raw.toString());
 
       if (msg.type === 'JOIN_ROOM') {
-        userSessionId = msg.sessionId || activeLiveSessionId;
+        const requestedSessionId = msg.sessionId || activeLiveSessionId;
         userRole = msg.role || 'attendee';
         userLanguage = msg.language || 'en';
 
         if (userRole === 'admin') {
-          activeLiveSessionId = userSessionId;
+          activeLiveSessionId = requestedSessionId;
         }
 
-        if (!sessionManager.getSession(userSessionId)) {
+        // Resolve canonical session ID via prefix/alias match (e.g. 'myo-youth' -> 'myo-youth-8f3a9e')
+        // This ensures attendees subscribe to the same room that Soniox broadcasts to.
+        const resolvedSession = sessionManager.getSession(requestedSessionId);
+        if (resolvedSession) {
+          userSessionId = resolvedSession.id;
+        } else {
+          // No existing session found — create one with the requested ID
           await sessionManager.createSession({
-            sessionId: userSessionId,
+            sessionId: requestedSessionId,
             mosqueName: process.env.DEFAULT_MASJID_NAME || 'Masjid Al-Noor',
             primaryLanguage: process.env.DEFAULT_PRIMARY_LANGUAGE || 'en'
           });
+          userSessionId = requestedSessionId;
         }
 
         sessionManager.addSubscriber(userSessionId, ws, {
