@@ -33,14 +33,14 @@
     #topbar {
       position: fixed;
       top: 0; left: 0; right: 0;
-      height: 64px;
+      height: 72px;
       background: rgba(3, 7, 17, 0.95);
       backdrop-filter: blur(16px);
       border-bottom: 1px solid var(--divider);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 2.5rem;
+      padding: 0 2rem;
       z-index: 100;
     }
 
@@ -84,63 +84,67 @@
       font-size: 0.9rem;
     }
 
-    /* Center Mosque Brand */
-    .center-brand {
+    /* Center Mosque Brand & Layout Switcher */
+    .center-brand-wrapper {
       position: absolute;
       left: 50%;
-      transform: translateX(-50%);
+      top: 50%;
+      transform: translate(-50%, -50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.28rem; /* a little below the name to separate them */
+      pointer-events: auto;
+    }
+
+    .center-brand {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
+      gap: 0.6rem;
     }
 
     .brand-icon {
-      width: 30px;
-      height: 30px;
-      border-radius: 8px;
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
       background: #10b981;
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: 900;
-      font-size: 1.1rem;
+      font-size: 0.95rem;
       color: #030711;
-      box-shadow: 0 0 15px var(--emerald-glow);
+      box-shadow: 0 0 12px var(--emerald-glow);
     }
 
     #mosque-name {
-      font-size: 1.15rem;
+      font-size: 1.05rem;
       font-weight: 700;
       letter-spacing: 0.06em;
       text-transform: uppercase;
       color: #f8fafc;
-    }
-
-    /* Right Controls Wrapper */
-    .right-controls-wrapper {
-      display: flex;
-      align-items: center;
-      gap: 0.65rem;
-      margin-right: 8.5rem; /* Shift left to prevent overlap with Fullscreen button */
+      line-height: 1.2;
+      white-space: nowrap;
     }
 
     /* Screen Mode Dropdown (Dual Screen vs Translation Only) */
     .screen-mode-dropdown-wrapper {
-      display: flex;
+      display: inline-flex;
       align-items: center;
-      gap: 0.4rem;
-      background: rgba(255, 255, 255, 0.07);
-      border: 1px solid rgba(255, 255, 255, 0.18);
+      gap: 0.35rem;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.22);
       border-radius: 999px;
-      padding: 0.25rem 0.75rem 0.25rem 0.65rem;
+      padding: 0.15rem 0.65rem;
       transition: all 0.2s;
     }
     .screen-mode-dropdown-wrapper:hover {
-      background: rgba(255, 255, 255, 0.12);
-      border-color: rgba(255, 255, 255, 0.35);
+      background: rgba(255, 255, 255, 0.14);
+      border-color: rgba(255, 255, 255, 0.38);
     }
     .screen-icon {
-      font-size: 0.85rem;
+      font-size: 0.78rem;
       line-height: 1;
       display: flex;
       align-items: center;
@@ -149,17 +153,24 @@
     .screen-select-dropdown {
       background: transparent;
       border: none;
-      color: rgba(255, 255, 255, 0.9);
+      color: rgba(255, 255, 255, 0.92);
       font-family: inherit;
-      font-size: 0.85rem;
-      font-weight: 700;
+      font-size: 0.78rem;
+      font-weight: 600;
       cursor: pointer;
       outline: none;
     }
     .screen-select-dropdown option {
       background: #0b1523;
       color: #f1f5f9;
-      font-size: 0.9rem;
+      font-size: 0.85rem;
+    }
+
+    /* Right Controls: Target Language & Fullscreen */
+    .right-controls-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
     }
 
     /* Right Target Language Dropdown */
@@ -223,7 +234,7 @@
     /* ─── MAIN STAGE: 2 SPLIT COLUMNS ─── */
     #stage {
       position: fixed;
-      top: 64px; bottom: 0; left: 0; right: 0;
+      top: 72px; bottom: 0; left: 0; right: 0;
       display: flex;
     }
 
@@ -422,7 +433,7 @@
     #ayah-overlay {
       display: none;
       position: fixed;
-      inset: 64px 0 0 0;
+      inset: 72px 0 0 0;
       z-index: 150;
       background: rgba(3, 7, 17, 0.96);
       backdrop-filter: blur(20px);
@@ -485,25 +496,27 @@
       line-height: 1.5;
     }
 
-    /* Fullscreen Toggle */
+    /* Fullscreen Toggle (Integrated into Right Controls) */
     #btn-fullscreen {
-      position: fixed;
-      top: 16px;
-      right: 1.25rem;
-      z-index: 250;
       background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      color: rgba(255, 255, 255, 0.7);
-      font-size: 0.78rem;
-      padding: 0.3rem 0.65rem;
-      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.28rem 0.75rem;
+      border-radius: 999px;
       cursor: pointer;
       font-family: inherit;
       transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      white-space: nowrap;
     }
     #btn-fullscreen:hover {
-      background: rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.16);
       color: #fff;
+      border-color: rgba(255, 255, 255, 0.38);
     }
   </style>
 </head>
@@ -530,14 +543,12 @@
       </select>
     </div>
 
-    <!-- Center: Mosque / Center Branding -->
-    <div class="center-brand">
-      <div class="brand-icon">🕌</div>
-      <div id="mosque-name">MYO YOUTH CENTER</div>
-    </div>
-
-    <!-- Right Controls: Screen Mode & Translation Language -->
-    <div class="right-controls-wrapper">
+    <!-- Center: Mosque Brand & Screen Layout Switcher (Separated a little below the name) -->
+    <div class="center-brand-wrapper">
+      <div class="center-brand">
+        <div class="brand-icon">🕌</div>
+        <div id="mosque-name">MYO YOUTH CENTER</div>
+      </div>
       <div class="screen-mode-dropdown-wrapper">
         <span class="screen-icon" title="Screen Layout">🖥️</span>
         <select id="screen-mode-select" class="screen-select-dropdown" aria-label="Select Screen Layout">
@@ -545,7 +556,10 @@
           <option value="translation-only">Translation Only</option>
         </select>
       </div>
+    </div>
 
+    <!-- Right Controls: Translation Language & Fullscreen -->
+    <div class="right-controls-wrapper">
       <div class="lang-dropdown-wrapper">
         <span class="live-dot" id="live-dot-indicator"></span>
         <select id="target-lang-select" class="lang-select-dropdown" aria-label="Select TV Translation Language">
@@ -561,14 +575,14 @@
           <option value="so">Somali (Soomaali)</option>
         </select>
       </div>
+
+      <!-- Fullscreen Button -->
+      <button id="btn-fullscreen" onclick="toggleFullscreen()" title="Toggle Fullscreen">⛶ Fullscreen</button>
     </div>
   </header>
 
-  <!-- Fullscreen Button -->
-  <button id="btn-fullscreen" onclick="toggleFullscreen()">⛶ Fullscreen</button>
-
   <!-- Floating Status Banner (Paused / Ended state) -->
-  <div id="stage-status-banner" style="display: none; position: fixed; top: 76px; left: 50%; transform: translateX(-50%); z-index: 95; padding: 0.35rem 1.25rem; border-radius: 999px; font-size: 0.84rem; font-weight: 700; letter-spacing: 0.04em; backdrop-filter: blur(12px); box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
+  <div id="stage-status-banner" style="display: none; position: fixed; top: 84px; left: 50%; transform: translateX(-50%); z-index: 95; padding: 0.35rem 1.25rem; border-radius: 999px; font-size: 0.84rem; font-weight: 700; letter-spacing: 0.04em; backdrop-filter: blur(12px); box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
     <span id="stage-status-text">Translation Paused</span>
   </div>
 
