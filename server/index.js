@@ -231,7 +231,7 @@ sonioxService.on('token_stream', ({ sessionId, lang, translatedChunk, originalCh
 // DO NOT broadcast LIVE_SUBTITLE here — the STREAMING_TOKEN with isFinal:true
 // already finalized the display paragraph. Broadcasting LIVE_SUBTITLE on top of it
 // causes a visual collision (text flashes/overwrites/duplicates on the TV display).
-// Session transcripts are still saved so HTTP polling fallback and refresh recovery work.
+// Session transcripts are merged by sequence (seq) so all translated languages accumulate.
 sonioxService.on('sentence_finalized', ({ sessionId, lang, translatedText, finalText, originalText, seq, timestamp }) => {
   if (!sessionId || sessionId === 'default') return;
 
@@ -239,34 +239,102 @@ sonioxService.on('sentence_finalized', ({ sessionId, lang, translatedText, final
   if (!session || session.status !== 'active') return;
 
   const resolvedTranslation = translatedText || finalText || '';
-  const translations = { [lang]: resolvedTranslation };
   const ts = timestamp || new Date().toISOString();
 
-  // Save to session history for refresh/reconnect/polling recovery
-  session.transcripts.push({
-    seq: seq || session.transcripts.length + 1,
-    arabic: originalText,
-    translations,
-    ayah: null,
-    timestamp: ts
-  });
+  // Merge translations by sequence number so each transcript contains all languages
+  let existing = null;
+  if (seq) {
+    existing = session.transcripts.find(t => t.seq === seq);
+  }
+  if (!existing && ts) {
+    existing = session.transcripts.find(t => t.timestamp === ts);
+  }
+
+  if (existing) {
+    if (!existing.translations) existing.translations = {};
+    if (lang && resolvedTranslation) existing.translations[lang] = resolvedTranslation;
+    if (!existing.arabic && originalText) existing.arabic = originalText;
+  } else {
+    existing = {
+      seq: seq || session.transcripts.length + 1,
+      arabic: originalText,
+      translations: { [lang]: resolvedTranslation },
+      ayah: null,
+      timestamp: ts
+    };
+    session.transcripts.push(existing);
+  }
 
   // Also broadcast to admin panel of that specific session
-  const subs = sessionManager.subscribers.get(sid);
+  const subs = sessionManager.subscribers.get(session.id);
   if (subs) {
     for (const sub of subs) {
       if (sub.ws.readyState === 1 && sub.role === 'admin') {
         sub.ws.send(JSON.stringify({
           type: 'ADMIN_TRANSCRIPT',
-          seq,
-          arabic: originalText,
-          translations,
+          seq: existing.seq,
+          arabic: existing.arabic,
+          translations: existing.translations,
           ayah: null,
-          timestamp: ts
+          timestamp: existing.timestamp
         }));
       }
     }
   }
+});
+
+/**
+ * Asynchronously backfills translations for any past sentences in a session
+ * when a new language is activated mid-session.
+ */
+async function backfillSessionHistory(sessionId, targetLang) {
+  if (!sessionId || !targetLang) return;
+  const session = sessionManager.getSession(sessionId);
+  if (!session || !session.transcripts || session.transcripts.length === 0) return;
+
+  const missing = session.transcripts.filter(t => {
+    return !t.translations || !t.translations[targetLang] || t.translations[targetLang].trim() === '';
+  });
+
+  if (missing.length === 0) return;
+
+  console.log(`[Backfill] Translating ${missing.length} past sentences to newly activated language "${targetLang}" for session "${session.id}"...`);
+
+  // Translate in parallel with a sensible concurrency limit
+  const tasks = missing.map(async (t) => {
+    try {
+      // Pick source text: prefer Arabic, then English, then any available translation
+      const source = (t.arabic && t.arabic.trim()) 
+        || (t.translations && t.translations.en) 
+        || (t.translations && Object.values(t.translations)[0])
+        || '';
+      if (!source) return;
+
+      const translated = await translationService.translate(source, targetLang);
+      if (translated) {
+        if (!t.translations) t.translations = {};
+        t.translations[targetLang] = translated;
+      }
+    } catch (err) {
+      console.warn(`[Backfill] Failed translating sentence seq ${t.seq} to ${targetLang}:`, err.message);
+    }
+  });
+
+  await Promise.all(tasks);
+
+  // Broadcast backfilled history to all clients in the session room
+  sessionManager.broadcastToSession(session.id, {
+    type: 'SESSION_HISTORY_BACKFILL',
+    lang: targetLang,
+    transcripts: session.transcripts
+  });
+}
+
+// Automatically trigger backfill when any client activates a language
+sessionManager.on('language_activated', ({ sessionId, language }) => {
+  backfillSessionHistory(sessionId, language).catch(err => {
+    console.warn(`[Backfill] Error in language_activated handler:`, err.message);
+  });
 });
 
 
@@ -572,6 +640,18 @@ app.get('/api/session/:id/feed', (req, res) => {
   });
 });
 
+// Retroactive history backfill endpoint for newly selected languages
+app.post('/api/session/:id/backfill', async (req, res) => {
+  const { lang } = req.body;
+  const session = sessionManager.getSession(req.params.id);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+  if (lang) {
+    sessionManager.activateLanguage(session.id, lang);
+    await backfillSessionHistory(session.id, lang);
+  }
+  return res.json({ success: true, transcripts: session.transcripts });
+});
+
 // Client presence heartbeat ping (tracks active browser tabs in real time)
 app.post('/api/session/:id/ping', (req, res) => {
   const { clientId, role, deviceType, language } = req.body;
@@ -683,7 +763,11 @@ wss.on('connection', (ws, req) => {
 
       if (msg.type === 'CHANGE_LANGUAGE') {
         userLanguage = msg.language || 'en';
-        sessionManager.updateSubscriberLanguage(userSessionId, ws, userLanguage);
+        const targetSid = msg.sessionId || userSessionId;
+        if (targetSid) {
+          sessionManager.updateSubscriberLanguage(targetSid, ws, userLanguage);
+          sessionManager.activateLanguage(targetSid, userLanguage);
+        }
       }
 
       if (msg.type === 'SET_SOURCE_LANGUAGE') {

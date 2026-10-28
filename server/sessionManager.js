@@ -86,6 +86,7 @@ class SessionManager extends EventEmitter {
       joinUrl,
       qrCodeDataUrl,
       languages: ['en', 'bn', 'ur', 'fr', 'zh', 'tr'],
+      activatedLanguages: new Set([primaryLanguage || 'en']),
       createdAt: new Date().toISOString()
     };
 
@@ -353,6 +354,31 @@ class SessionManager extends EventEmitter {
   }
 
   /**
+   * Sticky language activation: once a language is selected (by TV or attendee),
+   * it remains in the session's active translation pool until the session concludes.
+   */
+  activateLanguage(sessionId, lang) {
+    if (!lang || typeof lang !== 'string') return false;
+    const session = this.getSession(sessionId);
+    if (!session) return false;
+
+    if (!session.activatedLanguages) {
+      session.activatedLanguages = new Set([session.tvLanguage || session.primaryLanguage || 'en']);
+    }
+
+    const wasPresent = session.activatedLanguages.has(lang);
+    session.activatedLanguages.add(lang);
+
+    if (!wasPresent) {
+      console.log(`[Session ${session.id}] Sticky activation for language "${lang}". Active pool: ${Array.from(session.activatedLanguages).join(', ')}`);
+      this.notifyStatsUpdate(session.id);
+      this.emit('language_activated', { sessionId: session.id, language: lang });
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * Adds a WebSocket connection to the session room
    */
   addSubscriber(sessionId, ws, { role = 'attendee', language = 'en', clientId = '', deviceType = null } = {}) {
@@ -366,6 +392,10 @@ class SessionManager extends EventEmitter {
     if (role === 'tv' && language) {
       const session = this.getSession(sessionId);
       if (session) session.tvLanguage = language;
+    }
+
+    if (language && role !== 'admin') {
+      this.activateLanguage(sessionId, language);
     }
 
     // Update attendee counts
@@ -386,6 +416,9 @@ class SessionManager extends EventEmitter {
           if (sub.role === 'tv') {
             const session = this.getSession(sessionId);
             if (session) session.tvLanguage = language;
+          }
+          if (sub.role !== 'admin') {
+            this.activateLanguage(sessionId, language);
           }
         }
         if (clientId) sub.clientId = clientId;
@@ -409,6 +442,9 @@ class SessionManager extends EventEmitter {
     if (role === 'tv' && language) {
       const session = this.getSession(sessionId);
       if (session) session.tvLanguage = language;
+    }
+    if (language && role !== 'admin') {
+      this.activateLanguage(sessionId, language);
     }
     this.notifyStatsUpdate(sessionId);
   }
@@ -451,6 +487,9 @@ class SessionManager extends EventEmitter {
         if (sub.role === 'tv') {
           const session = this.getSession(sessionId);
           if (session) session.tvLanguage = newLanguage;
+        }
+        if (sub.role !== 'admin') {
+          this.activateLanguage(sessionId, newLanguage);
         }
         break;
       }
@@ -528,7 +567,7 @@ class SessionManager extends EventEmitter {
 
   /**
    * Computes the list of distinct languages actively needed for the session room
-   * (Display TV target language + all languages selected by connected attendees)
+   * (Display TV target language + all sticky activated languages + connected attendee languages)
    */
   getRequiredLanguages(sessionId) {
     const session = this.getSession(sessionId);
@@ -536,6 +575,11 @@ class SessionManager extends EventEmitter {
     if (session) {
       const tvLang = session.tvLanguage || session.primaryLanguage || 'en';
       languages.add(tvLang);
+      if (session.activatedLanguages) {
+        for (const l of session.activatedLanguages) {
+          if (l) languages.add(l);
+        }
+      }
     } else {
       languages.add('en');
     }

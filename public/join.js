@@ -224,8 +224,11 @@ if (feedEl) {
 // ═════════════════════════════════════════════
 let isAudioEnabled = false;
 let audioCtx = null;
+let keepAliveSource = null;
 const audioQueue = [];
 let isPlayingAudio = false;
+let currentUtterance = null;
+window.__activeUtterance = null;
 const spokenKeys = new Set();
 let cachedVoices = [];
 
@@ -255,6 +258,64 @@ function getBestVoice(langCode) {
   return pool[0] || null;
 }
 
+function startBluetoothKeepAlive() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    if (!keepAliveSource) {
+      // 2 seconds of silent buffer looped indefinitely to keep Bluetooth DAC awake
+      const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 2, audioCtx.sampleRate);
+      const gainNode = audioCtx.createGain();
+      gainNode.gain.value = 0.001; // Whisper prevents Bluetooth sleep without audible sound
+
+      keepAliveSource = audioCtx.createBufferSource();
+      keepAliveSource.buffer = buffer;
+      keepAliveSource.loop = true;
+      keepAliveSource.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      keepAliveSource.start(0);
+    }
+  } catch (e) {
+    console.warn('[Earbuds] Keep-alive notice:', e);
+  }
+
+  if ('mediaSession' in navigator) {
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: 'Live Khutbah Translation',
+        artist: 'Mishkah AI',
+        album: 'Live Mosque Translation'
+      });
+      navigator.mediaSession.playbackState = 'playing';
+    } catch (_) {}
+  }
+}
+
+function stopBluetoothKeepAlive() {
+  if (keepAliveSource) {
+    try { keepAliveSource.stop(); } catch (_) {}
+    keepAliveSource = null;
+  }
+  if ('mediaSession' in navigator) {
+    try { navigator.mediaSession.playbackState = 'none'; } catch (_) {}
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && isAudioEnabled) {
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(() => {});
+    }
+    if ('speechSynthesis' in window && window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+    }
+    if (!isPlayingAudio && audioQueue.length > 0) {
+      processAudioQueue();
+    }
+  }
+});
+
 function enqueueSpeech(text, lang, key = null) {
   if (!isAudioEnabled) return;
   if (key && spokenKeys.has(key)) return;
@@ -283,27 +344,42 @@ function processAudioQueue() {
     utterance.rate = 1.0;
     utterance.pitch = 0.95;
 
-    // Chrome 12-second speech synthesis stall watchdog
-    const watchdog = setTimeout(() => {
-      if (window.speechSynthesis.speaking) {
-        window.speechSynthesis.pause();
-        window.speechSynthesis.resume();
-      }
-    }, 12000);
+    // Retain global reference so browser garbage collection doesn't kill it mid-playback on Bluetooth
+    currentUtterance = utterance;
+    window.__activeUtterance = utterance;
 
+    // Dynamic watchdog timeout: proportional to text length + safety buffer
+    const maxDuration = Math.max(6500, (item.text.length || 20) * 120);
+    const watchdog = setTimeout(() => {
+      console.warn('[Earbuds] Speech synthesis watchdog triggered (stalled playback). Advancing queue.');
+      try { window.speechSynthesis.cancel(); } catch (_) {}
+      onFinish();
+    }, maxDuration);
+
+    let finished = false;
     const onFinish = () => {
+      if (finished) return;
+      finished = true;
       clearTimeout(watchdog);
+      currentUtterance = null;
+      window.__activeUtterance = null;
       isPlayingAudio = false;
-      processAudioQueue();
+      // Small 150ms buffer to let Bluetooth audio subsystem settle before next sentence
+      setTimeout(processAudioQueue, 150);
     };
 
     utterance.onend = onFinish;
-    utterance.onerror = onFinish;
+    utterance.onerror = (err) => {
+      console.warn('[Earbuds] Utterance error:', err);
+      onFinish();
+    };
 
     window.speechSynthesis.speak(utterance);
   } catch (err) {
+    currentUtterance = null;
+    window.__activeUtterance = null;
     isPlayingAudio = false;
-    processAudioQueue();
+    setTimeout(processAudioQueue, 200);
   }
 }
 
@@ -326,11 +402,8 @@ async function toggleAudio() {
       }
     } catch (_) {}
 
-    // 2. Resume AudioContext if suspended
-    try {
-      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      if (audioCtx.state === 'suspended') await audioCtx.resume();
-    } catch (_) {}
+    // 2. Start Bluetooth keep-alive to keep earbuds awake
+    startBluetoothKeepAlive();
 
     // 3. Play latest finalized sentence if available
     const sorted = Array.from(segments.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -346,6 +419,9 @@ async function toggleAudio() {
     if (playerSubtitle) playerSubtitle.textContent = 'Tap play to stream audio to earbuds';
     audioQueue.length = 0;
     isPlayingAudio = false;
+    currentUtterance = null;
+    window.__activeUtterance = null;
+    stopBluetoothKeepAlive();
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
   }
 }
@@ -390,21 +466,21 @@ function commitSentence(data) {
   const key = segKey(data) || `gen_${Date.now()}_${++segmentOrder}`;
   registerAlias(key, data);
 
-  // Build translations from the data we have:
-  // 1. If the server sent a full translations object, use it.
-  // 2. Otherwise build one from translatedFull / translated.
-  const translations =
-    (data.translations && Object.keys(data.translations).length > 0)
-      ? data.translations
-      : { [currentLanguage]: finalText };
+  const existing = segments.get(key);
+  const translations = existing && existing.translations ? Object.assign({}, existing.translations) : {};
+  if (data.translations && typeof data.translations === 'object') {
+    Object.assign(translations, data.translations);
+  }
+  const langKey = data.lang || currentLanguage;
+  translations[langKey] = finalText;
 
   segments.set(key, {
     key,
     translations,
-    arabic: data.arabic || '',
-    ayah: data.ayah || null,
-    ts: data.timestamp || new Date().toISOString(),
-    order: ++segmentOrder
+    arabic: data.arabic || (existing ? existing.arabic : ''),
+    ayah: data.ayah || (existing ? existing.ayah : null),
+    ts: data.timestamp || (existing ? existing.ts : new Date().toISOString()),
+    order: existing ? existing.order : ++segmentOrder
   });
 
   liveText = '';
@@ -558,6 +634,11 @@ function connectWebSocket() {
         clearSessionData();
         updateMobileStatus('ended', 'Session Concluded');
       }
+      if (data.type === 'SESSION_HISTORY_BACKFILL') {
+        if (data.transcripts) {
+          applyBackfillToSegments(data.transcripts);
+        }
+      }
       if (data.type === 'STREAMING_TOKEN') {
         handleStreamingTokenMobile(data);
       }
@@ -675,14 +756,69 @@ function renderModalLangs() {
           role: 'attendee',
           language: currentLanguage
         }));
+        ws.send(JSON.stringify({
+          type: 'CHANGE_LANGUAGE',
+          sessionId,
+          language: currentLanguage
+        }));
       }
 
-      // Re-render whole manuscript in new language
+      // Re-render whole manuscript immediately in new language (or fallback to English)
       renderManuscript();
       updateLiveStreamView();
+
+      // Fetch backfilled history for newly selected language
+      fetchBackfillAttendee(currentLanguage);
     });
     modalLangGrid.appendChild(card);
   });
+}
+
+/**
+ * Fetch retroactive translations from server when switching language mid-session
+ */
+async function fetchBackfillAttendee(lang) {
+  try {
+    const res = await fetch(`/api/session/${sessionId}/backfill`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lang })
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.transcripts && data.transcripts.length > 0) {
+      applyBackfillToSegments(data.transcripts);
+    }
+  } catch (err) {
+    console.warn('[Attendee] Backfill fetch error:', err);
+  }
+}
+
+/**
+ * Merge full historical transcripts into segments and re-render manuscript
+ */
+function applyBackfillToSegments(transcripts) {
+  if (!transcripts) return;
+  transcripts.forEach(t => {
+    const key = segKey(t) || `seq_${t.seq}`;
+    registerAlias(key, t);
+    const existing = segments.get(key);
+    if (existing) {
+      if (!existing.translations) existing.translations = {};
+      Object.assign(existing.translations, t.translations || {});
+      if (!existing.arabic && t.arabic) existing.arabic = t.arabic;
+    } else {
+      segments.set(key, {
+        key,
+        translations: t.translations || {},
+        arabic: t.arabic || '',
+        ayah: t.ayah || null,
+        ts: t.timestamp || new Date().toISOString(),
+        order: ++segmentOrder
+      });
+    }
+  });
+  renderManuscript();
 }
 
 function openLangModal() {

@@ -388,12 +388,61 @@ if (targetLangSelect) {
 
     // Inform WebSocket of new TV language
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'CHANGE_LANGUAGE', language: targetLang }));
+      ws.send(JSON.stringify({ type: 'CHANGE_LANGUAGE', sessionId, language: targetLang }));
     }
 
     // Instantly re-render translations on TV screen in new language
     reRenderTranslationFeed();
+
+    // Trigger immediate backfill fetch from server to obtain translated past sentences
+    fetchBackfilledHistory(targetLang);
   });
+}
+
+/**
+ * Fetch retroactive translations from server when switching language mid-session
+ */
+async function fetchBackfilledHistory(lang) {
+  try {
+    const res = await fetch(`/api/session/${sessionId}/backfill`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lang })
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.transcripts && data.transcripts.length > 0) {
+      applyTranscriptsToFeed(data.transcripts);
+    }
+  } catch (err) {
+    console.warn('[TV] Backfill fetch error:', err);
+  }
+}
+
+/**
+ * Merge full historical transcripts into recentFeedItems and re-render
+ */
+function applyTranscriptsToFeed(transcripts) {
+  if (!transcripts || transcripts.length === 0) return;
+  const recent = transcripts.slice(-MAX_HISTORY);
+  recent.forEach(t => {
+    let item = null;
+    if (t.seq) item = recentFeedItems.find(i => i.seq === t.seq);
+    if (!item && t.timestamp) item = recentFeedItems.find(i => i.timestamp === t.timestamp);
+    if (item) {
+      item.transObj = Object.assign({}, item.transObj || {}, t.translations || {});
+      if (!item.arabicText && t.arabic) item.arabicText = t.arabic;
+    } else {
+      recentFeedItems.push({
+        seq: t.seq || Date.now(),
+        arabicText: t.arabic || '',
+        transObj: t.translations || {},
+        timestamp: t.timestamp
+      });
+      while (recentFeedItems.length > MAX_HISTORY) recentFeedItems.shift();
+    }
+  });
+  reRenderTranslationFeed();
 }
 
 // Screen Mode Layout Switcher (Dual Split vs Translation Only)
@@ -836,6 +885,35 @@ function handleStreamingToken({
         playTvBrowserAudio(currentTrans.textContent, targetLang);
       }
     }
+
+    // Persist finalized sentence in recentFeedItems so language switching immediately renders it
+    const sText = isReplacement ? (originalFull || originalChunk) : (currentArabic ? currentArabic.textContent : originalChunk);
+    const tText = isReplacement ? (translatedFull || translatedChunk) : (currentTrans ? currentTrans.textContent : translatedChunk);
+
+    if (sText || tText) {
+      let item = null;
+      if (seq) {
+        item = recentFeedItems.find(i => i.seq === seq);
+      }
+      if (!item && timestamp) {
+        item = recentFeedItems.find(i => i.timestamp === timestamp);
+      }
+      if (item) {
+        if (!item.transObj || typeof item.transObj !== 'object') {
+          item.transObj = typeof item.transObj === 'string' ? { [targetLang]: item.transObj } : {};
+        }
+        if (lang && tText) item.transObj[lang] = tText;
+        if (!item.arabicText && sText) item.arabicText = sText;
+      } else {
+        recentFeedItems.push({
+          seq: seq || Date.now(),
+          arabicText: sText || '',
+          transObj: { [lang || targetLang]: tText || '' },
+          timestamp: timestamp || new Date().toISOString()
+        });
+        while (recentFeedItems.length > MAX_HISTORY) recentFeedItems.shift();
+      }
+    }
   }
 }
 
@@ -991,6 +1069,11 @@ function connectWebSocket() {
           stageStatusBanner.style.display = 'block';
           stageStatusBanner.style.background = 'rgba(239, 68, 68, 0.25)';
           stageStatusBanner.style.color = '#fca5a5';
+        }
+      }
+      if (data.type === 'SESSION_HISTORY_BACKFILL') {
+        if (data.transcripts) {
+          applyTranscriptsToFeed(data.transcripts);
         }
       }
       if (data.type === 'STREAMING_TOKEN') {
