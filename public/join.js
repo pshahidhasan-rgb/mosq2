@@ -531,7 +531,7 @@ function startAttendeeHeartbeat() {
 
 function connectWebSocket() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+  ws = new WebSocket(`${protocol}//${window.location.host}/ws?session=${encodeURIComponent(sessionId)}&role=attendee&lang=${encodeURIComponent(currentLanguage)}`);
 
   ws.onopen = () => {
     ws.send(JSON.stringify({

@@ -116,6 +116,52 @@
       color: #f8fafc;
     }
 
+    /* Right Controls Wrapper */
+    .right-controls-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      margin-right: 8.5rem; /* Shift left to prevent overlap with Fullscreen button */
+    }
+
+    /* Screen Mode Dropdown (Dual Screen vs Translation Only) */
+    .screen-mode-dropdown-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 999px;
+      padding: 0.25rem 0.75rem 0.25rem 0.65rem;
+      transition: all 0.2s;
+    }
+    .screen-mode-dropdown-wrapper:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.35);
+    }
+    .screen-icon {
+      font-size: 0.85rem;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      opacity: 0.85;
+    }
+    .screen-select-dropdown {
+      background: transparent;
+      border: none;
+      color: rgba(255, 255, 255, 0.9);
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+      outline: none;
+    }
+    .screen-select-dropdown option {
+      background: #0b1523;
+      color: #f1f5f9;
+      font-size: 0.9rem;
+    }
+
     /* Right Target Language Dropdown */
     .lang-dropdown-wrapper {
       display: flex;
@@ -125,7 +171,6 @@
       border: 1px solid rgba(16, 185, 129, 0.35);
       border-radius: 999px;
       padding: 0.25rem 0.85rem 0.25rem 0.65rem;
-      margin-right: 7.5rem; /* Shift left to prevent overlap with Fullscreen button */
       transition: all 0.2s;
     }
     .lang-dropdown-wrapper:hover {
@@ -156,6 +201,23 @@
       background: #0a1f17;
       color: #f1f5f9;
       font-size: 0.9rem;
+    }
+
+    /* ─── SCREEN MODE: TRANSLATION ONLY (Option 2) ─── */
+    body.screen-mode-trans-only #arabic-col {
+      display: none !important;
+    }
+    body.screen-mode-trans-only #trans-col {
+      flex: 1 1 100% !important;
+      max-width: 100% !important;
+      border: none !important;
+      padding: 2.5rem 5rem 13rem !important;
+      background: radial-gradient(circle at 50% 90%, rgba(59, 130, 246, 0.03) 0%, transparent 70%);
+    }
+    body.screen-mode-trans-only #trans-col .feed-container {
+      max-width: 1100px;
+      margin-left: auto;
+      margin-right: auto;
     }
 
     /* ─── MAIN STAGE: 2 SPLIT COLUMNS ─── */
@@ -474,21 +536,31 @@
       <div id="mosque-name">MYO YOUTH CENTER</div>
     </div>
 
-    <!-- Right: Translation Language Dropdown -->
-    <div class="lang-dropdown-wrapper">
-      <span class="live-dot" id="live-dot-indicator"></span>
-      <select id="target-lang-select" class="lang-select-dropdown" aria-label="Select TV Translation Language">
-        <option value="en">English</option>
-        <option value="uz">Uzbek (O‘zbekcha)</option>
-        <option value="tr">Turkish (Türkçe)</option>
-        <option value="ur">Urdu (اردو)</option>
-        <option value="bn">Bengali (বাংলা)</option>
-        <option value="fr">French (Français)</option>
-        <option value="zh">Chinese Mandarin (中文 普通话)</option>
-        <option value="zh-TW">Traditional Chinese (中文 繁體)</option>
-        <option value="id">Indonesian (Bahasa)</option>
-        <option value="so">Somali (Soomaali)</option>
-      </select>
+    <!-- Right Controls: Screen Mode & Translation Language -->
+    <div class="right-controls-wrapper">
+      <div class="screen-mode-dropdown-wrapper">
+        <span class="screen-icon" title="Screen Layout">🖥️</span>
+        <select id="screen-mode-select" class="screen-select-dropdown" aria-label="Select Screen Layout">
+          <option value="split">Dual Screen (Split)</option>
+          <option value="translation-only">Translation Only</option>
+        </select>
+      </div>
+
+      <div class="lang-dropdown-wrapper">
+        <span class="live-dot" id="live-dot-indicator"></span>
+        <select id="target-lang-select" class="lang-select-dropdown" aria-label="Select TV Translation Language">
+          <option value="en">English</option>
+          <option value="uz">Uzbek (O‘zbekcha)</option>
+          <option value="tr">Turkish (Türkçe)</option>
+          <option value="ur">Urdu (اردو)</option>
+          <option value="bn">Bengali (বাংলা)</option>
+          <option value="fr">French (Français)</option>
+          <option value="zh">Chinese Mandarin (中文 普通话)</option>
+          <option value="zh-TW">Traditional Chinese (中文 繁體)</option>
+          <option value="id">Indonesian (Bahasa)</option>
+          <option value="so">Somali (Soomaali)</option>
+        </select>
+      </div>
     </div>
   </header>
 

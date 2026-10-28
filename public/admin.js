@@ -848,7 +848,7 @@ async function startMicrophone() {
       muteGain.connect(audioContext.destination);
 
       micAudioProcessor.onaudioprocess = (e) => {
-        if (sessionStatus !== 'active' || !ws || ws.readyState !== WebSocket.OPEN) return;
+        if (sessionStatus !== 'active' || !ws || ws.readyState !== WebSocket.OPEN || !currentSessionId) return;
         const inputData = e.inputBuffer.getChannelData(0);
         const inputSampleRate = audioContext.sampleRate;
         const pcm16 = downsampleTo16kPCM(inputData, inputSampleRate);
@@ -1122,7 +1122,7 @@ function updateStatsDisplay(stats) {
 // ─── WEBSOCKET CONNECTION ───
 function connectWebSocket(sessionId) {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+  ws = new WebSocket(`${protocol}//${window.location.host}/ws?session=${encodeURIComponent(sessionId)}&role=admin`);
 
   ws.onopen = () => {
     ws.send(JSON.stringify({

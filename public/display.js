@@ -34,6 +34,38 @@ if (urlParams.get('sourceLang') && VALID_SOURCE_LANGS.includes(urlParams.get('so
   } catch (e) {}
 }
 
+// Determine initial screen layout mode (Dual Screen Split vs Translation Only):
+let screenMode = 'split'; // Default: Dual Screen (Split)
+const urlMode = urlParams.get('mode');
+if (urlMode === 'translation-only' || urlMode === 'trans-only' || urlMode === 'single') {
+  screenMode = 'translation-only';
+} else if (urlMode === 'split' || urlMode === 'dual') {
+  screenMode = 'split';
+} else {
+  try {
+    const savedMode = localStorage.getItem('mishkah_tv_screen_mode') || localStorage.getItem('mosq_tv_screen_mode');
+    if (savedMode === 'translation-only' || savedMode === 'split') {
+      screenMode = savedMode;
+    }
+  } catch (e) {}
+}
+
+function applyScreenMode(mode) {
+  screenMode = (mode === 'translation-only') ? 'translation-only' : 'split';
+  if (screenMode === 'translation-only') {
+    document.body.classList.add('screen-mode-trans-only');
+  } else {
+    document.body.classList.remove('screen-mode-trans-only');
+  }
+  const sel = document.getElementById('screen-mode-select');
+  if (sel && sel.value !== screenMode) {
+    sel.value = screenMode;
+  }
+  try {
+    localStorage.setItem('mishkah_tv_screen_mode', screenMode);
+  } catch (_) {}
+}
+
 let currentMosqueName = 'MYO YOUTH CENTER';
 let ws = null;
 
@@ -266,6 +298,7 @@ const stageStatusText = document.getElementById('stage-status-text');
 const liveDotIndicator = document.getElementById('live-dot-indicator');
 const sourceLangSelect = document.getElementById('source-lang-select');
 const targetLangSelect = document.getElementById('target-lang-select');
+const screenModeSelect = document.getElementById('screen-mode-select');
 const arabicCol = document.getElementById('arabic-col');
 const arabicFeed = document.getElementById('arabic-feed');
 const transFeed = document.getElementById('trans-feed');
@@ -362,6 +395,16 @@ if (targetLangSelect) {
     reRenderTranslationFeed();
   });
 }
+
+// Screen Mode Layout Switcher (Dual Split vs Translation Only)
+if (screenModeSelect) {
+  screenModeSelect.value = screenMode;
+  screenModeSelect.addEventListener('change', () => {
+    applyScreenMode(screenModeSelect.value);
+  });
+}
+// Apply initial screen mode
+applyScreenMode(screenMode);
 
 function updateTVStatusUI(status, mosqueName) {
   if (mosqueName) currentMosqueName = mosqueName;
@@ -887,7 +930,7 @@ function connectWebSocket() {
     return;
   }
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+  ws = new WebSocket(`${protocol}//${window.location.host}/ws?session=${encodeURIComponent(sessionId)}&role=tv&lang=${encodeURIComponent(targetLang)}`);
 
   ws.onopen = () => {
     ws.send(JSON.stringify({

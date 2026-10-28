@@ -213,20 +213,18 @@ sessionManager.on('languages_updated', ({ sessionId, languages }) => {
 
 // Broadcast real-time streaming tokens (sub-200ms word-by-word) strictly to the target session room
 sonioxService.on('token_stream', ({ sessionId, lang, translatedChunk, originalChunk, originalFull, translatedFull, isReplacement, isFinal, seq, timestamp }) => {
-  const sid = sessionId || activeLiveSessionId;
-  if (sid) {
-    sessionManager.broadcastStreamingToken(sid, {
-      lang,
-      translatedChunk,
-      originalChunk,
-      originalFull,
-      translatedFull,
-      isReplacement,
-      isFinal,
-      seq,
-      timestamp
-    });
-  }
+  if (!sessionId || sessionId === 'default') return;
+  sessionManager.broadcastStreamingToken(sessionId, {
+    lang,
+    translatedChunk,
+    originalChunk,
+    originalFull,
+    translatedFull,
+    isReplacement,
+    isFinal,
+    seq,
+    timestamp
+  });
 });
 
 // When a sentence is finalized by Soniox, save to session history for that specific session ONLY.
@@ -235,10 +233,9 @@ sonioxService.on('token_stream', ({ sessionId, lang, translatedChunk, originalCh
 // causes a visual collision (text flashes/overwrites/duplicates on the TV display).
 // Session transcripts are still saved so HTTP polling fallback and refresh recovery work.
 sonioxService.on('sentence_finalized', ({ sessionId, lang, translatedText, finalText, originalText, seq, timestamp }) => {
-  const sid = sessionId || activeLiveSessionId;
-  if (!sid) return;
+  if (!sessionId || sessionId === 'default') return;
 
-  const session = sessionManager.getSession(sid);
+  const session = sessionManager.getSession(sessionId);
   if (!session || session.status !== 'active') return;
 
   const resolvedTranslation = translatedText || finalText || '';
@@ -398,8 +395,6 @@ app.post('/api/session/create', async (req, res) => {
     cleanId = `${cleanId}-${token}`;
   }
 
-  activeLiveSessionId = cleanId;
-
   const session = await sessionManager.createSession({
     sessionId: cleanId,
     mosqueName: mosqueName || 'Masjid Al-Noor',
@@ -412,7 +407,6 @@ app.post('/api/session/create', async (req, res) => {
 
 // Start Session
 app.post('/api/session/:id/start', (req, res) => {
-  activeLiveSessionId = req.params.id;
   const session = sessionManager.startSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
   res.json(session);
@@ -420,7 +414,6 @@ app.post('/api/session/:id/start', (req, res) => {
 
 // Resume Session (alias to start)
 app.post('/api/session/:id/resume', (req, res) => {
-  activeLiveSessionId = req.params.id;
   const session = sessionManager.startSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
   res.json(session);
@@ -595,10 +588,26 @@ app.post('/api/session/:id/ping', (req, res) => {
 });
 
 // WebSocket Connection Handler
-wss.on('connection', (ws) => {
-  let userSessionId = activeLiveSessionId;
+wss.on('connection', (ws, req) => {
+  let userSessionId = null;
   let userRole = 'attendee';
   let userLanguage = 'en';
+
+  // Parse connection URL query string for immediate session and role binding
+  if (req && req.url) {
+    try {
+      const parsedUrl = new URL(req.url, 'http://localhost');
+      const urlSession = parsedUrl.searchParams.get('session');
+      const urlRole = parsedUrl.searchParams.get('role');
+      const urlLang = parsedUrl.searchParams.get('lang');
+      if (urlRole) userRole = urlRole;
+      if (urlLang) userLanguage = urlLang;
+      if (urlSession) {
+        const resolved = sessionManager.getSession(urlSession);
+        userSessionId = resolved ? resolved.id : urlSession;
+      }
+    } catch (_) {}
+  }
 
   ws.on('message', async (raw, isBinary) => {
     try {
@@ -607,9 +616,12 @@ wss.on('connection', (ws) => {
         if (Buffer.isBuffer(raw) && raw.length >= 2) {
           const pcm = raw.length % 2 === 0 ? raw : raw.subarray(0, raw.length - 1);
           if (pcm.length >= 2) {
-            const sid = userSessionId || activeLiveSessionId;
+            // STRICT SESSION ISOLATION: Drop binary audio if socket has no bound sessionId
+            if (!userSessionId) {
+              return;
+            }
             if (sonioxService.isConfigured()) {
-              sonioxService.broadcastAudio(pcm, sid);
+              sonioxService.broadcastAudio(pcm, userSessionId);
             } else {
               sttService.sendAudioChunk(pcm);
             }
@@ -621,16 +633,15 @@ wss.on('connection', (ws) => {
       const msg = JSON.parse(raw.toString());
 
       if (msg.type === 'JOIN_ROOM') {
-        const requestedSessionId = msg.sessionId || activeLiveSessionId;
-        userRole = msg.role || 'attendee';
-        userLanguage = msg.language || 'en';
-
-        if (userRole === 'admin') {
-          activeLiveSessionId = requestedSessionId;
+        const requestedSessionId = msg.sessionId || userSessionId;
+        if (!requestedSessionId) {
+          console.warn('[WS] JOIN_ROOM received without sessionId; ignoring.');
+          return;
         }
+        userRole = msg.role || userRole || 'attendee';
+        userLanguage = msg.language || userLanguage || 'en';
 
         // Resolve canonical session ID via prefix/alias match (e.g. 'myo-youth' -> 'myo-youth-8f3a9e')
-        // This ensures attendees subscribe to the same room that Soniox broadcasts to.
         const resolvedSession = sessionManager.getSession(requestedSessionId);
         if (resolvedSession) {
           userSessionId = resolvedSession.id;
@@ -708,10 +719,10 @@ wss.on('connection', (ws) => {
         // Base64 audio chunk from browser WebRTC/MediaRecorder
         if (msg.base64Audio) {
           const audioBuffer = Buffer.from(msg.base64Audio, 'base64');
-          const sid = msg.sessionId || userSessionId || activeLiveSessionId;
-          if (sonioxService.isConfigured()) {
+          const sid = msg.sessionId || userSessionId;
+          if (sid && sonioxService.isConfigured()) {
             sonioxService.broadcastAudio(audioBuffer, sid);
-          } else {
+          } else if (sid) {
             sttService.sendAudioChunk(audioBuffer);
           }
         }
@@ -719,11 +730,12 @@ wss.on('connection', (ws) => {
 
       if (msg.type === 'DIRECT_SPEECH') {
         // Direct speech from browser Web Speech API
-        if (msg.text) {
+        if (msg.text && userSessionId) {
           sttService.emit('transcript', {
             text: msg.text,
             isFinal: true,
-            source: 'browser_mic'
+            source: 'browser_mic',
+            sessionId: userSessionId
           });
         }
       }

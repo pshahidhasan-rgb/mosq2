@@ -589,7 +589,11 @@ class SonioxGateManager extends EventEmitter {
     }
     if (pcmBuffer.length < 2) return;
 
-    const sid = sessionId || 'default';
+    if (!sessionId || sessionId === 'default') {
+      return;
+    }
+
+    const sid = sessionId;
 
     // Touch session inactivity timer
     this.touchSessionAudio(sid);
@@ -608,7 +612,7 @@ class SonioxGateManager extends EventEmitter {
 
     for (const [_, gate] of this.activeGates.entries()) {
       // STRICT SESSION ISOLATION: Never send audio to gates of another session!
-      if (sessionId && gate.sessionId !== sid) {
+      if (gate.sessionId !== sid) {
         continue;
       }
 
