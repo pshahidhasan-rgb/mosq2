@@ -1,12 +1,24 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" style="background:#030711; color:#ffffff; height:100%; margin:0; padding:0; overflow:hidden;">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Live Khutbah TV Display — Mishkah AI</title>
+  <script>
+    // ES3-safe TV runtime error logger: ensures any script error is visible on TV screen
+    window.onerror = function (msg, src, line, col) {
+      var el = document.getElementById('boot-err');
+      if (el) {
+        el.style.display = 'block';
+        el.innerHTML += (msg || 'Error') + ' (' + (line || 0) + ':' + (col || 0) + ')\n';
+      }
+      return false;
+    };
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"></noscript>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -22,9 +34,10 @@
 
     html, body {
       height: 100%;
+      background: #030711;
       background: var(--bg);
       color: #fff;
-      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
       overflow: hidden;
       user-select: none;
     }
@@ -294,12 +307,14 @@
       text-shadow: 0 0 25px rgba(255, 255, 255, 0.22);
     }
     #arabic-col .para-item.history {
+      font-size: 1.3rem;
       font-size: calc(clamp(1.1rem, 1.5vw, 1.45rem) * var(--tv-font-scale, 1));
       color: #ffffff;
       font-weight: 500;
       text-shadow: 0 0 25px rgba(255, 255, 255, 0.22);
     }
     #arabic-col .para-item.current {
+      font-size: 1.7rem;
       font-size: calc(clamp(1.4rem, 2.1vw, 2rem) * var(--tv-font-scale, 1));
       color: #ffffff;
       font-weight: 700;
@@ -316,12 +331,14 @@
       text-shadow: 0 0 25px rgba(255, 255, 255, 0.22);
     }
     #trans-col .para-item.history {
+      font-size: 1.1rem;
       font-size: calc(clamp(0.95rem, 1.25vw, 1.2rem) * var(--tv-font-scale, 1));
       color: #ffffff;
       font-weight: 500;
       text-shadow: 0 0 25px rgba(255, 255, 255, 0.22);
     }
     #trans-col .para-item.current {
+      font-size: 1.45rem;
       font-size: calc(clamp(1.2rem, 1.7vw, 1.65rem) * var(--tv-font-scale, 1));
       color: #ffffff;
       font-weight: 600;
@@ -519,8 +536,11 @@
       border-color: rgba(255, 255, 255, 0.38);
     }
   </style>
-</head>
-<body>
+<body style="background:#030711; color:#ffffff; height:100%; margin:0; padding:0; overflow:hidden;">
+
+  <!-- Visual TV Boot Status & Error Display -->
+  <div id="boot-msg" style="position:fixed; left:0; right:0; top:45%; text-align:center; font-size:26px; font-weight:600; color:#94a3b8; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; pointer-events:none; z-index:9998;">Connecting to live Khutbah display…</div>
+  <div id="boot-err" style="display:none; position:fixed; left:20px; right:20px; bottom:20px; padding:12px; background:#7f1d1d; color:#fff; font:14px monospace; white-space:pre-wrap; z-index:9999; border-radius:8px;"></div>
 
   <!-- Top Bar (Clean & Distraction-Free Normal TV Screen) -->
   <header id="topbar">

@@ -139,7 +139,7 @@ class TranslationService {
         results[lang] = translated;
       } catch (err) {
         console.warn(`[Translation] Error translating to ${lang}:`, err.message);
-        results[lang] = arabicText;
+        results[lang] = '';
       }
     });
 
@@ -231,7 +231,7 @@ class TranslationService {
             messages: [
               {
                 role: 'system',
-                content: `You are an expert Islamic Friday sermon (Khutbah) translator. Translate the Arabic text into ${langName} with the highest theological precision, dignity, and accuracy. Retain sacred terms (Allah, Taqwa, Ihsan, Akhirah) with reverent equivalents. Output ONLY the translated text without commentary or quotes.`
+                content: `You are an expert Islamic Friday sermon (Khutbah) translator. Translate the sermon text into ${langName} with the highest theological precision, dignity, and accuracy. If translating to Somali, you MUST output exclusively in standard Latin orthography (never Arabic script). Retain sacred terms (Allah, Taqwa, Ihsan, Akhirah) with reverent equivalents. Output ONLY the translated text without commentary or quotes.`
               },
               {
                 role: 'user',
@@ -264,7 +264,7 @@ class TranslationService {
       let googleLang = targetLang;
       if (targetLang === 'zh' || targetLang === 'zh-CN') googleLang = 'zh-CN';
       if (targetLang === 'zh-TW') googleLang = 'zh-TW';
-      const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=ar&tl=${googleLang}&dt=t&q=${encodeURIComponent(cleanText)}`);
+      const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${googleLang}&dt=t&q=${encodeURIComponent(cleanText)}`);
       if (res.ok) {
         const data = await res.json();
         const translated = data[0]?.map(item => item[0]).join('').trim();

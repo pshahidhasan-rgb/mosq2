@@ -31,6 +31,13 @@ const SONIOX_LANG_MAP = {
   'zh-TW': 'zh',  // Traditional Chinese → same Soniox zh gate (Mandarin model handles both scripts)
 };
 
+// Whitelist of translation target languages supported natively by Soniox.
+// Languages not in this list (e.g. 'so' Somali, 'uz' Uzbek) reject with HTTP 400
+// and are automatically translated via the server's neural translation pipeline.
+const SONIOX_SUPPORTED_TRANSLATION_LANGUAGES = new Set([
+  'en', 'tr', 'ur', 'bn', 'fr', 'zh', 'zh-TW', 'id', 'es', 'de', 'it', 'pt', 'ar', 'ru', 'ja', 'ko', 'hi'
+]);
+
 let s2t = null;
 try {
   s2t = require('chinese-s2t').s2t;
@@ -212,6 +219,11 @@ class SonioxGateManager extends EventEmitter {
     }
   }
 
+  isLanguageSupported(lang) {
+    if (!lang) return false;
+    return SONIOX_SUPPORTED_TRANSLATION_LANGUAGES.has(lang);
+  }
+
   /**
    * Ensures a dedicated Soniox WebSocket stream exists for a specific session and target language.
    * @param {string} sessionIdOrLang
@@ -224,10 +236,23 @@ class SonioxGateManager extends EventEmitter {
     const langCode = maybeLang || sessionIdOrLang;
     if (!langCode) return null;
 
+    if (!SONIOX_SUPPORTED_TRANSLATION_LANGUAGES.has(langCode)) {
+      // Do not open a Soniox gate for unsupported target languages (prevents 400 rejection loops)
+      return null;
+    }
+
     const gateKey = `${sid}:${langCode}`;
     const existing = this.activeGates.get(gateKey);
-    if (existing && (existing.status === 'open' || existing.status === 'connecting')) {
-      return existing;
+    if (existing) {
+      if (existing.status === 'open' || existing.status === 'connecting') {
+        return existing;
+      }
+      // If reconnecting or in error, cancel pending reconnect timer to prevent gate duplication
+      if (existing.reconnectTimer) {
+        clearTimeout(existing.reconnectTimer);
+        existing.reconnectTimer = null;
+      }
+      try { existing.ws && existing.ws.close(); } catch (_) {}
     }
 
     console.log(`[Soniox Gate] Opening dynamic gate for session "${sid}" target language: "${langCode}"...`);
@@ -329,7 +354,8 @@ class SonioxGateManager extends EventEmitter {
         const delay = Math.min(250 * Math.pow(2, gate.reconnectAttempts++), 5000);
         console.warn(`[Soniox Gate ${gate.gateKey}] WS Closed (${code}: ${reason || 'Blip'}); auto-reconnect in ${delay}ms...`);
 
-        setTimeout(() => {
+        gate.reconnectTimer = setTimeout(() => {
+          gate.reconnectTimer = null;
           if (!gate.closing && this.isOperational && this.activeGates.has(gate.gateKey)) {
             this.connectGate(gate);
           }
@@ -365,6 +391,16 @@ class SonioxGateManager extends EventEmitter {
         console.error('[Soniox] Balance exhausted. Disabling Soniox gates.');
         this.isOperational = false;
         this.closeAllGates();
+        return;
+      }
+      // If error is 400 or invalid target_language, close permanently without looping reconnects
+      if (data.error_code === 400 || (typeof data.error_message === 'string' && data.error_message.includes('target_language'))) {
+        console.warn(`[Soniox Gate ${gate.gateKey}] Unsupported language target "${gate.lang}". Closing gate permanently without reconnecting.`);
+        gate.closing = true;
+        gate.status = 'closed';
+        if (gate.reconnectTimer) clearTimeout(gate.reconnectTimer);
+        try { gate.ws.close(); } catch (_) {}
+        this.activeGates.delete(gate.gateKey);
         return;
       }
       // Non-fatal API error: close socket to trigger clean reconnect
@@ -566,11 +602,12 @@ class SonioxGateManager extends EventEmitter {
     if (this.sessionInactivityTimers.has(sid)) {
       clearTimeout(this.sessionInactivityTimers.get(sid));
     }
+    // 5-minute inactivity timeout so normal Khutbah pauses (sitting between sermons, quiet dua) never kill gates
     const timer = setTimeout(() => {
       this.sessionInactivityTimers.delete(sid);
-      console.log(`[Soniox] Inactivity timeout: 30s with no audio for session "${sid}". Closing its gates ($0 cost).`);
+      console.log(`[Soniox] Inactivity timeout: 5 minutes of silence for session "${sid}". Closing gates.`);
       this.closeSessionGates(sid);
-    }, 30000);
+    }, 300000);
     this.sessionInactivityTimers.set(sid, timer);
   }
 
@@ -598,7 +635,7 @@ class SonioxGateManager extends EventEmitter {
     // Touch session inactivity timer
     this.touchSessionAudio(sid);
 
-    // If no gate exists yet for this session, open default 'en' gate on-demand
+    // If no gate exists yet for this session (e.g. after pause or fresh start), request full resync
     let sessionHasGates = false;
     for (const [_, gate] of this.activeGates.entries()) {
       if (gate.sessionId === sid) {
@@ -607,6 +644,7 @@ class SonioxGateManager extends EventEmitter {
       }
     }
     if (!sessionHasGates) {
+      this.emit('session_needs_sync', sid);
       this.ensureGate(sid, 'en');
     }
 
@@ -651,6 +689,10 @@ class SonioxGateManager extends EventEmitter {
     gate.closing = true;
     clearInterval(gate.keepaliveTimer);
     if (gate.emitTimer) clearTimeout(gate.emitTimer);
+    if (gate.reconnectTimer) {
+      clearTimeout(gate.reconnectTimer);
+      gate.reconnectTimer = null;
+    }
 
     // Commit any remaining text before closing
     this.commit(gate, 'gate-close', true);

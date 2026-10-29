@@ -1,5 +1,125 @@
 [
   {
+    "id": "hist_test-session-live_1793274367885",
+    "sessionId": "test-session-live",
+    "mosqueName": "Test Masjid",
+    "startedAt": "2026-10-29T11:46:07.809Z",
+    "endedAt": "2026-10-29T11:46:07.845Z",
+    "dateDisplay": "Oct 29, 2026",
+    "timeDisplay": "05:46 PM",
+    "durationSeconds": 0,
+    "durationDisplay": "0s",
+    "totalTranscripts": 3,
+    "totalAyahsDetected": 1,
+    "totalAttendance": 2,
+    "attendance": {
+      "total": 2,
+      "phoneAttendees": 1,
+      "computerDisplays": 1
+    },
+    "phoneAttendees": 1,
+    "computerDisplays": 1,
+    "tvLanguage": "en",
+    "transcripts": [
+      {
+        "original": "إن الحمد لله نحمده ونستعينه ونستغفره",
+        "translation": "All praise is due to Allah; we praise Him, seek His help, and ask for His forgiveness.",
+        "timestamp": "2026-10-29T11:46:07.833Z"
+      },
+      {
+        "original": "فإن مع العسر يسرا",
+        "translation": "For indeed, with hardship [will be] ease.",
+        "timestamp": "2026-10-29T11:46:07.837Z"
+      },
+      {
+        "original": "إن الحمد لله نحمده ونستعينه ونستغفره",
+        "translation": "All praise is due to Allah; we praise Him, seek His help, and ask for His forgiveness.",
+        "timestamp": "2026-10-29T11:46:07.844Z"
+      }
+    ],
+    "createdAt": "2026-10-29T11:46:07.845Z"
+  },
+  {
+    "id": "hist_test-session-live_1793274260600",
+    "sessionId": "test-session-live",
+    "mosqueName": "Test Masjid",
+    "startedAt": "2026-10-29T11:44:20.509Z",
+    "endedAt": "2026-10-29T11:44:20.543Z",
+    "dateDisplay": "Oct 29, 2026",
+    "timeDisplay": "05:44 PM",
+    "durationSeconds": 0,
+    "durationDisplay": "0s",
+    "totalTranscripts": 3,
+    "totalAyahsDetected": 1,
+    "totalAttendance": 2,
+    "attendance": {
+      "total": 2,
+      "phoneAttendees": 1,
+      "computerDisplays": 1
+    },
+    "phoneAttendees": 1,
+    "computerDisplays": 1,
+    "tvLanguage": "en",
+    "transcripts": [
+      {
+        "original": "إن الحمد لله نحمده ونستعينه ونستغفره",
+        "translation": "All praise is due to Allah; we praise Him, seek His help, and ask for His forgiveness.",
+        "timestamp": "2026-10-29T11:44:20.531Z"
+      },
+      {
+        "original": "فإن مع العسر يسرا",
+        "translation": "For indeed, with hardship [will be] ease.",
+        "timestamp": "2026-10-29T11:44:20.536Z"
+      },
+      {
+        "original": "إن الحمد لله نحمده ونستعينه ونستغفره",
+        "translation": "All praise is due to Allah; we praise Him, seek His help, and ask for His forgiveness.",
+        "timestamp": "2026-10-29T11:44:20.543Z"
+      }
+    ],
+    "createdAt": "2026-10-29T11:44:20.543Z"
+  },
+  {
+    "id": "hist_test-session-live_1793273453593",
+    "sessionId": "test-session-live",
+    "mosqueName": "Test Masjid",
+    "startedAt": "2026-10-29T11:30:53.523Z",
+    "endedAt": "2026-10-29T11:30:53.559Z",
+    "dateDisplay": "Oct 29, 2026",
+    "timeDisplay": "05:30 PM",
+    "durationSeconds": 0,
+    "durationDisplay": "0s",
+    "totalTranscripts": 3,
+    "totalAyahsDetected": 1,
+    "totalAttendance": 2,
+    "attendance": {
+      "total": 2,
+      "phoneAttendees": 1,
+      "computerDisplays": 1
+    },
+    "phoneAttendees": 1,
+    "computerDisplays": 1,
+    "tvLanguage": "en",
+    "transcripts": [
+      {
+        "original": "إن الحمد لله نحمده ونستعينه ونستغفره",
+        "translation": "All praise is due to Allah; we praise Him, seek His help, and ask for His forgiveness.",
+        "timestamp": "2026-10-29T11:30:53.545Z"
+      },
+      {
+        "original": "فإن مع العسر يسرا",
+        "translation": "For indeed, with hardship [will be] ease.",
+        "timestamp": "2026-10-29T11:30:53.550Z"
+      },
+      {
+        "original": "إن الحمد لله نحمده ونستعينه ونستغفره",
+        "translation": "All praise is due to Allah; we praise Him, seek His help, and ask for His forgiveness.",
+        "timestamp": "2026-10-29T11:30:53.558Z"
+      }
+    ],
+    "createdAt": "2026-10-29T11:30:53.559Z"
+  },
+  {
     "id": "hist_myo-youth-8f3a9e_1792754039923",
     "sessionId": "myo-youth-8f3a9e",
     "mosqueName": "MYO Youth Center",

@@ -211,6 +211,16 @@ sessionManager.on('languages_updated', ({ sessionId, languages }) => {
   }
 });
 
+// Re-synchronize gates when incoming audio resumes after pause/silence
+sonioxService.on('session_needs_sync', (sessionId) => {
+  if (sonioxService.isConfigured() && sessionId) {
+    const session = sessionManager.getSession(sessionId);
+    if (session && session.activatedLanguages) {
+      sonioxService.syncGates(sessionId, session.activatedLanguages);
+    }
+  }
+});
+
 // Broadcast real-time streaming tokens (sub-200ms word-by-word) strictly to the target session room
 sonioxService.on('token_stream', ({ sessionId, lang, translatedChunk, originalChunk, originalFull, translatedFull, isReplacement, isFinal, seq, timestamp }) => {
   if (!sessionId || sessionId === 'default') return;
@@ -263,6 +273,35 @@ sonioxService.on('sentence_finalized', ({ sessionId, lang, translatedText, final
       timestamp: ts
     };
     session.transcripts.push(existing);
+  }
+
+  // Translate for any active session languages not covered by Soniox (e.g. Somali 'so', Uzbek 'uz')
+  const nonSonioxLangs = Array.from(session.activatedLanguages || []).filter(
+    l => !sonioxService.isLanguageSupported(l) && (!existing.translations || !existing.translations[l])
+  );
+  if (nonSonioxLangs.length > 0) {
+    const srcText = originalText || resolvedTranslation;
+    if (srcText && srcText.trim()) {
+      translationService.translateMultiple(srcText, nonSonioxLangs).then(results => {
+        if (!existing.translations) existing.translations = {};
+        for (const [nl, nText] of Object.entries(results)) {
+          if (nText && nText.trim()) {
+            existing.translations[nl] = nText;
+            sessionManager.broadcastStreamingToken(sessionId, {
+              lang: nl,
+              translatedChunk: nText,
+              originalChunk: originalText || '',
+              originalFull: originalText || '',
+              translatedFull: nText,
+              isReplacement: true,
+              isFinal: true,
+              seq: existing.seq,
+              timestamp: ts
+            });
+          }
+        }
+      }).catch(err => console.warn('[Non-Soniox AutoTranslate] Error:', err.message));
+    }
   }
 
   // Also broadcast to admin panel of that specific session
@@ -322,12 +361,20 @@ async function backfillSessionHistory(sessionId, targetLang) {
 
   await Promise.all(tasks);
 
-  // Broadcast backfilled history to all clients in the session room
-  sessionManager.broadcastToSession(session.id, {
-    type: 'SESSION_HISTORY_BACKFILL',
-    lang: targetLang,
-    transcripts: session.transcripts
-  });
+  // Broadcast backfilled history strictly to clients subscribed to targetLang or admin
+  const subs = sessionManager.subscribers.get(session.id);
+  if (subs) {
+    const payload = JSON.stringify({
+      type: 'SESSION_HISTORY_BACKFILL',
+      lang: targetLang,
+      transcripts: session.transcripts
+    });
+    for (const sub of subs) {
+      if (sub.ws && sub.ws.readyState === 1 && (sub.language === targetLang || sub.role === 'admin')) {
+        try { sub.ws.send(payload); } catch (_) {}
+      }
+    }
+  }
 }
 
 // Automatically trigger backfill when any client activates a language

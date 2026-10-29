@@ -407,7 +407,7 @@ class SessionManager extends EventEmitter {
 
     if (role === 'tv' && language) {
       const session = this.getSession(sessionId);
-      if (session) session.tvLanguage = language;
+      if (session && !session.tvLanguage) session.tvLanguage = language;
     }
 
     if (language && role !== 'admin') {
@@ -429,10 +429,6 @@ class SessionManager extends EventEmitter {
         if (deviceType) sub.deviceType = deviceType;
         if (language) {
           sub.language = language;
-          if (sub.role === 'tv') {
-            const session = this.getSession(sessionId);
-            if (session) session.tvLanguage = language;
-          }
           if (sub.role !== 'admin') {
             this.activateLanguage(sessionId, language);
           }
@@ -457,7 +453,7 @@ class SessionManager extends EventEmitter {
     });
     if (role === 'tv' && language) {
       const session = this.getSession(sessionId);
-      if (session) session.tvLanguage = language;
+      if (session && !session.tvLanguage) session.tvLanguage = language;
     }
     if (language && role !== 'admin') {
       this.activateLanguage(sessionId, language);
@@ -500,10 +496,6 @@ class SessionManager extends EventEmitter {
     for (const sub of subs) {
       if (sub.ws === ws) {
         sub.language = newLanguage;
-        if (sub.role === 'tv') {
-          const session = this.getSession(sessionId);
-          if (session) session.tvLanguage = newLanguage;
-        }
         if (sub.role !== 'admin') {
           this.activateLanguage(sessionId, newLanguage);
         }

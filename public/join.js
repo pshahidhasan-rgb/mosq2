@@ -2,9 +2,24 @@
 // Continuous manuscript view · persistent history · first-sentence-reliable audio
 'use strict';
 
-const urlParams = new URLSearchParams(window.location.search);
-const sessionId = urlParams.get('session') || 'myo-youth';
-let currentLanguage = urlParams.get('lang') || 'en';
+function getQueryParam(name) {
+  if (typeof window !== 'undefined' && window.location) {
+    if (window.URLSearchParams) {
+      try {
+        var p = new URLSearchParams(window.location.search);
+        return p.get(name);
+      } catch (_) {}
+    }
+    var regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)');
+    var results = regex.exec(window.location.search);
+    if (!results || !results[2]) return null;
+    return decodeURIComponent(results[2].replace(/\+/g, ' '));
+  }
+  return null;
+}
+
+const sessionId = getQueryParam('session') || 'myo-youth';
+let currentLanguage = getQueryParam('lang') || 'en';
 let currentMosqueName = 'Live Sermon';
 
 const LANGUAGES = [
@@ -121,6 +136,8 @@ function registerAlias(key, obj) {
   if (obj && obj.seq) keyAlias.set(`seq_${obj.seq}`, key);
 }
 
+const hasArabicScript = (text) => /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/.test(text || '');
+
 // ═════════════════════════════════════════════
 // TEXT EXTRACTION
 // ═════════════════════════════════════════════
@@ -133,9 +150,16 @@ function pickText(item, lang) {
     if (item.ayah.translation) return item.ayah.translation;
   }
   if (item.translations && typeof item.translations === 'object') {
-    return item.translations[lang] || item.translations.en || Object.values(item.translations)[0] || '';
+    if (item.translations[lang]) return item.translations[lang];
+    if (item.translations.en) return item.translations.en;
+    const firstVal = Object.values(item.translations)[0];
+    if (firstVal && !hasArabicScript(firstVal)) return firstVal;
+    return '';
   }
-  return item.translated || item.text || item.arabic || '';
+  if (item.translated) return item.translated;
+  if (item.text && !hasArabicScript(item.text)) return item.text;
+  if (lang === 'ar' || lang === 'auto') return item.arabic || '';
+  return '';
 }
 
 // ═════════════════════════════════════════════
@@ -243,31 +267,51 @@ if ('speechSynthesis' in window) {
   window.speechSynthesis.onvoiceschanged = loadVoices;
 }
 
+function hasVoiceForLang(langCode) {
+  if (!cachedVoices.length) loadVoices();
+  const targetPrefix = (langCode || 'en').toLowerCase().split('-')[0];
+  return cachedVoices.some(v => (v.lang || '').toLowerCase().replace('_', '-').startsWith(targetPrefix));
+}
+
 function getBestVoice(langCode) {
   if (!cachedVoices.length) loadVoices();
   const targetPrefix = (langCode || 'en').toLowerCase().split('-')[0];
   const matching = cachedVoices.filter(v => (v.lang || '').toLowerCase().replace('_', '-').startsWith(targetPrefix));
-  const pool = matching.length ? matching : cachedVoices;
+  if (!matching.length) return null; // Avoid returning unrelated language voice
 
-  for (const voice of pool) {
+  for (const voice of matching) {
     const nameLower = voice.name.toLowerCase();
     const isMale = MALE_VOICE_KEYWORDS.some(kw => nameLower.includes(kw));
     const isFemale = FEMALE_VOICE_KEYWORDS.some(kw => nameLower.includes(kw));
     if (isMale && !isFemale) return voice;
   }
-  return pool[0] || null;
+  return matching[0] || null;
 }
 
 function startBluetoothKeepAlive() {
   try {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      audioCtx.onstatechange = () => {
+        if (audioCtx && (audioCtx.state === 'suspended' || audioCtx.state === 'interrupted')) {
+          audioCtx.resume().catch(() => {});
+        }
+      };
+    }
+    if (audioCtx.state === 'suspended' || audioCtx.state === 'interrupted') {
+      audioCtx.resume().catch(() => {});
+    }
 
     if (!keepAliveSource) {
-      // 2 seconds of silent buffer looped indefinitely to keep Bluetooth DAC awake
-      const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 2, audioCtx.sampleRate);
+      // 2 seconds of ultra-low sub-audible 40Hz carrier tone to keep Bluetooth A2DP DAC active
+      const sampleRate = audioCtx.sampleRate || 44100;
+      const buffer = audioCtx.createBuffer(1, sampleRate * 2, sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        data[i] = Math.sin((2 * Math.PI * 40 * i) / sampleRate) * 0.0001;
+      }
       const gainNode = audioCtx.createGain();
-      gainNode.gain.value = 0.001; // Whisper prevents Bluetooth sleep without audible sound
+      gainNode.gain.value = 0.002;
 
       keepAliveSource = audioCtx.createBufferSource();
       keepAliveSource.buffer = buffer;
@@ -303,15 +347,26 @@ function stopBluetoothKeepAlive() {
 }
 
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && isAudioEnabled) {
-    if (audioCtx && audioCtx.state === 'suspended') {
-      audioCtx.resume().catch(() => {});
+  if (!document.hidden) {
+    // 1. Recover WebSocket if phone suspended it while screen was locked
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      console.log('[Mobile] Visibility recovered: reconnecting WebSocket...');
+      connectWebSocket();
     }
-    if ('speechSynthesis' in window && window.speechSynthesis.paused) {
-      window.speechSynthesis.resume();
-    }
-    if (!isPlayingAudio && audioQueue.length > 0) {
-      processAudioQueue();
+    // 2. Fetch any missing transcripts that occurred while screen was locked
+    fetchBackfillAttendee(currentLanguage);
+
+    // 3. Resume audio if enabled
+    if (isAudioEnabled) {
+      if (audioCtx && (audioCtx.state === 'suspended' || audioCtx.state === 'interrupted')) {
+        audioCtx.resume().catch(() => {});
+      }
+      if ('speechSynthesis' in window && window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+      if (!isPlayingAudio && audioQueue.length > 0) {
+        processAudioQueue();
+      }
     }
   }
 });
@@ -334,6 +389,15 @@ function processAudioQueue() {
 
   const item = audioQueue.shift();
   isPlayingAudio = true;
+
+  if (!hasVoiceForLang(item.lang)) {
+    if (playerSubtitle && isAudioEnabled) {
+      playerSubtitle.textContent = `Audio unavailable for ${getLangName(item.lang)} on this device`;
+    }
+    isPlayingAudio = false;
+    setTimeout(processAudioQueue, 50);
+    return;
+  }
 
   try {
     window.speechSynthesis.resume();
@@ -578,11 +642,24 @@ function updateMobileStatus(status, mosqueName) {
 // WEBSOCKET & BACKGROUND SYNC (Zero-Wipe Guarantee)
 // ═════════════════════════════════════════════
 let heartbeatInterval = null;
+let lastWsMessageAt = Date.now();
 
 function startAttendeeHeartbeat() {
   if (heartbeatInterval) clearInterval(heartbeatInterval);
   heartbeatInterval = setInterval(() => {
-    if (ws && ws.readyState === WebSocket.OPEN) {
+    // If socket is closed or dead, reconnect immediately
+    if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+      connectWebSocket();
+      return;
+    }
+    // Detect half-open mobile TCP connection if no message for >35s
+    if (Date.now() - lastWsMessageAt > 35000) {
+      console.warn('[Mobile] Socket stale >35s. Reconnecting...');
+      try { ws.close(); } catch (_) {}
+      connectWebSocket();
+      return;
+    }
+    if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({
         type: 'HEARTBEAT',
         sessionId,
@@ -606,10 +683,14 @@ function startAttendeeHeartbeat() {
 }
 
 function connectWebSocket() {
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+    return;
+  }
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   ws = new WebSocket(`${protocol}//${window.location.host}/ws?session=${encodeURIComponent(sessionId)}&role=attendee&lang=${encodeURIComponent(currentLanguage)}`);
 
   ws.onopen = () => {
+    lastWsMessageAt = Date.now();
     ws.send(JSON.stringify({
       type: 'JOIN_ROOM',
       sessionId,
@@ -623,6 +704,7 @@ function connectWebSocket() {
 
   ws.onmessage = (event) => {
     try {
+      lastWsMessageAt = Date.now();
       const data = JSON.parse(event.data);
       if (data.type === 'SESSION_STATUS') {
         updateMobileStatus(data.status, data.mosqueName);
@@ -635,6 +717,7 @@ function connectWebSocket() {
         updateMobileStatus('ended', 'Session Concluded');
       }
       if (data.type === 'SESSION_HISTORY_BACKFILL') {
+        if (data.lang && data.lang !== currentLanguage) return;
         if (data.transcripts) {
           applyBackfillToSegments(data.transcripts);
         }

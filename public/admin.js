@@ -848,7 +848,13 @@ async function startMicrophone() {
       muteGain.connect(audioContext.destination);
 
       micAudioProcessor.onaudioprocess = (e) => {
-        if (sessionStatus !== 'active' || !ws || ws.readyState !== WebSocket.OPEN || !currentSessionId) return;
+        if (sessionStatus !== 'active' || !currentSessionId) return;
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          if (!ws || ws.readyState === WebSocket.CLOSED) {
+            connectWebSocket(currentSessionId);
+          }
+          return;
+        }
         const inputData = e.inputBuffer.getChannelData(0);
         const inputSampleRate = audioContext.sampleRate;
         const pcm16 = downsampleTo16kPCM(inputData, inputSampleRate);
@@ -1125,6 +1131,22 @@ function updateStatsDisplay(stats) {
 }
 
 // ─── WEBSOCKET CONNECTION ───
+let adminHeartbeatTimer = null;
+function startAdminHeartbeat(sessionId) {
+  if (adminHeartbeatTimer) clearInterval(adminHeartbeatTimer);
+  adminHeartbeatTimer = setInterval(() => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.send(JSON.stringify({
+          type: 'HEARTBEAT',
+          sessionId,
+          role: 'admin'
+        }));
+      } catch (_) {}
+    }
+  }, 10000);
+}
+
 function connectWebSocket(sessionId) {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   ws = new WebSocket(`${protocol}//${window.location.host}/ws?session=${encodeURIComponent(sessionId)}&role=admin`);
@@ -1135,6 +1157,7 @@ function connectWebSocket(sessionId) {
       sessionId,
       role: 'admin'
     }));
+    startAdminHeartbeat(sessionId);
   };
 
   ws.onmessage = (event) => {
@@ -1169,7 +1192,8 @@ function connectWebSocket(sessionId) {
   };
 
   ws.onclose = () => {
-    setTimeout(() => connectWebSocket(sessionId), 3000);
+    if (adminHeartbeatTimer) clearInterval(adminHeartbeatTimer);
+    setTimeout(() => connectWebSocket(sessionId), 2500);
   };
 }
 

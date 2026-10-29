@@ -1,6 +1,21 @@
-// MosqAI - Live TV Split-Screen Script (Enhanced with Dropdown, Safe QR & History Persistence)
-const urlParams = new URLSearchParams(window.location.search);
-const sessionId = urlParams.get('session') || 'myo-youth';
+// MosqAI - Live TV Split-Screen Script (Enhanced with Safe Fallback for Smart TVs)
+function getQueryParam(name) {
+  if (typeof window !== 'undefined' && window.location) {
+    if (window.URLSearchParams) {
+      try {
+        var p = new URLSearchParams(window.location.search);
+        return p.get(name);
+      } catch (_) {}
+    }
+    var regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)');
+    var results = regex.exec(window.location.search);
+    if (!results || !results[2]) return null;
+    return decodeURIComponent(results[2].replace(/\+/g, ' '));
+  }
+  return null;
+}
+
+const sessionId = getQueryParam('session') || 'myo-youth';
 
 const VALID_LANGS = ['en', 'uz', 'tr', 'ur', 'bn', 'fr', 'zh', 'zh-TW', 'id', 'so'];
 const VALID_SOURCE_LANGS = ['auto', 'ar', 'en', 'uz', 'tr', 'ur', 'bn', 'fr', 'zh', 'zh-TW', 'id', 'so'];
@@ -8,8 +23,9 @@ let userExplicitlySelectedLang = false;
 
 // Determine initial translation target language:
 let targetLang = 'en';
-if (urlParams.get('lang') && VALID_LANGS.includes(urlParams.get('lang'))) {
-  targetLang = urlParams.get('lang');
+const urlLang = getQueryParam('lang');
+if (urlLang && VALID_LANGS.includes(urlLang)) {
+  targetLang = urlLang;
   userExplicitlySelectedLang = true;
 } else {
   try {
@@ -23,8 +39,9 @@ if (urlParams.get('lang') && VALID_LANGS.includes(urlParams.get('lang'))) {
 
 // Determine initial source (speech) language:
 let sourceLang = 'auto'; // Default: Detect Any
-if (urlParams.get('sourceLang') && VALID_SOURCE_LANGS.includes(urlParams.get('sourceLang'))) {
-  sourceLang = urlParams.get('sourceLang');
+const urlSource = getQueryParam('sourceLang');
+if (urlSource && VALID_SOURCE_LANGS.includes(urlSource)) {
+  sourceLang = urlSource;
 } else {
   try {
     const savedSource = localStorage.getItem('mosq_tv_source_lang');
@@ -36,7 +53,7 @@ if (urlParams.get('sourceLang') && VALID_SOURCE_LANGS.includes(urlParams.get('so
 
 // Determine initial screen layout mode (Dual Screen Split vs Translation Only):
 let screenMode = 'split'; // Default: Dual Screen (Split)
-const urlMode = urlParams.get('mode');
+const urlMode = getQueryParam('mode');
 if (urlMode === 'translation-only' || urlMode === 'trans-only' || urlMode === 'single') {
   screenMode = 'translation-only';
 } else if (urlMode === 'split' || urlMode === 'dual') {
@@ -278,13 +295,6 @@ function applyTvFontSize(fontSize, customCapacity = null, shouldScroll = true) {
   }
 }
 
-// Restore saved font size from localStorage if available
-try {
-  const savedTvSize = localStorage.getItem('mosq_tv_font_size');
-  const savedTvCap = localStorage.getItem('mosq_tv_capacity');
-  if (savedTvSize) applyTvFontSize(savedTvSize, savedTvCap, false);
-} catch (e) {}
-
 // History queue for re-rendering when user switches language
 const recentFeedItems = [];
 // Ayah overlay disabled
@@ -302,6 +312,13 @@ const screenModeSelect = document.getElementById('screen-mode-select');
 const arabicCol = document.getElementById('arabic-col');
 const arabicFeed = document.getElementById('arabic-feed');
 const transFeed = document.getElementById('trans-feed');
+
+// Restore saved font size from localStorage if available
+try {
+  const savedTvSize = localStorage.getItem('mosq_tv_font_size');
+  const savedTvCap = localStorage.getItem('mosq_tv_capacity');
+  if (savedTvSize) applyTvFontSize(savedTvSize, savedTvCap, false);
+} catch (e) {}
 
 function updateSourceColumnStyling() {
   if (!arabicCol) return;
@@ -576,7 +593,7 @@ function reRenderTranslationFeed() {
       pTrans.className = `para-item ${isCurrent ? 'current' : 'history'}`;
       let text = '';
       if (item.transObj && typeof item.transObj === 'object') {
-        text = item.transObj[targetLang] || item.transObj.en || Object.values(item.transObj)[0] || '';
+        text = item.transObj[targetLang] || item.transObj.en || '';
       } else {
         text = item.transObj || '';
       }
@@ -664,7 +681,7 @@ function appendToFeed(arabicText, transObj, isLive = true) {
   // 2. Translation Column
   let displayTrans = '';
   if (typeof transObj === 'object' && transObj !== null) {
-    displayTrans = transObj[targetLang] || transObj.en || Object.values(transObj)[0] || '';
+    displayTrans = transObj[targetLang] || transObj.en || '';
   } else {
     displayTrans = transObj || '';
   }
@@ -718,7 +735,7 @@ function handleIncomingSpeech({ arabic, translations, translated, ayah, timestam
 
   let displayTrans = '';
   if (typeof transObj === 'object' && transObj !== null) {
-    displayTrans = transObj[targetLang] || transObj.en || Object.values(transObj)[0] || '';
+    displayTrans = transObj[targetLang] || transObj.en || '';
   } else {
     displayTrans = transObj || '';
   }
@@ -781,8 +798,15 @@ function handleStreamingToken({
   originalFull = '',
   translatedFull = '',
   isReplacement = false,
-  isFinal = false
+  isFinal = false,
+  seq = 0,
+  timestamp = null
 }) {
+  // STRICT TV LANGUAGE FILTER: TV only renders streaming tokens matching its own selected target language!
+  if (lang && lang !== targetLang) {
+    return;
+  }
+
   // Clear idle placeholders as soon as live streaming tokens arrive
   const phA = arabicFeed ? arabicFeed.querySelector('.idle-placeholder') : null;
   if (phA) phA.remove();
@@ -935,6 +959,9 @@ async function initSession() {
   try {
     const res = await fetch(`/api/session/${sessionId}`);
     if (res.ok) {
+      const bMsg = document.getElementById('boot-msg');
+      if (bMsg) bMsg.style.display = 'none';
+
       const data = await res.json();
       if (data.mosqueName) currentMosqueName = data.mosqueName;
       updateTVStatusUI(data.status, data.mosqueName);
@@ -959,7 +986,7 @@ async function initSession() {
 
       // Adopt TV language from session (or URL param if provided)
       const sessionTvLang = data.tvLanguage || data.primaryLanguage;
-      if (sessionTvLang && VALID_LANGS.includes(sessionTvLang) && !urlParams.get('lang')) {
+      if (sessionTvLang && VALID_LANGS.includes(sessionTvLang) && !getQueryParam('lang')) {
         targetLang = sessionTvLang;
         if (targetLangSelect) targetLangSelect.value = targetLang;
         initQRCode();
@@ -1055,18 +1082,18 @@ function connectWebSocket() {
         }
       }
       if (data.type === 'JOINED_SUCCESS' && data.session) {
-        if (data.session.sourceLanguage && !urlParams.get('sourceLang')) {
+        if (data.session.sourceLanguage && !getQueryParam('sourceLang')) {
           sourceLang = data.session.sourceLanguage;
           if (sourceLangSelect) sourceLangSelect.value = sourceLang;
           try { localStorage.setItem('mosq_tv_source_lang', sourceLang); } catch (e) {}
           updateSourceColumnStyling();
         }
-        if (data.session.tvLanguage && !urlParams.get('lang')) {
+        if (data.session.tvLanguage && !getQueryParam('lang')) {
           targetLang = data.session.tvLanguage;
           if (targetLangSelect) targetLangSelect.value = targetLang;
           initQRCode();
         }
-        if (data.session.tvScreenMode && !urlParams.get('mode')) {
+        if (data.session.tvScreenMode && !getQueryParam('mode')) {
           applyScreenMode(data.session.tvScreenMode);
         }
         if (data.session.tvFontSize) applyTvFontSize(data.session.tvFontSize, data.session.tvCapacity, false);
@@ -1111,6 +1138,7 @@ function connectWebSocket() {
         }
       }
       if (data.type === 'SESSION_HISTORY_BACKFILL') {
+        if (data.lang && data.lang !== targetLang) return;
         if (data.transcripts) {
           applyTranscriptsToFeed(data.transcripts);
         }
