@@ -74,6 +74,8 @@ class SessionManager extends EventEmitter {
       mosqueName,
       primaryLanguage,
       tvLanguage: primaryLanguage || 'en', // Display TV target language
+      tvScreenMode: 'split', // 'split' | 'translation-only'
+      sourceLanguage: 'auto', // Spoken input speech language
       tvFontSize: 'medium', // 'small' | 'medium' | 'large' | 'xlarge'
       tvCapacity: 12, // 3X previous capacity (was 4, now 12 lines)
       tvAudioEnabled: false, // Default: OFF (Admin controlled)
@@ -128,7 +130,7 @@ class SessionManager extends EventEmitter {
     return session;
   }
 
-  updateTvSettings(sessionId, { fontSize, capacity, audioEnabled, showQr } = {}) {
+  updateTvSettings(sessionId, { fontSize, capacity, audioEnabled, showQr, tvTargetLang, tvScreenMode, sourceLanguage } = {}) {
     const session = this.getSession(sessionId);
     if (!session) return null;
     if (fontSize !== undefined && fontSize !== null) {
@@ -143,12 +145,26 @@ class SessionManager extends EventEmitter {
     if (showQr !== undefined && showQr !== null) {
       session.tvShowQr = Boolean(showQr);
     }
+    if (tvTargetLang !== undefined && tvTargetLang !== null) {
+      session.tvLanguage = tvTargetLang;
+      session.primaryLanguage = tvTargetLang;
+      this.activateLanguage(session.id, tvTargetLang);
+    }
+    if (tvScreenMode !== undefined && tvScreenMode !== null) {
+      session.tvScreenMode = tvScreenMode;
+    }
+    if (sourceLanguage !== undefined && sourceLanguage !== null) {
+      session.sourceLanguage = sourceLanguage;
+    }
     this.broadcastToSession(sessionId, {
       type: 'TV_SETTINGS_UPDATE',
       tvFontSize: session.tvFontSize,
       tvCapacity: session.tvCapacity,
       tvAudioEnabled: session.tvAudioEnabled,
-      tvShowQr: session.tvShowQr !== undefined ? session.tvShowQr : true
+      tvShowQr: session.tvShowQr !== undefined ? session.tvShowQr : true,
+      tvTargetLang: session.tvLanguage,
+      tvScreenMode: session.tvScreenMode || 'split',
+      sourceLanguage: session.sourceLanguage || 'auto'
     });
     return session;
   }

@@ -522,61 +522,20 @@
 </head>
 <body>
 
-  <!-- Top Bar -->
+  <!-- Top Bar (Clean & Distraction-Free Normal TV Screen) -->
   <header id="topbar">
-    <!-- Left: Source (Speech) Language Dropdown -->
-    <div class="source-dropdown-wrapper">
-      <span class="source-mic-icon" title="Source Language">🎙️</span>
-      <select id="source-lang-select" class="source-select-dropdown" aria-label="Select TV Source Language">
-        <option value="auto">Detect Any</option>
-        <option value="ar">Arabic (العربية)</option>
-        <option value="en">English</option>
-        <option value="uz">Uzbek (O‘zbekcha)</option>
-        <option value="tr">Turkish (Türkçe)</option>
-        <option value="ur">Urdu (اردو)</option>
-        <option value="bn">Bengali (বাংলা)</option>
-        <option value="fr">French (Français)</option>
-        <option value="zh">Chinese Mandarin (中文 普通话)</option>
-        <option value="zh-TW">Traditional Chinese (中文 繁體)</option>
-        <option value="id">Indonesian (Bahasa)</option>
-        <option value="so">Somali (Soomaali)</option>
-      </select>
-    </div>
+    <div style="min-width: 100px;"></div>
 
-    <!-- Center: Mosque Brand & Screen Layout Switcher (Separated a little below the name) -->
+    <!-- Center: Mosque Brand -->
     <div class="center-brand-wrapper">
       <div class="center-brand">
         <div class="brand-icon">🕌</div>
         <div id="mosque-name">MYO YOUTH CENTER</div>
       </div>
-      <div class="screen-mode-dropdown-wrapper">
-        <span class="screen-icon" title="Screen Layout">🖥️</span>
-        <select id="screen-mode-select" class="screen-select-dropdown" aria-label="Select Screen Layout">
-          <option value="split">Dual Screen (Split)</option>
-          <option value="translation-only">Translation Only</option>
-        </select>
-      </div>
     </div>
 
-    <!-- Right Controls: Translation Language & Fullscreen -->
+    <!-- Right: Fullscreen Toggle -->
     <div class="right-controls-wrapper">
-      <div class="lang-dropdown-wrapper">
-        <span class="live-dot" id="live-dot-indicator"></span>
-        <select id="target-lang-select" class="lang-select-dropdown" aria-label="Select TV Translation Language">
-          <option value="en">English</option>
-          <option value="uz">Uzbek (O‘zbekcha)</option>
-          <option value="tr">Turkish (Türkçe)</option>
-          <option value="ur">Urdu (اردو)</option>
-          <option value="bn">Bengali (বাংলা)</option>
-          <option value="fr">French (Français)</option>
-          <option value="zh">Chinese Mandarin (中文 普通话)</option>
-          <option value="zh-TW">Traditional Chinese (中文 繁體)</option>
-          <option value="id">Indonesian (Bahasa)</option>
-          <option value="so">Somali (Soomaali)</option>
-        </select>
-      </div>
-
-      <!-- Fullscreen Button -->
       <button id="btn-fullscreen" onclick="toggleFullscreen()" title="Toggle Fullscreen">⛶ Fullscreen</button>
     </div>
   </header>

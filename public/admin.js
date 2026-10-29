@@ -1046,6 +1046,11 @@ async function initConsoleSession(sessionId) {
       if (data.tvFontSize) syncTvFontSizeUI(data.tvFontSize, data.tvCapacity);
       if (data.tvAudioEnabled !== undefined) syncTvAudioUI(data.tvAudioEnabled);
       if (data.tvShowQr !== undefined) syncTvQrUI(data.tvShowQr);
+      syncTvScreenOptionsUI({
+        sourceLang: data.sourceLanguage || 'auto',
+        tvTargetLang: data.tvLanguage || data.primaryLanguage || 'en',
+        tvScreenMode: data.tvScreenMode || 'split'
+      });
 
       // Update dynamic links with session primary language
       const joinUrl = `${window.location.origin}/join.html?session=${encodeURIComponent(sessionId)}&lang=${encodeURIComponent(data.primaryLanguage || 'en')}`;
@@ -1147,6 +1152,14 @@ function connectWebSocket(sessionId) {
         syncTvFontSizeUI(data.tvFontSize, data.tvCapacity);
         if (data.tvAudioEnabled !== undefined) syncTvAudioUI(data.tvAudioEnabled);
         if (data.tvShowQr !== undefined) syncTvQrUI(data.tvShowQr);
+        syncTvScreenOptionsUI({
+          sourceLang: data.sourceLanguage,
+          tvTargetLang: data.tvTargetLang,
+          tvScreenMode: data.tvScreenMode
+        });
+      }
+      if (data.type === 'SOURCE_LANGUAGE_CHANGED') {
+        syncTvScreenOptionsUI({ sourceLang: data.sourceLang });
       }
       if (data.type === 'STREAMING_TOKEN') {
         lastSonioxTokenTime = Date.now();
@@ -1270,6 +1283,171 @@ async function deliverNextSentence() {
 
   deliveryIndex++;
   deliveryTimer = setTimeout(deliverNextSentence, 4500);
+}
+
+// ─── TV DISPLAY SCREEN CONTROLS (Input Language, Output Language & Screen Type) ───
+let activeSourceLang = 'auto';
+let activeTvTargetLang = 'en';
+let activeTvScreenMode = 'split';
+
+const LANG_DISPLAY_NAMES = {
+  auto: 'Auto-Detect Any',
+  ar: 'Arabic (العربية)',
+  en: 'English',
+  uz: 'Uzbek (O‘zbekcha)',
+  tr: 'Turkish (Türkçe)',
+  ur: 'Urdu (اردو)',
+  bn: 'Bengali (বাংলা)',
+  fr: 'French (Français)',
+  zh: 'Chinese Mandarin (中文 普通话)',
+  'zh-TW': 'Traditional Chinese (中文 繁體)',
+  id: 'Indonesian (Bahasa)',
+  so: 'Somali (Soomaali)'
+};
+
+function getAdminSourceLangSelect() { return document.getElementById('admin-source-lang'); }
+function getAdminTvTargetLangSelect() { return document.getElementById('admin-tv-target-lang'); }
+function getBadgeCurrentSourceLang() { return document.getElementById('badge-current-source-lang'); }
+function getBadgeCurrentTvLang() { return document.getElementById('badge-current-tv-lang'); }
+function getBadgeCurrentScreenMode() { return document.getElementById('badge-current-screen-mode'); }
+function getBtnScreenSplit() { return document.getElementById('btn-screen-split'); }
+function getBtnScreenTransOnly() { return document.getElementById('btn-screen-trans-only'); }
+
+function syncTvScreenOptionsUI({ sourceLang, tvTargetLang, tvScreenMode } = {}) {
+  if (sourceLang !== undefined && sourceLang !== null) {
+    activeSourceLang = sourceLang;
+    const select = getAdminSourceLangSelect();
+    if (select && select.value !== activeSourceLang) select.value = activeSourceLang;
+    const badge = getBadgeCurrentSourceLang();
+    if (badge) badge.textContent = LANG_DISPLAY_NAMES[activeSourceLang] || activeSourceLang;
+  }
+
+  if (tvTargetLang !== undefined && tvTargetLang !== null) {
+    activeTvTargetLang = tvTargetLang;
+    const select = getAdminTvTargetLangSelect();
+    if (select && select.value !== activeTvTargetLang) select.value = activeTvTargetLang;
+    const badge = getBadgeCurrentTvLang();
+    if (badge) badge.textContent = LANG_DISPLAY_NAMES[activeTvTargetLang] || activeTvTargetLang;
+  }
+
+  if (tvScreenMode !== undefined && tvScreenMode !== null) {
+    activeTvScreenMode = (tvScreenMode === 'translation-only') ? 'translation-only' : 'split';
+    const badge = getBadgeCurrentScreenMode();
+    const btnSplit = getBtnScreenSplit();
+    const btnTransOnly = getBtnScreenTransOnly();
+
+    if (activeTvScreenMode === 'translation-only') {
+      if (badge) {
+        badge.textContent = 'Translation Only';
+        badge.style.color = '#38bdf8';
+      }
+      if (btnSplit) {
+        btnSplit.classList.remove('active');
+        btnSplit.style.borderColor = 'rgba(148, 163, 184, 0.2)';
+        btnSplit.style.background = 'rgba(30, 41, 59, 0.7)';
+        btnSplit.style.color = '#f1f5f9';
+      }
+      if (btnTransOnly) {
+        btnTransOnly.classList.add('active');
+        btnTransOnly.style.borderColor = '#10b981';
+        btnTransOnly.style.background = 'rgba(16, 185, 129, 0.2)';
+        btnTransOnly.style.color = '#34d399';
+      }
+    } else {
+      if (badge) {
+        badge.textContent = 'Dual Screen (Split)';
+        badge.style.color = '#34d399';
+      }
+      if (btnSplit) {
+        btnSplit.classList.add('active');
+        btnSplit.style.borderColor = '#10b981';
+        btnSplit.style.background = 'rgba(16, 185, 129, 0.2)';
+        btnSplit.style.color = '#34d399';
+      }
+      if (btnTransOnly) {
+        btnTransOnly.classList.remove('active');
+        btnTransOnly.style.borderColor = 'rgba(148, 163, 184, 0.2)';
+        btnTransOnly.style.background = 'rgba(30, 41, 59, 0.7)';
+        btnTransOnly.style.color = '#f1f5f9';
+      }
+    }
+  }
+}
+
+async function updateTvScreenSetting(updates) {
+  if (updates.sourceLang !== undefined) activeSourceLang = updates.sourceLang;
+  if (updates.tvTargetLang !== undefined) activeTvTargetLang = updates.tvTargetLang;
+  if (updates.tvScreenMode !== undefined) activeTvScreenMode = updates.tvScreenMode;
+
+  syncTvScreenOptionsUI({
+    sourceLang: activeSourceLang,
+    tvTargetLang: activeTvTargetLang,
+    tvScreenMode: activeTvScreenMode
+  });
+
+  if (!currentSessionId) return;
+
+  const payload = {
+    type: 'UPDATE_TV_SETTINGS',
+    sessionId: currentSessionId,
+    fontSize: activeTvFontSize,
+    capacity: activeTvCapacity,
+    audioEnabled: activeTvAudioEnabled,
+    showQr: activeTvShowQr,
+    sourceLanguage: activeSourceLang,
+    tvTargetLang: activeTvTargetLang,
+    tvScreenMode: activeTvScreenMode
+  };
+
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(payload));
+  }
+
+  try {
+    await fetch(`/api/session/${currentSessionId}/tv-settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fontSize: activeTvFontSize,
+        capacity: activeTvCapacity,
+        audioEnabled: activeTvAudioEnabled,
+        showQr: activeTvShowQr,
+        sourceLanguage: activeSourceLang,
+        tvTargetLang: activeTvTargetLang,
+        tvScreenMode: activeTvScreenMode
+      })
+    });
+  } catch (e) {}
+}
+
+function initTvScreenControls() {
+  const sourceSelect = getAdminSourceLangSelect();
+  if (sourceSelect) {
+    sourceSelect.addEventListener('change', () => {
+      updateTvScreenSetting({ sourceLang: sourceSelect.value });
+    });
+  }
+
+  const targetSelect = getAdminTvTargetLangSelect();
+  if (targetSelect) {
+    targetSelect.addEventListener('change', () => {
+      updateTvScreenSetting({ tvTargetLang: targetSelect.value });
+    });
+  }
+
+  const btnSplit = getBtnScreenSplit();
+  if (btnSplit) {
+    btnSplit.addEventListener('click', () => {
+      updateTvScreenSetting({ tvScreenMode: 'split' });
+    });
+  }
+
+  const btnTransOnly = getBtnScreenTransOnly();
+  if (btnTransOnly) {
+    btnTransOnly.addEventListener('click', () => {
+      updateTvScreenSetting({ tvScreenMode: 'translation-only' });
+    });
+  }
 }
 
 // ─── TV DISPLAY FONT SIZE & CAPACITY CONTROLS ───
@@ -1560,6 +1738,7 @@ function initTvFontControls() {
 
 // ─── INITIALIZATION ───
 async function init() {
+  initTvScreenControls();
   initTvFontControls();
   const authed = await checkAuth();
   if (authed) {

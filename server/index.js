@@ -571,17 +571,31 @@ app.post('/api/session/:id/inject-text', async (req, res) => {
   res.json({ success: true, result });
 });
 
-// TV Screen Font Size & Capacity Settings
+// TV Screen Font Size, Layout & Language Settings
 app.post('/api/session/:id/tv-settings', (req, res) => {
-  const { fontSize, capacity, audioEnabled, showQr } = req.body;
-  const session = sessionManager.updateTvSettings(req.params.id, { fontSize, capacity, audioEnabled, showQr });
+  const { fontSize, capacity, audioEnabled, showQr, tvTargetLang, tvScreenMode, sourceLanguage } = req.body;
+  if (sourceLanguage && sonioxService.isConfigured()) {
+    sonioxService.setSourceLanguage(req.params.id, sourceLanguage);
+  }
+  const session = sessionManager.updateTvSettings(req.params.id, {
+    fontSize,
+    capacity,
+    audioEnabled,
+    showQr,
+    tvTargetLang,
+    tvScreenMode,
+    sourceLanguage
+  });
   if (!session) return res.status(404).json({ error: 'Session not found' });
   res.json({
     success: true,
     tvFontSize: session.tvFontSize,
     tvCapacity: session.tvCapacity,
     tvAudioEnabled: session.tvAudioEnabled,
-    tvShowQr: session.tvShowQr !== undefined ? session.tvShowQr : true
+    tvShowQr: session.tvShowQr !== undefined ? session.tvShowQr : true,
+    tvTargetLang: session.tvLanguage,
+    tvScreenMode: session.tvScreenMode || 'split',
+    sourceLanguage: session.sourceLanguage || 'auto'
   });
 });
 
@@ -789,9 +803,26 @@ wss.on('connection', (ws, req) => {
       }
 
       if (msg.type === 'UPDATE_TV_SETTINGS') {
-        const { fontSize, capacity, audioEnabled, showQr, sessionId } = msg;
+        const { fontSize, capacity, audioEnabled, showQr, sessionId, tvTargetLang, tvScreenMode, sourceLanguage } = msg;
         const targetSessionId = sessionId || userSessionId;
-        sessionManager.updateTvSettings(targetSessionId, { fontSize, capacity, audioEnabled, showQr });
+        if (sourceLanguage) {
+          if (sonioxService.isConfigured()) {
+            sonioxService.setSourceLanguage(targetSessionId, sourceLanguage);
+          }
+          sessionManager.broadcastToSession(targetSessionId, {
+            type: 'SOURCE_LANGUAGE_CHANGED',
+            sourceLang: sourceLanguage
+          });
+        }
+        sessionManager.updateTvSettings(targetSessionId, {
+          fontSize,
+          capacity,
+          audioEnabled,
+          showQr,
+          tvTargetLang,
+          tvScreenMode,
+          sourceLanguage
+        });
       }
 
       if (msg.type === 'CLEAR_SESSION_TEXT') {

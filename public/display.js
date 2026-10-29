@@ -331,10 +331,12 @@ function updateSourceColumnStyling() {
   }
 }
 
-// Initialize Source Language Dropdown Selection & Handler
+// Initialize Source Language Styling
+updateSourceColumnStyling();
+
+// Initialize Source Language Dropdown Selection & Handler (if present in DOM)
 if (sourceLangSelect) {
   sourceLangSelect.value = sourceLang;
-  updateSourceColumnStyling();
 
   sourceLangSelect.addEventListener('change', () => {
     sourceLang = sourceLangSelect.value;
@@ -946,10 +948,19 @@ async function initSession() {
       if (data.tvShowQr !== undefined) {
         setTvQrVisibility(data.tvShowQr);
       }
+      if (data.tvScreenMode) {
+        applyScreenMode(data.tvScreenMode);
+      }
+      if (data.sourceLanguage) {
+        sourceLang = data.sourceLanguage;
+        try { localStorage.setItem('mosq_tv_source_lang', sourceLang); } catch (e) {}
+        updateSourceColumnStyling();
+      }
 
-      // Only adopt session primaryLanguage on initial load IF user has NOT explicitly chosen a language
-      if (!userExplicitlySelectedLang && data.primaryLanguage && VALID_LANGS.includes(data.primaryLanguage)) {
-        targetLang = data.primaryLanguage;
+      // Adopt TV language from session (or URL param if provided)
+      const sessionTvLang = data.tvLanguage || data.primaryLanguage;
+      if (sessionTvLang && VALID_LANGS.includes(sessionTvLang) && !urlParams.get('lang')) {
+        targetLang = sessionTvLang;
         if (targetLangSelect) targetLangSelect.value = targetLang;
         initQRCode();
       }
@@ -1050,6 +1061,14 @@ function connectWebSocket() {
           try { localStorage.setItem('mosq_tv_source_lang', sourceLang); } catch (e) {}
           updateSourceColumnStyling();
         }
+        if (data.session.tvLanguage && !urlParams.get('lang')) {
+          targetLang = data.session.tvLanguage;
+          if (targetLangSelect) targetLangSelect.value = targetLang;
+          initQRCode();
+        }
+        if (data.session.tvScreenMode && !urlParams.get('mode')) {
+          applyScreenMode(data.session.tvScreenMode);
+        }
         if (data.session.tvFontSize) applyTvFontSize(data.session.tvFontSize, data.session.tvCapacity, false);
         if (data.session.tvAudioEnabled !== undefined) setTvAudioState(data.session.tvAudioEnabled);
         if (data.session.tvShowQr !== undefined) setTvQrVisibility(data.session.tvShowQr);
@@ -1058,6 +1077,26 @@ function connectWebSocket() {
         if (data.tvFontSize) applyTvFontSize(data.tvFontSize, data.tvCapacity, true);
         if (data.tvAudioEnabled !== undefined) setTvAudioState(data.tvAudioEnabled);
         if (data.tvShowQr !== undefined) setTvQrVisibility(data.tvShowQr);
+        if (data.tvScreenMode) applyScreenMode(data.tvScreenMode);
+        if (data.sourceLanguage || data.sourceLang) {
+          const newSource = data.sourceLanguage || data.sourceLang;
+          if (sourceLang !== newSource) {
+            sourceLang = newSource;
+            if (sourceLangSelect) sourceLangSelect.value = sourceLang;
+            try { localStorage.setItem('mosq_tv_source_lang', sourceLang); } catch (e) {}
+            updateSourceColumnStyling();
+          }
+        }
+        if (data.tvTargetLang && VALID_LANGS.includes(data.tvTargetLang)) {
+          if (targetLang !== data.tvTargetLang) {
+            targetLang = data.tvTargetLang;
+            if (targetLangSelect) targetLangSelect.value = targetLang;
+            try { localStorage.setItem('mosq_tv_lang', targetLang); } catch (e) {}
+            initQRCode();
+            reRenderTranslationFeed();
+            fetchBackfilledHistory(targetLang);
+          }
+        }
       }
       if (data.type === 'SESSION_CLEAR_TEXT') {
         clearTvFeeds();
