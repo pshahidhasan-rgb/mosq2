@@ -7,7 +7,10 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node server/index.js",
-    "test:e2e": "node test/autonomous_e2e_test.js"
+    "test:e2e": "node test/autonomous_e2e_test.js",
+    "bridge": "node replicate-bridge/server.mjs",
+    "chat": "node chatbot/chat.mjs",
+    "chat:web": "node chatbot/chat.mjs --web"
   },
   "dependencies": {
     "@soniox/node": "^2.3.0",

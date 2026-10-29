@@ -771,22 +771,30 @@ function startFeedSync() {
 // STEP NAVIGATION & IN-STREAM LANGUAGE MODAL
 // ═════════════════════════════════════════════
 function showStep(num) {
-  step1.classList.remove('active');
-  step2.classList.remove('active');
-  step3.classList.remove('active');
+  if (step1) {
+    step1.classList.remove('active');
+    step1.style.display = 'none';
+  }
+  if (step2) {
+    step2.classList.remove('active');
+    step2.style.display = 'none';
+  }
+  if (step3) {
+    step3.classList.remove('active');
+    step3.style.display = 'none';
+  }
 
   const target = $('step' + num);
-  if (target) target.classList.add('active');
+  if (target) {
+    target.classList.add('active');
+    target.style.display = 'flex';
+  }
 }
 
 if (btnJoin) {
   btnJoin.addEventListener('click', () => {
-    if (urlParams.has('lang')) {
-      showStep(3);
-      initLiveSession();
-    } else {
-      showStep(2);
-    }
+    showStep(3);
+    initLiveSession();
   });
 }
 
@@ -971,11 +979,11 @@ async function initLiveSession() {
   startFeedSync();
 }
 
-// Auto-start if session and lang in URL
-if (urlParams.has('session') && urlParams.has('lang')) {
-  currentLanguage = urlParams.get('lang') || 'en';
-  showStep(3);
-  initLiveSession();
-} else {
-  showStep(1);
+// Always directly launch into Live Manuscript Translation View (Step 3)
+const requestedLang = getQueryParam('lang');
+if (requestedLang && LANGUAGES.some(l => l.code === requestedLang)) {
+  currentLanguage = requestedLang;
 }
+updateLangDisplay();
+showStep(3);
+initLiveSession();

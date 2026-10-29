@@ -207,8 +207,8 @@
 </head>
 <body>
 
-  <!-- STEP 1: WELCOME SCREEN -->
-  <section id="step1" class="step-screen active">
+  <!-- STEP 1: WELCOME SCREEN (Fallback) -->
+  <section id="step1" class="step-screen" style="display: none;">
     <div class="brand-avatar">🕌</div>
     <h1 id="s1-mosque-name"><span>Live</span> Sermon</h1>
     <div class="live-indicator-pill"><div class="pulsing-dot"></div> LIVE KHUTBAH</div>
@@ -217,8 +217,8 @@
     <button id="btn-join" class="btn-main-join">Join Live Translation →</button>
   </section>
 
-  <!-- STEP 2: LANGUAGE PICKER -->
-  <section id="step2" class="step-screen">
+  <!-- STEP 2: LANGUAGE PICKER (Fallback) -->
+  <section id="step2" class="step-screen" style="display: none;">
     <div class="s2-header">
       <h2>Choose your language</h2>
       <p>Translations and audio will stream in your choice</p>
@@ -238,8 +238,8 @@
     <button id="btn-confirm-lang" class="btn-submit-lang" disabled>Continue to Sermon →</button>
   </section>
 
-  <!-- STEP 3: LIVE MANUSCRIPT VIEW -->
-  <section id="step3" class="step-screen">
+  <!-- STEP 3: LIVE MANUSCRIPT VIEW (Default Primary Screen) -->
+  <section id="step3" class="step-screen active">
     <header class="comp-header">
       <div class="left-meta">
         <button id="btn-back" class="btn-back-step" aria-label="Change language">‹</button>
