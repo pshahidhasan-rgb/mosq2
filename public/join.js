@@ -143,20 +143,29 @@ const hasArabicScript = (text) => /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE7
 // ═════════════════════════════════════════════
 function pickText(item, lang) {
   if (!item) return '';
+  const isArabicTarget = (lang === 'ar' || lang === 'ur');
+  const isCorrupt = (str) => {
+    if (!str || typeof str !== 'string' || !str.trim()) return true;
+    if (str.startsWith(`[${lang.toUpperCase()}]`)) return true;
+    if (!isArabicTarget && hasArabicScript(str)) return true;
+    return false;
+  };
+
   if (item.ayah) {
-    if (item.ayah.translations && (item.ayah.translations[lang] || item.ayah.translations.en)) {
-      return item.ayah.translations[lang] || item.ayah.translations.en;
+    if (item.ayah.translations) {
+      if (item.ayah.translations[lang] && !isCorrupt(item.ayah.translations[lang])) return item.ayah.translations[lang];
+      if (item.ayah.translations.en && !isCorrupt(item.ayah.translations.en)) return item.ayah.translations.en;
     }
-    if (item.ayah.translation) return item.ayah.translation;
+    if (item.ayah.translation && !isCorrupt(item.ayah.translation)) return item.ayah.translation;
   }
   if (item.translations && typeof item.translations === 'object') {
-    if (item.translations[lang]) return item.translations[lang];
-    if (item.translations.en) return item.translations.en;
-    const firstVal = Object.values(item.translations)[0];
-    if (firstVal && !hasArabicScript(firstVal)) return firstVal;
+    if (item.translations[lang] && !isCorrupt(item.translations[lang])) return item.translations[lang];
+    if (item.translations.en && !isCorrupt(item.translations.en)) return item.translations.en;
+    const firstVal = Object.values(item.translations).find(v => !isCorrupt(v));
+    if (firstVal) return firstVal;
     return '';
   }
-  if (item.translated) return item.translated;
+  if (item.translated && !isCorrupt(item.translated)) return item.translated;
   if (item.text && !hasArabicScript(item.text)) return item.text;
   if (lang === 'ar' || lang === 'auto') return item.arabic || '';
   return '';

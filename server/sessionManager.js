@@ -747,6 +747,23 @@ class SessionManager extends EventEmitter {
     for (const sub of subs) {
       if (sub.ws.readyState !== 1) continue;
 
+      const isArabicTarget = (l) => (l === 'ar' || l === 'ur');
+      const isCorruptTrans = (str, l) => {
+        if (!str || typeof str !== 'string' || !str.trim()) return true;
+        if (str.startsWith(`[${l.toUpperCase()}]`)) return true;
+        if (!isArabicTarget(l) && /[\u0600-\u06FF]/.test(str)) return true;
+        return false;
+      };
+
+      const pickCleanTranslation = (l) => {
+        if (!translations || typeof translations !== 'object') return isArabicTarget(l) ? (arabicText || '') : '';
+        const direct = translations[l];
+        if (direct && !isCorruptTrans(direct, l)) return direct;
+        const en = translations.en;
+        if (en && !isCorruptTrans(en, l)) return en;
+        return isArabicTarget(l) ? (arabicText || '') : (translations.en || '');
+      };
+
       if (sub.role === 'tv') {
         // TV display gets Arabic + full multi-language translations map so client can display any selected language
         const tvLang = sub.language || (session ? session.primaryLanguage : 'en');
@@ -754,7 +771,7 @@ class SessionManager extends EventEmitter {
           type: 'LIVE_SUBTITLE',
           arabic: arabicText,
           translations,
-          translated: (translations && translations[tvLang]) || (translations && translations.en) || arabicText,
+          translated: pickCleanTranslation(tvLang),
           language: tvLang,
           ayah: ayahData || null,
           timestamp
@@ -762,7 +779,7 @@ class SessionManager extends EventEmitter {
       } else if (sub.role === 'attendee') {
         // Attendee receives their chosen language + audio buffer
         const attendeeLang = sub.language || 'en';
-        const translatedText = (translations && translations[attendeeLang]) || (translations && translations.en) || arabicText;
+        const translatedText = pickCleanTranslation(attendeeLang);
         const audio = audioByLanguage[attendeeLang] || null;
 
         sub.ws.send(JSON.stringify({

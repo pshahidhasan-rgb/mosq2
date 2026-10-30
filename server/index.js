@@ -13,7 +13,7 @@ const { WebSocketServer } = require('ws');
 const QRCode = require('qrcode');
 const { SessionManager } = require('./sessionManager');
 const { STTService } = require('./services/sttService');
-const { TranslationService } = require('./services/translationService');
+const { TranslationService, hasArabicScript } = require('./services/translationService');
 const { TTSService } = require('./services/ttsService');
 const { QuranAIDetector } = require('./services/quranAiDetector');
 
@@ -276,8 +276,15 @@ sonioxService.on('sentence_finalized', ({ sessionId, lang, translatedText, final
   }
 
   // Translate for any active session languages not covered by Soniox (e.g. Somali 'so', Uzbek 'uz')
+  const isCorruptOrMissingText = (str, targetL) => {
+    if (!str || typeof str !== 'string' || !str.trim()) return true;
+    if (str.startsWith(`[${targetL.toUpperCase()}]`)) return true;
+    if (targetL !== 'ar' && targetL !== 'ur' && hasArabicScript(str)) return true;
+    return false;
+  };
+
   const nonSonioxLangs = Array.from(session.activatedLanguages || []).filter(
-    l => !sonioxService.isLanguageSupported(l) && (!existing.translations || !existing.translations[l])
+    l => !sonioxService.isLanguageSupported(l) && (!existing.translations || isCorruptOrMissingText(existing.translations[l], l))
   );
   if (nonSonioxLangs.length > 0) {
     const srcText = originalText || resolvedTranslation;
@@ -285,7 +292,7 @@ sonioxService.on('sentence_finalized', ({ sessionId, lang, translatedText, final
       translationService.translateMultiple(srcText, nonSonioxLangs).then(results => {
         if (!existing.translations) existing.translations = {};
         for (const [nl, nText] of Object.entries(results)) {
-          if (nText && nText.trim()) {
+          if (nText && nText.trim() && !isCorruptOrMissingText(nText, nl)) {
             existing.translations[nl] = nText;
             sessionManager.broadcastStreamingToken(sessionId, {
               lang: nl,
@@ -331,9 +338,16 @@ async function backfillSessionHistory(sessionId, targetLang) {
   const session = sessionManager.getSession(sessionId);
   if (!session || !session.transcripts || session.transcripts.length === 0) return;
 
-  const missing = session.transcripts.filter(t => {
-    return !t.translations || !t.translations[targetLang] || t.translations[targetLang].trim() === '';
-  });
+  const isCorruptOrMissing = (t, lang) => {
+    if (!t.translations || !t.translations[lang] || typeof t.translations[lang] !== 'string') return true;
+    const val = t.translations[lang].trim();
+    if (!val) return true;
+    if (val.startsWith(`[${lang.toUpperCase()}]`)) return true;
+    if (lang !== 'ar' && lang !== 'ur' && hasArabicScript(val)) return true;
+    return false;
+  };
+
+  const missing = session.transcripts.filter(t => isCorruptOrMissing(t, targetLang));
 
   if (missing.length === 0) return;
 
@@ -349,8 +363,8 @@ async function backfillSessionHistory(sessionId, targetLang) {
         || '';
       if (!source) return;
 
-      const translated = await translationService.translate(source, targetLang);
-      if (translated) {
+      const translated = await translationService.translate(source, targetLang, t.translations || {});
+      if (translated && !translated.startsWith(`[${targetLang.toUpperCase()}]`)) {
         if (!t.translations) t.translations = {};
         t.translations[targetLang] = translated;
       }

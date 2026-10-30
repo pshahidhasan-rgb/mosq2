@@ -576,6 +576,36 @@ function streamWordsIntoElement(element, fullText, delayMs = 85, onComplete = nu
 }
 
 /**
+ * Extract clean, verified translation text for the requested language.
+ * Guarantees that non-Arabic languages (Uzbek, Turkish, English, etc.) never render raw Arabic or corrupt bracket tags.
+ */
+function getValidTranslationText(transObj, lang) {
+  if (!transObj) return '';
+  const isArabicTarget = (lang === 'ar' || lang === 'ur');
+  const isCorrupt = (str) => {
+    if (!str || typeof str !== 'string' || !str.trim()) return true;
+    if (str.startsWith(`[${lang.toUpperCase()}]`)) return true;
+    if (!isArabicTarget && hasArabicScript(str)) return true;
+    return false;
+  };
+
+  if (typeof transObj === 'object') {
+    const direct = transObj[lang];
+    if (direct && !isCorrupt(direct)) return direct;
+    const en = transObj.en;
+    if (en && !isCorrupt(en)) return en;
+    for (const v of Object.values(transObj)) {
+      if (v && !isCorrupt(v)) return v;
+    }
+    return '';
+  }
+  if (typeof transObj === 'string' && !isCorrupt(transObj)) {
+    return transObj;
+  }
+  return '';
+}
+
+/**
  * Re-render Translation Column in the newly selected targetLang
  */
 function reRenderTranslationFeed() {
@@ -591,12 +621,7 @@ function reRenderTranslationFeed() {
       const isCurrent = (idx === recentFeedItems.length - 1);
       const pTrans = document.createElement('div');
       pTrans.className = `para-item ${isCurrent ? 'current' : 'history'}`;
-      let text = '';
-      if (item.transObj && typeof item.transObj === 'object') {
-        text = item.transObj[targetLang] || item.transObj.en || '';
-      } else {
-        text = item.transObj || '';
-      }
+      const text = getValidTranslationText(item.transObj, targetLang);
       pTrans.textContent = text;
       transFeed.appendChild(pTrans);
     });
@@ -733,12 +758,7 @@ function handleIncomingSpeech({ arabic, translations, translated, ayah, timestam
     transObj = { [targetLang]: translated };
   }
 
-  let displayTrans = '';
-  if (typeof transObj === 'object' && transObj !== null) {
-    displayTrans = transObj[targetLang] || transObj.en || '';
-  } else {
-    displayTrans = transObj || '';
-  }
+  let displayTrans = getValidTranslationText(transObj, targetLang);
 
   const streamingArabic = arabicFeed.querySelector('.para-item.current.streaming');
   const streamingTrans = transFeed.querySelector('.para-item.current.streaming');
@@ -875,7 +895,10 @@ function handleStreamingToken({
   }
 
   // ── Right column (translation) ──────────────────────────────────────────────
-  const transContent = isReplacement ? translatedFull : translatedChunk;
+  const rawTransContent = isReplacement ? translatedFull : translatedChunk;
+  const isArabicTarget = (targetLang === 'ar' || targetLang === 'ur');
+  const isTransCorrupt = rawTransContent && (rawTransContent.startsWith(`[${targetLang.toUpperCase()}]`) || (!isArabicTarget && hasArabicScript(rawTransContent)));
+  const transContent = isTransCorrupt ? '' : rawTransContent;
   if (transContent && transContent.length > 0) {
     let currentTrans = transFeed.querySelector('.para-item.current.streaming');
     if (!currentTrans) {
