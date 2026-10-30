@@ -48,6 +48,7 @@ const KEEPALIVE_MS = 5000;
 const MAX_QUEUE_BYTES = 16000 * 2 * 15; // 15 seconds of 16kHz 16-bit PCM (480,000 bytes)
 const SENTENCE_END = /[.!?؟。！？۔]\s*/g; // Sentence punctuation (incl. Arabic ؟, Urdu ۔, Chinese 。！？)
 const MAX_SEGMENT_CHARS = 220; // Force commit during long continuous speech without punctuation
+const MAX_CONCURRENT_GATES = parseInt(process.env.SONIOX_MAX_CONCURRENT_STREAMS || '1', 10);
 
 // Per-language glossaries (carefully phrased to prevent unwanted replacements)
 const GLOSSARY = {
@@ -91,6 +92,8 @@ class SonioxGateManager extends EventEmitter {
     this.sessionInactivityTimers = new Map();
     // Key format: "${sessionId}" -> { lang: string, hints: string[] }
     this.sessionSourceLanguages = new Map();
+    this.isRateLimited = false;
+    this.rateLimitedUntil = 0;
     this.isOperational = this.validateApiKey(this.apiKey);
 
     if (this.isOperational) {
@@ -108,6 +111,24 @@ class SonioxGateManager extends EventEmitter {
 
   isConfigured() {
     return this.isOperational;
+  }
+
+  /**
+   * Returns true only if Soniox has a healthy, connected WebSocket gate actively streaming for sessionId.
+   * If Soniox is disconnected, in cool-off, or rate-limited, returns false so hot fallback (browser_mic/Gladia) activates.
+   */
+  isStreaming(sessionId = null) {
+    if (!this.isOperational) return false;
+    if (this.isRateLimited && Date.now() < this.rateLimitedUntil) return false;
+
+    for (const [_, gate] of this.activeGates.entries()) {
+      if (!sessionId || gate.sessionId === sessionId) {
+        if (gate.status === 'open' && gate.ws && gate.ws.readyState === WebSocket.OPEN) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   setApiKey(key) {
@@ -236,9 +257,26 @@ class SonioxGateManager extends EventEmitter {
     const langCode = maybeLang || sessionIdOrLang;
     if (!langCode) return null;
 
+    // If currently cooling off from 429, do not open new sockets
+    if (this.isRateLimited) {
+      if (Date.now() < this.rateLimitedUntil) {
+        return null;
+      }
+      this.isRateLimited = false;
+    }
+
     if (!SONIOX_SUPPORTED_TRANSLATION_LANGUAGES.has(langCode)) {
       // Do not open a Soniox gate for unsupported target languages (prevents 400 rejection loops)
       return null;
+    }
+
+    // STRICT ORGANIZATION CONCURRENCY PROTECTION:
+    // Close any gates from older/different sessions to avoid exceeding the 1-stream limit
+    for (const [key, g] of Array.from(this.activeGates.entries())) {
+      if (g.sessionId !== sid) {
+        console.log(`[Soniox] Closing stale gate "${key}" of session "${g.sessionId}" to maintain organization concurrency limit.`);
+        this.closeGate(g.sessionId, g.lang);
+      }
     }
 
     const gateKey = `${sid}:${langCode}`;
@@ -253,6 +291,12 @@ class SonioxGateManager extends EventEmitter {
         existing.reconnectTimer = null;
       }
       try { existing.ws && existing.ws.close(); } catch (_) {}
+    }
+
+    // Check if we reached the maximum concurrent streams allowed for this account
+    if (this.activeGates.size >= MAX_CONCURRENT_GATES) {
+      console.log(`[Soniox] Concurrency cap (${MAX_CONCURRENT_GATES}) reached. Target language "${langCode}" will be handled via fast neural translation.`);
+      return null;
     }
 
     console.log(`[Soniox Gate] Opening dynamic gate for session "${sid}" target language: "${langCode}"...`);
@@ -304,6 +348,7 @@ class SonioxGateManager extends EventEmitter {
         gate.status = 'open';
         gate.reconnectAttempts = 0;
         console.log(`[Soniox Gate] Connected & ready for session "${gate.sessionId}" language "${gate.lang}".`);
+        this.emit('connected', { sessionId: gate.sessionId, lang: gate.lang });
 
         // Send start configuration payload
         ws.send(JSON.stringify(this.buildConfig(gate.lang, gate.sessionId)));
@@ -350,13 +395,21 @@ class SonioxGateManager extends EventEmitter {
           return;
         }
 
+        // If rate-limited, do not reconnect immediately to avoid DDoS loop
+        if (this.isRateLimited && Date.now() < this.rateLimitedUntil) {
+          gate.status = 'closed';
+          gate.closing = true;
+          this.activeGates.delete(gate.gateKey);
+          return;
+        }
+
         gate.status = 'reconnecting';
-        const delay = Math.min(250 * Math.pow(2, gate.reconnectAttempts++), 5000);
+        const delay = Math.min(1000 * Math.pow(2, gate.reconnectAttempts++), 30000);
         console.warn(`[Soniox Gate ${gate.gateKey}] WS Closed (${code}: ${reason || 'Blip'}); auto-reconnect in ${delay}ms...`);
 
         gate.reconnectTimer = setTimeout(() => {
           gate.reconnectTimer = null;
-          if (!gate.closing && this.isOperational && this.activeGates.has(gate.gateKey)) {
+          if (!gate.closing && this.isOperational && !this.isRateLimited && this.activeGates.has(gate.gateKey)) {
             this.connectGate(gate);
           }
         }, delay);
@@ -391,6 +444,21 @@ class SonioxGateManager extends EventEmitter {
         console.error('[Soniox] Balance exhausted. Disabling Soniox gates.');
         this.isOperational = false;
         this.closeAllGates();
+        return;
+      }
+      if (data.error_code === 429 || (typeof data.error_message === 'string' && data.error_message.includes('limit for real-time transcription has been exceeded'))) {
+        console.warn(`[Soniox Gate ${gate.gateKey}] Soniox 429 limit exceeded (rate or concurrency). Pausing Soniox reconnects for 30s to allow rate limits to reset. Hot fallback to browser mic / Gladia.`);
+        this.isRateLimited = true;
+        this.rateLimitedUntil = Date.now() + 30000;
+        gate.closing = true;
+        gate.status = 'closed';
+        if (gate.reconnectTimer) {
+          clearTimeout(gate.reconnectTimer);
+          gate.reconnectTimer = null;
+        }
+        try { gate.ws && gate.ws.close(); } catch (_) {}
+        this.activeGates.delete(gate.gateKey);
+        this.emit('degraded', { sessionId: gate.sessionId, reason: '429_rate_limit' });
         return;
       }
       // If error is 400 or invalid target_language, close permanently without looping reconnects
@@ -602,12 +670,12 @@ class SonioxGateManager extends EventEmitter {
     if (this.sessionInactivityTimers.has(sid)) {
       clearTimeout(this.sessionInactivityTimers.get(sid));
     }
-    // 5-minute inactivity timeout so normal Khutbah pauses (sitting between sermons, quiet dua) never kill gates
+    // 45-second inactivity timeout so gates close promptly when session audio stops, preventing concurrency lockouts
     const timer = setTimeout(() => {
       this.sessionInactivityTimers.delete(sid);
-      console.log(`[Soniox] Inactivity timeout: 5 minutes of silence for session "${sid}". Closing gates.`);
+      console.log(`[Soniox] Inactivity timeout: 45 seconds of silence for session "${sid}". Closing gates.`);
       this.closeSessionGates(sid);
-    }, 300000);
+    }, 45000);
     this.sessionInactivityTimers.set(sid, timer);
   }
 

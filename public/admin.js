@@ -881,27 +881,19 @@ async function startMicrophone() {
       }
     }
 
-    // When Soniox is active, Soniox handles 100% of speech & translation in real time via PCM audio.
-    // Completely bypass Web Speech API to eliminate delayed OpenRouter batch injection!
+    // Check if Soniox streaming provider is available
     if (!isSonnoxActive) {
       try {
         const statusRes = await fetch('/api/status');
         if (statusRes.ok) {
           const sData = await statusRes.json();
-          isSonnoxActive = sData.providers && sData.providers.sonioxStreaming === true;
+          isSonnoxActive = sData.providers && (sData.providers.sonioxStreaming === true || sData.providers.sonioxConfigured === true);
         }
       } catch (_) {}
     }
 
-    if (isSonnoxActive) {
-      console.log('[Live Mic] Soniox streaming active — audio piped directly to Soniox (Web Speech API bypassed)');
-      return;
-    }
-
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      if (!isSonnoxActive) {
-        alert('Live speech recognition requires Google Chrome or Safari.');
-      }
+      console.warn('[Live Mic] Web Speech API not supported in this browser.');
       return;
     }
 
@@ -925,9 +917,11 @@ async function startMicrophone() {
           const transcript = evt.results[i][0].transcript.trim();
           if (!transcript) continue;
 
-          // If Soniox is active, suppress Web Speech fallback injection to prevent duplicate / wrong language text
-          if (isSonnoxActive) {
-            console.log('[Live Mic] Suppressing Web Speech fallback — Soniox handles live audio');
+          // If Soniox has actively delivered streaming tokens within the last 3.5 seconds, suppress Web Speech fallback.
+          // BUT if Soniox is quiet/degraded/offline for >3.5s while someone is speaking, immediately let Web Speech send fallback text!
+          const sonioxIsActivelyStreaming = (Date.now() - lastSonioxTokenTime < 3500);
+          if (isSonnoxActive && sonioxIsActivelyStreaming) {
+            console.log('[Live Mic] Suppressing Web Speech fallback — Soniox actively streaming tokens');
             continue;
           }
 
@@ -1186,6 +1180,13 @@ function connectWebSocket(sessionId) {
       }
       if (data.type === 'STREAMING_TOKEN') {
         lastSonioxTokenTime = Date.now();
+      }
+      if (data.type === 'SONIOX_STATUS') {
+        if (data.streaming === false) {
+          lastSonioxTokenTime = 0; // Force immediate fallback
+        } else if (data.streaming === true) {
+          lastSonioxTokenTime = Date.now();
+        }
       }
       if (data.type === 'LIVE_SUBTITLE') addTranscriptEntry(data);
     } catch (e) {}

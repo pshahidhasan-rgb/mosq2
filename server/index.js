@@ -136,9 +136,11 @@ async function processTranscript({ text, isFinal, source, sessionId }) {
 }
 
 sttService.on('transcript', (data) => {
-  // Skip Gladia's slow transcript path when Sonnox is active (Sonox handles streaming)
-  if (sonioxService.isConfigured()) {
-    console.log('[Sonox Active] Skipping Gladia transcript pipeline');
+  const sid = data.sessionId || activeLiveSessionId;
+  // If Soniox is configured AND actively streaming for this session, skip Gladia/WebSpeech to avoid duplicates.
+  // BUT if Soniox is not streaming (e.g. rate-limited, cooling down, or disconnected), allow fallback speech through immediately!
+  if (sonioxService.isConfigured() && sonioxService.isStreaming(sid)) {
+    console.log(`[Soniox Streaming] Skipping fallback STT transcript pipeline for session "${sid}"`);
     return;
   }
   processTranscript(data).catch(err => console.error('[STT] Processing error:', err.message));
@@ -150,8 +152,9 @@ sttService.on('transcript', (data) => {
  * and broadcast immediately. This is the primary fast path for the live display.
  */
 sttService.on('translation', async (data) => {
-  // Suppress Gladia translation events when Soniox is configured to eliminate slow overwriting/collision
-  if (sonioxService.isConfigured()) return;
+  const targetSessionId = activeLiveSessionId;
+  // Suppress Gladia translation events only when Soniox is actively streaming for this session
+  if (sonioxService.isConfigured() && sonioxService.isStreaming(targetSessionId)) return;
 
   const { arabic, translations, sessionLabel } = data;
   if (!arabic && (!translations || Object.keys(translations).length === 0)) return;
@@ -221,6 +224,28 @@ sonioxService.on('session_needs_sync', (sessionId) => {
   }
 });
 
+sonioxService.on('degraded', ({ sessionId, reason }) => {
+  if (sessionId && sessionId !== 'default') {
+    sessionManager.broadcastToSession(sessionId, {
+      type: 'SONIOX_STATUS',
+      operational: false,
+      streaming: false,
+      reason
+    });
+  }
+});
+
+sonioxService.on('connected', ({ sessionId, lang }) => {
+  if (sessionId && sessionId !== 'default') {
+    sessionManager.broadcastToSession(sessionId, {
+      type: 'SONIOX_STATUS',
+      operational: true,
+      streaming: true,
+      lang
+    });
+  }
+});
+
 // Broadcast real-time streaming tokens (sub-200ms word-by-word) strictly to the target session room
 sonioxService.on('token_stream', ({ sessionId, lang, translatedChunk, originalChunk, originalFull, translatedFull, isReplacement, isFinal, seq, timestamp }) => {
   if (!sessionId || sessionId === 'default') return;
@@ -283,13 +308,14 @@ sonioxService.on('sentence_finalized', ({ sessionId, lang, translatedText, final
     return false;
   };
 
-  const nonSonioxLangs = Array.from(session.activatedLanguages || []).filter(
-    l => !sonioxService.isLanguageSupported(l) && (!existing.translations || isCorruptOrMissingText(existing.translations[l], l))
+  // Translate for any active session languages not already translated by a Soniox gate
+  const pendingLanguages = Array.from(session.activatedLanguages || []).filter(
+    l => (!existing.translations || !existing.translations[l] || isCorruptOrMissingText(existing.translations[l], l))
   );
-  if (nonSonioxLangs.length > 0) {
+  if (pendingLanguages.length > 0) {
     const srcText = originalText || resolvedTranslation;
     if (srcText && srcText.trim()) {
-      translationService.translateMultiple(srcText, nonSonioxLangs).then(results => {
+      translationService.translateMultiple(srcText, pendingLanguages).then(results => {
         if (!existing.translations) existing.translations = {};
         for (const [nl, nText] of Object.entries(results)) {
           if (nText && nText.trim() && !isCorruptOrMissingText(nText, nl)) {
@@ -446,7 +472,8 @@ app.get('/api/status', (req, res) => {
       deeplTranslation: isKeyActive(process.env.DEEPL_API_KEY),
       quranAiModel: isKeyActive(openrouterKey),
       cartesiaTTS: isKeyActive(process.env.CARTESIA_API_KEY),
-      sonioxStreaming: sonioxService.isConfigured()
+      sonioxStreaming: sonioxService.isConfigured() && sonioxService.isStreaming(),
+      sonioxConfigured: sonioxService.isConfigured()
     },
     sonioxGates: sonioxService.getStatus(),
     activeSessionId: activeLiveSessionId,
@@ -536,6 +563,14 @@ app.post('/api/session/create', async (req, res) => {
 
 // Start Session
 app.post('/api/session/:id/start', (req, res) => {
+  if (sonioxService.isConfigured()) {
+    for (const [key, gate] of Array.from(sonioxService.activeGates.entries())) {
+      if (gate.sessionId !== req.params.id) {
+        console.log(`[Session Start] Closing gate for older session "${gate.sessionId}" to maintain concurrency limits.`);
+        sonioxService.closeSessionGates(gate.sessionId);
+      }
+    }
+  }
   const session = sessionManager.startSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
   res.json(session);
@@ -543,6 +578,14 @@ app.post('/api/session/:id/start', (req, res) => {
 
 // Resume Session (alias to start)
 app.post('/api/session/:id/resume', (req, res) => {
+  if (sonioxService.isConfigured()) {
+    for (const [key, gate] of Array.from(sonioxService.activeGates.entries())) {
+      if (gate.sessionId !== req.params.id) {
+        console.log(`[Session Resume] Closing gate for older session "${gate.sessionId}" to maintain concurrency limits.`);
+        sonioxService.closeSessionGates(gate.sessionId);
+      }
+    }
+  }
   const session = sessionManager.startSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
   res.json(session);
@@ -617,8 +660,9 @@ app.post('/api/session/:id/inject-text', async (req, res) => {
     });
   }
 
-  // If Soniox streaming is active, suppress browser Web Speech fallback injection
-  if (sonioxService.isConfigured() && req.body.source === 'browser_mic') {
+  // If Soniox is actively streaming for this session, suppress browser Web Speech fallback injection.
+  // If Soniox is degraded, disconnected, or rate-limited, allow browser_mic fallback immediately!
+  if (sonioxService.isConfigured() && sonioxService.isStreaming(req.params.id) && req.body.source === 'browser_mic') {
     return res.json({ success: true, suppressed: true, reason: 'Soniox handles real-time speech stream' });
   }
 
