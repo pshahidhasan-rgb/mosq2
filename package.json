@@ -7,6 +7,10 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node server/index.js",
+    "test": "node test/es5_syntax_test.js && node test/tv_server_routes_test.js && node test/soniox_lifecycle_audit_test.js && node test/autonomous_e2e_test.js",
+    "test:es5": "node test/es5_syntax_test.js",
+    "test:tv": "node test/tv_server_routes_test.js",
+    "test:soniox": "node test/soniox_lifecycle_audit_test.js",
     "test:e2e": "node test/autonomous_e2e_test.js",
     "bridge": "node replicate-bridge/server.mjs",
     "chat": "node chatbot/chat.mjs",
