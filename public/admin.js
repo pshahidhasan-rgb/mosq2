@@ -15,6 +15,7 @@ let speechRecognition = null;
 let isSimulating = false;
 let isSonnoxActive = false; // When true, Soniox handles real-time token streaming
 let lastSonioxTokenTime = 0; // Timestamp of latest received streaming token
+let publisherLeaseInterval = null; // Timer for renewing publisher mic lease
 
 // DOM Views
 const viewSessionsList = document.getElementById('view-sessions-list');
@@ -169,6 +170,7 @@ if (adminPinInput) {
 
 if (btnLogout) {
   btnLogout.addEventListener('click', () => {
+    stopMicrophone();
     localStorage.removeItem('mosq_admin_token');
     showAuthModal();
   });
@@ -670,6 +672,7 @@ function setSessionActive(startedAt) {
 }
 
 function setSessionPaused() {
+  stopMicrophone();
   sessionStatus = 'paused';
   sessionBadge.className = 'badge badge-idle';
   sessionStatusText.textContent = 'PAUSED';
@@ -681,6 +684,7 @@ function setSessionPaused() {
 }
 
 function setSessionEnded() {
+  stopMicrophone();
   sessionStatus = 'ended';
   sessionBadge.className = 'badge badge-idle';
   sessionStatusText.textContent = 'ENDED';
@@ -707,25 +711,73 @@ function updateTimerDisplay() {
 
 // Button Listeners
 btnStart.addEventListener('click', async () => {
-  setSessionActive(new Date().toISOString());
+  btnStart.disabled = true;
+  const originalText = btnStart.textContent;
+  btnStart.textContent = 'Starting...';
   try {
-    await fetch(`/api/session/${currentSessionId}/start`, { method: 'POST' });
-  } catch (e) { console.warn('Start error:', e.message); }
+    const res = await fetch(`/api/session/${currentSessionId}/start`, { method: 'POST' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert('Failed to start session: ' + (err.error || res.statusText));
+      btnStart.disabled = false;
+      btnStart.textContent = originalText;
+      return;
+    }
+    const data = await res.json();
+    setSessionActive(data.startedAt || new Date().toISOString());
+  } catch (e) {
+    console.warn('Start error:', e.message);
+    alert('Network error starting session: ' + e.message);
+    btnStart.disabled = false;
+    btnStart.textContent = originalText;
+  }
 });
 
 btnPause.addEventListener('click', async () => {
-  setSessionPaused();
+  stopMicrophone();
+  btnPause.disabled = true;
+  const originalText = btnPause.textContent;
+  btnPause.textContent = 'Pausing...';
   try {
-    await fetch(`/api/session/${currentSessionId}/pause`, { method: 'POST' });
-  } catch (e) { console.warn('Pause error:', e.message); }
+    const res = await fetch(`/api/session/${currentSessionId}/pause`, { method: 'POST' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert('Failed to pause session: ' + (err.error || res.statusText));
+      btnPause.disabled = false;
+      btnPause.textContent = originalText;
+      return;
+    }
+    setSessionPaused();
+  } catch (e) {
+    console.warn('Pause error:', e.message);
+    alert('Network error pausing session: ' + e.message);
+    btnPause.disabled = false;
+    btnPause.textContent = originalText;
+  }
 });
 
 btnEnd.addEventListener('click', async () => {
   if (confirm('Are you sure you want to conclude this session?')) {
-    setSessionEnded();
+    stopMicrophone();
+    btnEnd.disabled = true;
+    const originalText = btnEnd.textContent;
+    btnEnd.textContent = 'Ending...';
     try {
-      await fetch(`/api/session/${currentSessionId}/end`, { method: 'POST' });
-    } catch (e) { console.warn('End error:', e.message); }
+      const res = await fetch(`/api/session/${currentSessionId}/end`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert('Failed to end session: ' + (err.error || res.statusText));
+        btnEnd.disabled = false;
+        btnEnd.textContent = originalText;
+        return;
+      }
+      setSessionEnded();
+    } catch (e) {
+      console.warn('End error:', e.message);
+      alert('Network error ending session: ' + e.message);
+      btnEnd.disabled = false;
+      btnEnd.textContent = originalText;
+    }
   }
 });
 
@@ -888,6 +940,29 @@ async function startMicrophone() {
     btnToggleMic.textContent = '🛑 Stop Live Mic';
     btnToggleMic.className = 'btn btn-danger';
 
+    // Start periodic publisher mic lease renewals ($0 cost guarantee)
+    if (publisherLeaseInterval) {
+      clearInterval(publisherLeaseInterval);
+      publisherLeaseInterval = null;
+    }
+    const renewPublisherLease = () => {
+      if (!micActive || !currentSessionId || sessionStatus !== 'active') return;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify({ type: 'PUBLISHER_HEARTBEAT', sessionId: currentSessionId }));
+        } catch (_) {}
+      }
+      try {
+        fetch(`/api/session/${encodeURIComponent(currentSessionId)}/publisher-lease`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ active: true, leaseDurationMs: 10000 })
+        }).catch(() => {});
+      } catch (_) {}
+    };
+    renewPublisherLease();
+    publisherLeaseInterval = setInterval(renewPublisherLease, 3000);
+
     // Auto-activate session if idle when user starts live microphone
     if (sessionStatus === 'idle') {
       console.log('[Live Mic] Auto-activating session for live pulpit speech...');
@@ -1031,6 +1106,11 @@ let micAudioProcessor = null;
 function stopMicrophone() {
   micActive = false;
 
+  if (publisherLeaseInterval) {
+    clearInterval(publisherLeaseInterval);
+    publisherLeaseInterval = null;
+  }
+
   // Immediately notify server that mic is off so Soniox gates shut down in 0ms ($0 cost)
   if (currentSessionId) {
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -1041,8 +1121,14 @@ function stopMicrophone() {
         }));
       } catch (_) {}
     }
+    const offUrl = `/api/session/${encodeURIComponent(currentSessionId)}/mic-off`;
     try {
-      fetch(`/api/session/${encodeURIComponent(currentSessionId)}/mic-off`, { method: 'POST' }).catch(() => {});
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(offUrl, new Blob(['{}'], { type: 'application/json' }));
+      }
+    } catch (_) {}
+    try {
+      fetch(offUrl, { method: 'POST', keepalive: true }).catch(() => {});
     } catch (_) {}
   }
 
@@ -1055,14 +1141,34 @@ function stopMicrophone() {
     speechRecognition = null;
   }
   if (mediaStream) {
-    mediaStream.getTracks().forEach(t => t.stop());
+    try {
+      mediaStream.getTracks().forEach(t => t.stop());
+    } catch (_) {}
     mediaStream = null;
+  }
+  if (audioContext) {
+    try {
+      audioContext.close();
+    } catch (_) {}
+    audioContext = null;
   }
   clearInterval(micInterval);
   micLevelBar.style.width = '0%';
   btnToggleMic.textContent = '🎤 Enable Live Mic';
   btnToggleMic.className = 'btn btn-secondary';
 }
+
+// Window lifecycle listeners to ensure microphone & server gates release on tab close/nav
+window.addEventListener('pagehide', () => {
+  if (micActive) {
+    stopMicrophone();
+  }
+});
+window.addEventListener('beforeunload', () => {
+  if (micActive) {
+    stopMicrophone();
+  }
+});
 
 // ─── INITIALIZE CONSOLE SESSION ───
 async function initConsoleSession(sessionId) {

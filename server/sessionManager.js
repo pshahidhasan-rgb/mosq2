@@ -81,6 +81,9 @@ class SessionManager extends EventEmitter {
       tvAudioEnabled: false, // Default: OFF (Admin controlled)
       tvShowQr: true, // Default: ON (Admin controlled)
       status: 'idle', // idle, active, paused, ended
+      publisherActive: false, // True only when authorized admin microphone is actively on
+      publisherLeaseUntil: 0, // Expiry timestamp for publisher lease (ms)
+      publisherGeneration: 1, // Monotonic generation ID for publisher runs
       startedAt: null,
       endedAt: null,
       transcripts: [],
@@ -115,6 +118,65 @@ class SessionManager extends EventEmitter {
     if (!sessionId) return null;
     const session = this.getSession(sessionId);
     return session ? session.id : sessionId;
+  }
+
+  /**
+   * Set the publisher/microphone authorization state on the session
+   */
+  setPublisherState(sessionId, active, leaseDurationMs = 10000) {
+    const session = this.getSession(sessionId);
+    if (!session) return null;
+    const wasActive = Boolean(session.publisherActive);
+    session.publisherActive = Boolean(active);
+    if (session.publisherActive) {
+      session.publisherLeaseUntil = Date.now() + Math.max(10, leaseDurationMs);
+    } else {
+      session.publisherLeaseUntil = 0;
+      session.publisherGeneration = (session.publisherGeneration || 0) + 1;
+    }
+    if (wasActive !== session.publisherActive) {
+      this.emit('publisher_state_changed', {
+        sessionId: session.id,
+        active: session.publisherActive,
+        generation: session.publisherGeneration
+      });
+    }
+    return session;
+  }
+
+  /**
+   * Touch/renew the publisher lease while the microphone is streaming
+   */
+  touchPublisherLease(sessionId, leaseDurationMs = 10000) {
+    const session = this.getSession(sessionId);
+    if (!session) return false;
+    if (session.publisherActive && session.status === 'active') {
+      session.publisherLeaseUntil = Date.now() + Math.max(10, leaseDurationMs);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Returns true only if the publisher is explicitly authorized, session is active, and lease has not expired.
+   */
+  isPublisherActive(sessionId) {
+    const session = this.getSession(sessionId);
+    if (!session) return false;
+    if (session.status !== 'active') return false;
+    if (!session.publisherActive) return false;
+    if (Date.now() > (session.publisherLeaseUntil || 0)) {
+      session.publisherActive = false;
+      session.publisherLeaseUntil = 0;
+      session.publisherGeneration = (session.publisherGeneration || 0) + 1;
+      this.emit('publisher_state_changed', {
+        sessionId: session.id,
+        active: false,
+        generation: session.publisherGeneration
+      });
+      return false;
+    }
+    return true;
   }
 
 
@@ -196,6 +258,15 @@ class SessionManager extends EventEmitter {
     if (!session) return false;
     const actualId = session.id;
 
+    session.publisherActive = false;
+    session.publisherLeaseUntil = 0;
+    session.publisherGeneration = (session.publisherGeneration || 0) + 1;
+    this.emit('publisher_state_changed', {
+      sessionId: actualId,
+      active: false,
+      generation: session.publisherGeneration
+    });
+
     this.broadcastToSession(actualId, {
       type: 'SESSION_DELETED',
       sessionId: actualId
@@ -229,6 +300,11 @@ class SessionManager extends EventEmitter {
     const session = this.getSession(sessionId);
     if (!session) return null;
 
+    // Reset publisher authorization state until mic is actively streaming
+    session.publisherActive = false;
+    session.publisherLeaseUntil = 0;
+    session.publisherGeneration = (session.publisherGeneration || 0) + 1;
+
     // If there were already transcripts from an earlier run on a different day, archive them first
     if (session.transcripts && session.transcripts.length > 0) {
       this.archiveSessionRun(session.id);
@@ -253,6 +329,14 @@ class SessionManager extends EventEmitter {
     const session = this.getSession(sessionId);
     if (!session) return null;
     session.status = 'paused';
+    session.publisherActive = false;
+    session.publisherLeaseUntil = 0;
+    session.publisherGeneration = (session.publisherGeneration || 0) + 1;
+    this.emit('publisher_state_changed', {
+      sessionId: session.id,
+      active: false,
+      generation: session.publisherGeneration
+    });
     this.broadcastToSession(sessionId, {
       type: 'SESSION_STATUS',
       status: 'paused',
@@ -267,6 +351,14 @@ class SessionManager extends EventEmitter {
     if (!session) return null;
     session.status = 'ended';
     session.endedAt = new Date().toISOString();
+    session.publisherActive = false;
+    session.publisherLeaseUntil = 0;
+    session.publisherGeneration = (session.publisherGeneration || 0) + 1;
+    this.emit('publisher_state_changed', {
+      sessionId: session.id,
+      active: false,
+      generation: session.publisherGeneration
+    });
 
     let archiveRecord = null;
     if (session.transcripts && session.transcripts.length > 0) {
@@ -612,40 +704,40 @@ class SessionManager extends EventEmitter {
   }
 
   /**
-   * Computes the list of distinct languages actively needed for the session room
-   * (Display TV target language + all sticky activated languages + connected attendee languages)
+   * Computes the list of distinct languages actively needed by current live attendees and display TV.
+   * Unlike historical/sticky activated languages, this reflects LIVE presence so unused paid streams close ($0 cost).
    */
-  getRequiredLanguages(sessionId) {
+  getLiveRequiredLanguages(sessionId) {
     const actualId = this.getCanonicalId(sessionId);
     const session = this.getSession(actualId);
     const languages = new Set();
     if (session) {
       const tvLang = session.tvLanguage || session.primaryLanguage || 'en';
       languages.add(tvLang);
-      if (session.activatedLanguages) {
-        for (const l of session.activatedLanguages) {
-          if (l) languages.add(l);
-        }
-      }
     } else {
       languages.add('en');
     }
 
     const subs = this.subscribers.get(actualId) || new Set();
     for (const sub of subs) {
-      if (sub.role !== 'admin' && sub.language) {
+      if (sub.role !== 'admin' && sub.language && sub.ws && sub.ws.readyState === 1 /* OPEN */) {
         languages.add(sub.language);
       }
     }
 
     const activeHttp = this.getActiveHttpClients(actualId);
+    const now = Date.now();
     for (const [_, info] of activeHttp.entries()) {
-      if (info.role !== 'admin' && info.language) {
+      if (info.role !== 'admin' && info.language && (now - info.lastSeen < 15000)) {
         languages.add(info.language);
       }
     }
 
     return Array.from(languages);
+  }
+
+  getRequiredLanguages(sessionId) {
+    return this.getLiveRequiredLanguages(sessionId);
   }
 
   notifyStatsUpdate(sessionId) {
@@ -660,10 +752,17 @@ class SessionManager extends EventEmitter {
       stats
     });
 
-    // Notify language gates synchronization
+    const liveLanguages = this.getLiveRequiredLanguages(actualId);
+
+    // Notify language demand changed (only live active listeners)
+    this.emit('languages_demand_changed', {
+      sessionId: actualId,
+      languages: liveLanguages
+    });
+
     this.emit('languages_updated', {
       sessionId: actualId,
-      languages: this.getRequiredLanguages(actualId)
+      languages: liveLanguages
     });
   }
 

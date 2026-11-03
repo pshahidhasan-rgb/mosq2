@@ -237,11 +237,14 @@ function getTargetSessionIds() {
 }
 
 // Synchronize open Soniox language gates when attendee/TV language selection changes in a room
-// STRICT COST CONTROL: Only open gates if the Khutbah session is currently active ($0 idle cost)
+// STRICT COST CONTROL: Only open gates if the Khutbah session is currently active AND publisher mic is streaming ($0 idle cost)
 if (sonioxService.isConfigured()) {
   sonioxService.setSessionValidator((sessionId) => {
     const session = sessionManager.getSession(sessionId);
     return Boolean(session && session.status === 'active');
+  });
+  sonioxService.setPublisherValidator((sessionId) => {
+    return sessionManager.isPublisherActive(sessionId);
   });
 }
 
@@ -253,8 +256,23 @@ sessionManager.on('session_started', ({ sessionId }) => {
   }
 });
 
+sessionManager.on('publisher_state_changed', ({ sessionId, active }) => {
+  if (sonioxService.isConfigured() && sessionId) {
+    if (!active) {
+      console.log(`[Lifecycle] Session "${sessionId}" publisher inactive — closing Soniox gates ($0 cost).`);
+      sonioxService.closeSessionGates(sessionId);
+    } else {
+      const liveLangs = sessionManager.getLiveRequiredLanguages(sessionId);
+      sonioxService.syncGates(sessionId, liveLangs);
+    }
+  }
+});
+
 // Ensure Soniox gates close instantly whenever a session changes lifecycle state
 sessionManager.on('session_paused', ({ sessionId }) => {
+  if (sessionId) {
+    sessionManager.setPublisherState(sessionId, false);
+  }
   if (sonioxService.isConfigured() && sessionId) {
     console.log(`[Lifecycle] Session "${sessionId}" paused — immediately closing Soniox gates ($0 cost).`);
     sonioxService.closeSessionGates(sessionId);
@@ -262,6 +280,9 @@ sessionManager.on('session_paused', ({ sessionId }) => {
 });
 
 sessionManager.on('session_ended', ({ sessionId }) => {
+  if (sessionId) {
+    sessionManager.setPublisherState(sessionId, false);
+  }
   if (sonioxService.isConfigured() && sessionId) {
     console.log(`[Lifecycle] Session "${sessionId}" ended — immediately closing Soniox gates ($0 cost).`);
     sonioxService.closeSessionGates(sessionId);
@@ -269,6 +290,9 @@ sessionManager.on('session_ended', ({ sessionId }) => {
 });
 
 sessionManager.on('session_deleted', ({ sessionId }) => {
+  if (sessionId) {
+    sessionManager.setPublisherState(sessionId, false);
+  }
   if (sonioxService.isConfigured() && sessionId) {
     console.log(`[Lifecycle] Session "${sessionId}" deleted — immediately closing Soniox gates ($0 cost).`);
     sonioxService.closeSessionGates(sessionId);
@@ -279,10 +303,19 @@ sessionManager.on('session_deleted', ({ sessionId }) => {
   }
 });
 
+sessionManager.on('languages_demand_changed', ({ sessionId, languages }) => {
+  if (sonioxService.isConfigured() && sessionId) {
+    const session = sessionManager.getSession(sessionId);
+    if (session && session.status === 'active' && sessionManager.isPublisherActive(sessionId)) {
+      sonioxService.syncGates(sessionId, languages);
+    }
+  }
+});
+
 sessionManager.on('languages_updated', ({ sessionId, languages }) => {
   if (sonioxService.isConfigured() && sessionId) {
     const session = sessionManager.getSession(sessionId);
-    if (session && session.status === 'active') {
+    if (session && session.status === 'active' && sessionManager.isPublisherActive(sessionId)) {
       sonioxService.syncGates(sessionId, languages);
     }
   }
@@ -292,8 +325,8 @@ sessionManager.on('languages_updated', ({ sessionId, languages }) => {
 sessionManager.on('session_needs_sync', (sessionId) => {
   if (sonioxService.isConfigured() && sessionId) {
     const session = sessionManager.getSession(sessionId);
-    if (session && session.status === 'active') {
-      const requiredLangs = sessionManager.getRequiredLanguages(sessionId);
+    if (session && session.status === 'active' && sessionManager.isPublisherActive(sessionId)) {
+      const requiredLangs = sessionManager.getLiveRequiredLanguages(sessionId);
       sonioxService.syncGates(sessionId, requiredLangs);
     }
   }
@@ -302,8 +335,8 @@ sessionManager.on('session_needs_sync', (sessionId) => {
 sonioxService.on('session_needs_sync', (sessionId) => {
   if (sonioxService.isConfigured() && sessionId) {
     const session = sessionManager.getSession(sessionId);
-    if (session && session.status === 'active') {
-      const requiredLangs = sessionManager.getRequiredLanguages(sessionId);
+    if (session && session.status === 'active' && sessionManager.isPublisherActive(sessionId)) {
+      const requiredLangs = sessionManager.getLiveRequiredLanguages(sessionId);
       sonioxService.syncGates(sessionId, requiredLangs);
     }
   }
@@ -666,10 +699,7 @@ app.post('/api/session/:id/start', (req, res) => {
   }
   const session = sessionManager.startSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
-  if (sonioxService.isConfigured()) {
-    const requiredLangs = sessionManager.getRequiredLanguages(session.id);
-    sonioxService.syncGates(session.id, requiredLangs);
-  }
+  // STRICT COST CONTROL: Do NOT open Soniox gates on start. Gates open ONLY when live mic begins streaming!
   res.json(session);
 });
 
@@ -685,15 +715,13 @@ app.post('/api/session/:id/resume', (req, res) => {
   }
   const session = sessionManager.startSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
-  if (sonioxService.isConfigured()) {
-    const requiredLangs = sessionManager.getRequiredLanguages(session.id);
-    sonioxService.syncGates(session.id, requiredLangs);
-  }
+  // STRICT COST CONTROL: Do NOT open Soniox gates on resume. Gates open ONLY when live mic begins streaming!
   res.json(session);
 });
 
 // Pause Session
 app.post('/api/session/:id/pause', (req, res) => {
+  sessionManager.setPublisherState(req.params.id, false);
   if (sonioxService.isConfigured()) {
     sonioxService.closeSessionGates(req.params.id);
   }
@@ -704,6 +732,7 @@ app.post('/api/session/:id/pause', (req, res) => {
 
 // End Session
 app.post('/api/session/:id/end', (req, res) => {
+  sessionManager.setPublisherState(req.params.id, false);
   if (sonioxService.isConfigured()) {
     sonioxService.closeSessionGates(req.params.id);
   }
@@ -711,6 +740,28 @@ app.post('/api/session/:id/end', (req, res) => {
   const session = sessionManager.endSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
   res.json(session);
+});
+
+// Publisher Lease Renewal / State
+app.post('/api/session/:id/publisher-lease', (req, res) => {
+  const session = sessionManager.getSession(req.params.id);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+  const { active, leaseDurationMs } = req.body || {};
+  if (active === true || (!session.publisherActive && active !== false)) {
+    sessionManager.setPublisherState(req.params.id, true, leaseDurationMs || 10000);
+  } else if (active === false) {
+    sessionManager.setPublisherState(req.params.id, false);
+    if (sonioxService.isConfigured()) {
+      sonioxService.closeSessionGates(req.params.id);
+    }
+  } else {
+    sessionManager.touchPublisherLease(req.params.id, leaseDurationMs || 10000);
+  }
+  res.json({
+    success: true,
+    publisherActive: sessionManager.isPublisherActive(req.params.id),
+    leaseUntil: session.publisherLeaseUntil
+  });
 });
 
 // Clear current screen text and transcripts for a session (TV and Mobile)
@@ -722,6 +773,7 @@ app.post('/api/session/:id/clear', (req, res) => {
 
 // Microphone stopped / disabled endpoint
 app.post('/api/session/:id/mic-off', (req, res) => {
+  sessionManager.setPublisherState(req.params.id, false);
   if (sonioxService.isConfigured()) {
     sonioxService.onMicrophoneOff(req.params.id);
   }
@@ -969,6 +1021,16 @@ wss.on('connection', (ws, req) => {
             if (!session || session.status !== 'active') {
               return;
             }
+            // Ensure publisher lease is active and touched
+            if (!sessionManager.isPublisherActive(userSessionId)) {
+              if (userRole === 'admin') {
+                sessionManager.setPublisherState(userSessionId, true, 10000);
+              } else {
+                return;
+              }
+            } else {
+              sessionManager.touchPublisherLease(userSessionId, 10000);
+            }
             if (sonioxService.isConfigured()) {
               sonioxService.broadcastAudio(pcm, session.id);
             } else {
@@ -1097,10 +1159,20 @@ wss.on('connection', (ws, req) => {
         sessionManager.clearSessionText(targetSessionId);
       }
 
+      if (msg.type === 'PUBLISHER_HEARTBEAT') {
+        const targetSid = msg.sessionId || userSessionId;
+        if (targetSid && userRole === 'admin') {
+          sessionManager.touchPublisherLease(targetSid, 10000);
+        }
+      }
+
       if (msg.type === 'MIC_OFF') {
         const targetSessionId = msg.sessionId || userSessionId;
-        if (sonioxService.isConfigured() && targetSessionId) {
-          sonioxService.onMicrophoneOff(targetSessionId);
+        if (targetSessionId) {
+          sessionManager.setPublisherState(targetSessionId, false);
+          if (sonioxService.isConfigured()) {
+            sonioxService.onMicrophoneOff(targetSessionId);
+          }
         }
       }
 
@@ -1111,6 +1183,15 @@ wss.on('connection', (ws, req) => {
           const session = sid ? sessionManager.getSession(sid) : null;
           if (!session || session.status !== 'active') {
             return;
+          }
+          if (!sessionManager.isPublisherActive(session.id)) {
+            if (userRole === 'admin') {
+              sessionManager.setPublisherState(session.id, true, 10000);
+            } else {
+              return;
+            }
+          } else {
+            sessionManager.touchPublisherLease(session.id, 10000);
           }
           const audioBuffer = Buffer.from(msg.base64Audio, 'base64');
           if (sonioxService.isConfigured()) {

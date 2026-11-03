@@ -111,7 +111,9 @@ class SonioxGateManager extends EventEmitter {
     this.sessionSourceLanguages = new Map();
     this.isRateLimited = false;
     this.rateLimitedUntil = 0;
+    this.gateGenerationCounter = 0;
     this.sessionValidator = null; // Optional validator callback (sessionId) => boolean
+    this.publisherValidator = null; // Optional validator callback (sessionId) => boolean
     this.isOperational = this.validateApiKey(this.apiKey);
 
     if (this.isOperational) {
@@ -127,6 +129,12 @@ class SonioxGateManager extends EventEmitter {
     }
   }
 
+  setPublisherValidator(validatorFn) {
+    if (typeof validatorFn === 'function') {
+      this.publisherValidator = validatorFn;
+    }
+  }
+
   isSessionActive(sessionId) {
     if (!this.sessionValidator || !sessionId) return true;
     try {
@@ -134,6 +142,26 @@ class SonioxGateManager extends EventEmitter {
     } catch (_) {
       return true;
     }
+  }
+
+  isPublisherActive(sessionId) {
+    if (!sessionId) return false;
+    if (!this.publisherValidator) return true;
+    try {
+      return Boolean(this.publisherValidator(sessionId));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  isGateEligible(sessionId, lang) {
+    if (!this.isOperational) return false;
+    if (!sessionId || sessionId === 'default') return false;
+    if (!this.isSessionActive(sessionId)) return false;
+    if (!this.isPublisherActive(sessionId)) return false;
+    if (!this.isLanguageSupported(lang)) return false;
+    if (this.isRateLimited && Date.now() < this.rateLimitedUntil) return false;
+    return true;
   }
 
   validateApiKey(key) {
@@ -240,6 +268,12 @@ class SonioxGateManager extends EventEmitter {
    * @param {string|Array<string>} sessionIdOrLangs - Target sessionId or list of languages
    * @param {Array<string>|Set<string>} maybeLangs - List of active language codes if sessionId passed first
    */
+  /**
+   * Synchronize active language gates with the currently required languages for a session.
+   * Debounces gate closure by 10s to prevent thrashing when attendees reload/switch.
+   * @param {string|Array<string>} sessionIdOrLangs - Target sessionId or list of languages
+   * @param {Array<string>|Set<string>} maybeLangs - List of active language codes if sessionId passed first
+   */
   syncGates(sessionIdOrLangs, maybeLangs) {
     if (!this.isOperational) return;
 
@@ -247,11 +281,13 @@ class SonioxGateManager extends EventEmitter {
       ? sessionIdOrLangs
       : 'default';
 
-    // STRICT SESSION ACTIVE GATE: If session is not currently active, close all gates and refuse new ones
-    if (!this.isSessionActive(sid)) {
+    // STRICT SESSION & PUBLISHER ACTIVE GATE:
+    // If Khutbah session is not active OR publisher is not actively streaming mic ($0 idle cost),
+    // immediately close any gates and refuse new ones.
+    if (!this.isSessionActive(sid) || !this.isPublisherActive(sid)) {
       for (const [gateKey, gate] of this.activeGates.entries()) {
         if (gate.sessionId === sid) {
-          console.log(`[Soniox] Session "${sid}" is not active — closing gate "${gateKey}" ($0 cost).`);
+          console.log(`[Soniox] Session "${sid}" mic is not active — closing gate "${gateKey}" ($0 cost).`);
           this.closeGate(gate.sessionId, gate.lang);
         }
       }
@@ -263,7 +299,8 @@ class SonioxGateManager extends EventEmitter {
 
     // 1. Open newly requested gates for this session and cancel pending close timers
     for (const lang of reqSet) {
-      const gateKey = `${sid}:${lang}`;
+      const sonioxLang = SONIOX_LANG_MAP[lang] || lang;
+      const gateKey = `${sid}:${sonioxLang}`;
       if (this.gateRemovalTimers.has(gateKey)) {
         clearTimeout(this.gateRemovalTimers.get(gateKey));
         this.gateRemovalTimers.delete(gateKey);
@@ -271,27 +308,38 @@ class SonioxGateManager extends EventEmitter {
       this.ensureGate(sid, lang);
     }
 
-    // 2. Debounce closure for languages in this session that have 0 listeners
+    // 2. Debounce closure for gates in this session that have 0 listeners
     for (const [gateKey, gate] of this.activeGates.entries()) {
       if (gate.sessionId !== sid) continue;
-      if (!reqSet.has(gate.lang) && !this.gateRemovalTimers.has(gateKey)) {
-        const timer = setTimeout(() => {
+      const matchingLangs = Array.from(reqSet).filter(l => (SONIOX_LANG_MAP[l] || l) === gate.lang);
+      if (matchingLangs.length === 0) {
+        if (!this.gateRemovalTimers.has(gateKey)) {
+          const timer = setTimeout(() => {
+            this.gateRemovalTimers.delete(gateKey);
+            console.log(`[Soniox Gate] 0 listeners remaining for "${gate.lang}" in session "${sid}" — closing gate ($0 cost).`);
+            this.closeGate(sid, gate.lang);
+          }, 10000); // 10-second debounce
+          this.gateRemovalTimers.set(gateKey, timer);
+        }
+      } else {
+        if (this.gateRemovalTimers.has(gateKey)) {
+          clearTimeout(this.gateRemovalTimers.get(gateKey));
           this.gateRemovalTimers.delete(gateKey);
-          console.log(`[Soniox Gate] 0 listeners remaining for "${gate.lang}" in session "${sid}" — closing gate ($0 cost).`);
-          this.closeGate(sid, gate.lang);
-        }, 10000); // 10-second debounce
-        this.gateRemovalTimers.set(gateKey, timer);
+        }
+        gate.subLanguages = new Set(matchingLangs);
       }
     }
   }
 
   isLanguageSupported(lang) {
     if (!lang) return false;
-    return SONIOX_SUPPORTED_TRANSLATION_LANGUAGES.has(lang);
+    const base = SONIOX_LANG_MAP[lang] || lang;
+    return SONIOX_SUPPORTED_TRANSLATION_LANGUAGES.has(base) || SONIOX_SUPPORTED_TRANSLATION_LANGUAGES.has(lang);
   }
 
   /**
    * Ensures a dedicated Soniox WebSocket stream exists for a specific session and target language.
+   * Deduplicates regional variants (e.g. zh-TW maps to single zh stream).
    * @param {string} sessionIdOrLang
    * @param {string} maybeLang
    */
@@ -302,27 +350,12 @@ class SonioxGateManager extends EventEmitter {
     const langCode = maybeLang || sessionIdOrLang;
     if (!langCode) return null;
 
-    // STRICT SESSION ACTIVE GATE: Never open a Soniox stream for a non-active session
-    if (!this.isSessionActive(sid)) {
-      console.log(`[Soniox Gate] Session "${sid}" is not active — gate will NOT be opened for "${langCode}" ($0 cost).`);
-      return null;
-    }
-
-    // If currently cooling off from 429, do not open new sockets
-    if (this.isRateLimited) {
-      if (Date.now() < this.rateLimitedUntil) {
-        return null;
-      }
-      this.isRateLimited = false;
-    }
-
-    if (!SONIOX_SUPPORTED_TRANSLATION_LANGUAGES.has(langCode)) {
-      // Do not open a Soniox gate for unsupported target languages (prevents 400 rejection loops)
+    if (!this.isGateEligible(sid, langCode)) {
       return null;
     }
 
     // STRICT ORGANIZATION CONCURRENCY PROTECTION:
-    // Close any gates from older/different sessions to avoid exceeding the 1-stream limit
+    // Close any gates from older/different sessions to avoid exceeding concurrency limits
     for (const [key, g] of Array.from(this.activeGates.entries())) {
       if (g.sessionId !== sid) {
         console.log(`[Soniox] Closing stale gate "${key}" of session "${g.sessionId}" to maintain organization concurrency limit.`);
@@ -330,9 +363,12 @@ class SonioxGateManager extends EventEmitter {
       }
     }
 
-    const gateKey = `${sid}:${langCode}`;
+    const sonioxLang = SONIOX_LANG_MAP[langCode] || langCode;
+    const gateKey = `${sid}:${sonioxLang}`;
     const existing = this.activeGates.get(gateKey);
     if (existing) {
+      if (!existing.subLanguages) existing.subLanguages = new Set();
+      existing.subLanguages.add(langCode);
       if (existing.status === 'open' || existing.status === 'connecting') {
         return existing;
       }
@@ -350,18 +386,21 @@ class SonioxGateManager extends EventEmitter {
       return null;
     }
 
-    console.log(`[Soniox Gate] Opening dynamic gate for session "${sid}" target language: "${langCode}"...`);
+    console.log(`[Soniox Gate] Opening dynamic gate for session "${sid}" target language: "${sonioxLang}" (requested: "${langCode}")...`);
 
     const gate = {
       gateKey,
       sessionId: sid,
-      lang: langCode,
+      lang: sonioxLang,
+      subLanguages: new Set([langCode]),
+      generation: ++this.gateGenerationCounter,
       ws: null,
       status: 'connecting',
       closing: false,
       audioQueue: [],
       queuedBytes: 0,
       lastAudioAt: Date.now(),
+      lastVoiceAt: Date.now(),
       // Translation buffers:
       stableTr: '',
       liveTr: '',
@@ -373,6 +412,8 @@ class SonioxGateManager extends EventEmitter {
       seq: 0,
       emitTimer: null,
       keepaliveTimer: null,
+      reconnectTimer: null,
+      forceTerminationTimer: null,
       reconnectAttempts: 0,
       createdAt: Date.now()
     };
@@ -394,8 +435,15 @@ class SonioxGateManager extends EventEmitter {
       });
       gate.ws = ws;
       gate.status = 'connecting';
+      ws.generation = gate.generation;
 
       ws.on('open', () => {
+        // Identity check: verify this ws belongs to the currently active gate instance
+        if (gate.closing || this.activeGates.get(gate.gateKey) !== gate || gate.generation !== ws.generation) {
+          try { ws.close(); } catch (_) {}
+          return;
+        }
+
         gate.status = 'open';
         gate.reconnectAttempts = 0;
         console.log(`[Soniox Gate] Connected & ready for session "${gate.sessionId}" language "${gate.lang}".`);
@@ -444,13 +492,23 @@ class SonioxGateManager extends EventEmitter {
 
       ws.on('close', (code, reason) => {
         clearInterval(gate.keepaliveTimer);
+        if (gate.forceTerminationTimer) {
+          clearTimeout(gate.forceTerminationTimer);
+          gate.forceTerminationTimer = null;
+        }
 
         // Never lose finalized words: commit everything we currently have
         this.commit(gate, 'socket-close', /* includeLive */ true);
 
+        // Identity check: ONLY delete or mutate activeGates if this gate is STILL the one in activeGates!
+        const currentActiveGate = this.activeGates.get(gate.gateKey);
+        const isCurrentActive = (currentActiveGate === gate && currentActiveGate.generation === gate.generation);
+
         if (gate.closing || !this.isOperational) {
           gate.status = 'closed';
-          this.activeGates.delete(gate.gateKey);
+          if (isCurrentActive) {
+            this.activeGates.delete(gate.gateKey);
+          }
           return;
         }
 
@@ -458,18 +516,23 @@ class SonioxGateManager extends EventEmitter {
         if (this.isRateLimited && Date.now() < this.rateLimitedUntil) {
           gate.status = 'closed';
           gate.closing = true;
-          this.activeGates.delete(gate.gateKey);
+          if (isCurrentActive) {
+            this.activeGates.delete(gate.gateKey);
+          }
           return;
         }
 
-        // STRICT COST PROTECTION: Only auto-reconnect if audio was actively being streamed (within last 5 seconds)
-        // If the socket closed during silence or Khutbah pause, stay closed at $0 cost!
+        // STRICT COST PROTECTION: Only auto-reconnect if session & publisher are still active
+        // AND audio was actively being streamed (within last 5 seconds)
+        const canReconnect = this.isGateEligible(gate.sessionId, gate.lang);
         const wasRecentlyActive = (Date.now() - gate.lastAudioAt) < 5000;
-        if (!wasRecentlyActive) {
-          console.log(`[Soniox Gate ${gate.gateKey}] Socket closed during silence — staying closed until active speech resumes ($0 cost).`);
+        if (!canReconnect || !wasRecentlyActive) {
+          console.log(`[Soniox Gate ${gate.gateKey}] Socket closed (eligible=${canReconnect}, recent=${wasRecentlyActive}) — staying closed ($0 cost).`);
           gate.status = 'closed';
           gate.closing = true;
-          this.activeGates.delete(gate.gateKey);
+          if (isCurrentActive) {
+            this.activeGates.delete(gate.gateKey);
+          }
           return;
         }
 
@@ -479,8 +542,11 @@ class SonioxGateManager extends EventEmitter {
 
         gate.reconnectTimer = setTimeout(() => {
           gate.reconnectTimer = null;
-          if (!gate.closing && this.isOperational && !this.isRateLimited && this.activeGates.has(gate.gateKey)) {
-            this.connectGate(gate);
+          if (!gate.closing && this.isOperational && !this.isRateLimited) {
+            const liveGate = this.activeGates.get(gate.gateKey);
+            if (liveGate === gate && liveGate.generation === gate.generation && this.isGateEligible(gate.sessionId, gate.lang)) {
+              this.connectGate(gate);
+            }
           }
         }, delay);
       });
@@ -547,50 +613,52 @@ class SonioxGateManager extends EventEmitter {
     }
 
     const tokens = data.tokens || (data.result && data.result.tokens) || [];
-    if (!Array.isArray(tokens) || tokens.length === 0) return;
+    const hasTokens = Array.isArray(tokens) && tokens.length > 0;
+
+    if (!hasTokens && !data.finished) return;
 
     let liveTr = '';
     let liveOr = '';
     let endpoint = false;
 
-    for (const t of tokens) {
-      if (!t.text) continue;
-      if (t.text === '<end>' || t.text === '<fin>') {
-        endpoint = true;
-        continue;
-      }
-      if (isSpecialToken(t.text)) continue;
+    if (hasTokens) {
+      for (const t of tokens) {
+        if (!t.text) continue;
+        if (t.text === '<end>' || t.text === '<fin>') {
+          endpoint = true;
+          continue;
+        }
+        if (isSpecialToken(t.text)) continue;
 
-      const isTr = t.translation_status === 'translation';
-      let tokenText = t.text;
-      if (isTr && gate.lang === 'zh-TW' && s2t) {
-        tokenText = s2t(tokenText);
+        const isTr = t.translation_status === 'translation';
+        const tokenText = t.text;
+        if (t.is_final) {
+          // FINAL: append permanently once
+          if (isTr) gate.stableTr += tokenText;
+          else gate.stableOr += tokenText;
+        } else {
+          // NON-FINAL: provisional tail, replaced every message
+          if (isTr) liveTr += tokenText;
+          else liveOr += tokenText;
+        }
       }
-      if (t.is_final) {
-        // FINAL: append permanently once
-        if (isTr) gate.stableTr += tokenText;
-        else gate.stableOr += tokenText;
+
+      gate.liveTr = liveTr;
+      gate.liveOr = liveOr;
+
+      if (endpoint) {
+        this.commit(gate, 'endpoint', /* includeLive */ false);
       } else {
-        // NON-FINAL: provisional tail, replaced every message
-        if (isTr) liveTr += tokenText;
-        else liveOr += tokenText;
+        this.commitCompletedSentences(gate);
       }
+
+      // Schedule partial streaming token update (throttled to ~60ms)
+      this.schedulePartial(gate);
     }
-
-    gate.liveTr = liveTr;
-    gate.liveOr = liveOr;
-
-    if (endpoint) {
-      this.commit(gate, 'endpoint', /* includeLive */ false);
-    } else {
-      this.commitCompletedSentences(gate);
-    }
-
-    // Schedule partial streaming token update (throttled to ~60ms)
-    this.schedulePartial(gate);
 
     if (data.finished) {
-      try { gate.ws.close(); } catch (_) {}
+      this.commit(gate, 'stream-finished', true);
+      try { gate.ws && gate.ws.close(); } catch (_) {}
     }
   }
 
@@ -634,8 +702,12 @@ class SonioxGateManager extends EventEmitter {
   }
 
   commit(gate, reason = 'endpoint', includeLive = false) {
-    const tr = (gate.stableTr + (includeLive ? gate.liveTr : '')).trim();
-    const ar = (gate.stableOr + (includeLive ? gate.liveOr : '')).trim();
+    const stableTr = gate.stableTr || '';
+    const liveTr = gate.liveTr || '';
+    const stableOr = gate.stableOr || '';
+    const liveOr = gate.liveOr || '';
+    const tr = (stableTr + (includeLive ? liveTr : '')).trim();
+    const ar = (stableOr + (includeLive ? liveOr : '')).trim();
     gate.stableTr = '';
     gate.stableOr = '';
     if (includeLive) {
@@ -655,42 +727,53 @@ class SonioxGateManager extends EventEmitter {
     const seq = ++gate.seq;
     const ts = new Date().toISOString();
 
-    // 1. Emit token_stream with isFinal: true so TV display locks in the completed sentence immediately
-    this.emit('token_stream', {
-      sessionId: gate.sessionId,
-      lang: gate.lang,
-      originalFull: arabic,
-      translatedFull: translated,
-      originalChunk: '',
-      translatedChunk: '',
-      isReplacement: true,
-      isFinal: true,
-      seq,
-      timestamp: ts
-    });
+    const targets = (gate.subLanguages && gate.subLanguages.size > 0)
+      ? Array.from(gate.subLanguages)
+      : [gate.lang];
 
-    // 2. Emit sentence_finalized for history storage and admin transcript
-    this.emit('sentence_finalized', {
-      sessionId: gate.sessionId,
-      lang: gate.lang,
-      seq,
-      finalText: translated,
-      translatedText: translated,
-      originalText: arabic,
-      reason,
-      timestamp: ts
-    });
+    for (const subLang of targets) {
+      let subTranslated = translated;
+      if (subLang === 'zh-TW' && s2t) {
+        subTranslated = s2t(subTranslated);
+      }
 
-    // 3. Emit modern commit event
-    this.emit('commit', {
-      sessionId: gate.sessionId,
-      lang: gate.lang,
-      seq,
-      translated,
-      arabic,
-      reason,
-      t: Date.now()
-    });
+      // 1. Emit token_stream with isFinal: true so TV display locks in the completed sentence immediately
+      this.emit('token_stream', {
+        sessionId: gate.sessionId,
+        lang: subLang,
+        originalFull: arabic,
+        translatedFull: subTranslated,
+        originalChunk: '',
+        translatedChunk: '',
+        isReplacement: true,
+        isFinal: true,
+        seq,
+        timestamp: ts
+      });
+
+      // 2. Emit sentence_finalized for history storage and admin transcript
+      this.emit('sentence_finalized', {
+        sessionId: gate.sessionId,
+        lang: subLang,
+        seq,
+        finalText: subTranslated,
+        translatedText: subTranslated,
+        originalText: arabic,
+        reason,
+        timestamp: ts
+      });
+
+      // 3. Emit modern commit event
+      this.emit('commit', {
+        sessionId: gate.sessionId,
+        lang: subLang,
+        seq,
+        translated: subTranslated,
+        arabic,
+        reason,
+        t: Date.now()
+      });
+    }
   }
 
   schedulePartial(gate) {
@@ -707,31 +790,46 @@ class SonioxGateManager extends EventEmitter {
 
       const ts = new Date().toISOString();
 
-      // Emit full-replacement token_stream for display.js and join.js
-      this.emit('token_stream', {
-        sessionId: gate.sessionId,
-        lang: gate.lang,
-        originalFull,
-        translatedFull,
-        originalChunk: '',
-        translatedChunk: '',
-        isReplacement: true,
-        isFinal: false,
-        seq: gate.seq + 1,
-        timestamp: ts
-      });
+      const targets = (gate.subLanguages && gate.subLanguages.size > 0)
+        ? Array.from(gate.subLanguages)
+        : [gate.lang];
 
-      // Emit modern partial event
-      this.emit('partial', {
-        sessionId: gate.sessionId,
-        lang: gate.lang,
-        seq: gate.seq + 1,
-        stable: gate.stableTr,
-        live: gate.liveTr,
-        arabicStable: gate.stableOr,
-        arabicLive: gate.liveOr,
-        t: Date.now()
-      });
+      for (const subLang of targets) {
+        let subTranslatedFull = translatedFull;
+        let subLive = gate.liveTr;
+        let subStable = gate.stableTr;
+        if (subLang === 'zh-TW' && s2t) {
+          subTranslatedFull = s2t(subTranslatedFull);
+          subLive = s2t(subLive);
+          subStable = s2t(subStable);
+        }
+
+        // Emit full-replacement token_stream for display.js and join.js
+        this.emit('token_stream', {
+          sessionId: gate.sessionId,
+          lang: subLang,
+          originalFull,
+          translatedFull: subTranslatedFull,
+          originalChunk: '',
+          translatedChunk: '',
+          isReplacement: true,
+          isFinal: false,
+          seq: gate.seq + 1,
+          timestamp: ts
+        });
+
+        // Emit modern partial event
+        this.emit('partial', {
+          sessionId: gate.sessionId,
+          lang: subLang,
+          seq: gate.seq + 1,
+          stable: subStable,
+          live: subLive,
+          arabicStable: gate.stableOr,
+          arabicLive: gate.liveOr,
+          t: Date.now()
+        });
+      }
     }, PARTIAL_THROTTLE_MS);
   }
 
@@ -770,8 +868,9 @@ class SonioxGateManager extends EventEmitter {
 
     const sid = sessionId;
 
-    // STRICT SESSION ACTIVE GATE: Drop audio and close any lingering gates if session is not active
-    if (!this.isSessionActive(sid)) {
+    // STRICT SESSION AND PUBLISHER ACTIVE GATE:
+    // Drop audio and close lingering gates if session or publisher (mic) is not active ($0 idle cost)
+    if (!this.isSessionActive(sid) || !this.isPublisherActive(sid)) {
       this.closeSessionGates(sid);
       return;
     }
@@ -796,7 +895,6 @@ class SonioxGateManager extends EventEmitter {
     if (!sessionHasGates) {
       if (isVoice) {
         this.emit('session_needs_sync', sid);
-        this.ensureGate(sid, 'en');
       } else {
         // Do not open new gates for pure silence
         return;
@@ -848,22 +946,27 @@ class SonioxGateManager extends EventEmitter {
   onMicrophoneOff(sessionId) {
     const sid = sessionId || 'default';
     console.log(`[Soniox] Microphone turned OFF for session "${sid}" — immediately closing all gates ($0 cost).`);
-    this.closeSessionGates(sid);
+    return this.closeSessionGates(sid);
   }
 
   /**
-   * Close a specific language gate gracefully for a session.
+   * Close a specific language gate gracefully for a session with a 1500ms hard safety deadline.
    */
   closeGate(sessionIdOrLang, maybeLang) {
     const sid = maybeLang ? sessionIdOrLang : 'default';
-    const langCode = maybeLang || sessionIdOrLang;
-    const gateKey = `${sid}:${langCode}`;
+    const rawLang = maybeLang || sessionIdOrLang;
+    const sonioxLang = SONIOX_LANG_MAP[rawLang] || rawLang;
+    const gateKey = `${sid}:${sonioxLang}`;
     const gate = this.activeGates.get(gateKey);
-    if (!gate) return;
+    if (!gate) return Promise.resolve(false);
 
     gate.closing = true;
+    gate.status = 'closing';
     clearInterval(gate.keepaliveTimer);
-    if (gate.emitTimer) clearTimeout(gate.emitTimer);
+    if (gate.emitTimer) {
+      clearTimeout(gate.emitTimer);
+      gate.emitTimer = null;
+    }
     if (gate.reconnectTimer) {
       clearTimeout(gate.reconnectTimer);
       gate.reconnectTimer = null;
@@ -872,22 +975,62 @@ class SonioxGateManager extends EventEmitter {
     // Commit any remaining text before closing
     this.commit(gate, 'gate-close', true);
 
-    if (gate.ws) {
-      try {
-        if (gate.ws.readyState === WebSocket.OPEN) {
-          gate.ws.send(JSON.stringify({ type: 'finalize' }));
-          gate.ws.send(''); // Empty frame = graceful end of audio stream
-          setTimeout(() => {
-            try { gate.ws.close(1000, 'Gate closed by manager'); } catch (_) {}
-          }, 500);
-        } else {
-          gate.ws.close();
-        }
-      } catch (_) {}
+    // Identity check before delete from activeGates
+    if (this.activeGates.get(gateKey) === gate) {
+      this.activeGates.delete(gateKey);
     }
 
-    gate.status = 'closed';
-    this.activeGates.delete(gateKey);
+    return new Promise((resolve) => {
+      const ws = gate.ws;
+      if (!ws) {
+        gate.status = 'closed';
+        return resolve(true);
+      }
+
+      let resolved = false;
+      const cleanup = () => {
+        if (!resolved) {
+          resolved = true;
+          gate.status = 'closed';
+          if (gate.forceTerminationTimer) {
+            clearTimeout(gate.forceTerminationTimer);
+            gate.forceTerminationTimer = null;
+          }
+          resolve(true);
+        }
+      };
+
+      // 1500ms safety deadline: force terminate if WS closing handshake stalls
+      gate.forceTerminationTimer = setTimeout(() => {
+        console.warn(`[Soniox Gate ${gate.gateKey}] WS termination deadline reached (1500ms); forcing ws.terminate().`);
+        try { ws.terminate(); } catch (_) {}
+        cleanup();
+      }, 1500);
+
+      if (typeof ws.once === 'function') {
+        ws.once('close', cleanup);
+      } else if (typeof ws.on === 'function') {
+        ws.on('close', cleanup);
+      }
+
+      try {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'finalize' }));
+          ws.send(''); // Empty frame = graceful end of audio stream
+          setTimeout(() => {
+            try { ws.close(1000, 'Gate closed by manager'); } catch (_) {}
+          }, 300);
+        } else if (ws.readyState === WebSocket.CONNECTING) {
+          ws.terminate();
+          cleanup();
+        } else {
+          cleanup();
+        }
+      } catch (_) {
+        try { ws.terminate(); } catch (_) {}
+        cleanup();
+      }
+    });
   }
 
   /**
@@ -899,11 +1042,13 @@ class SonioxGateManager extends EventEmitter {
       clearTimeout(this.sessionInactivityTimers.get(sid));
       this.sessionInactivityTimers.delete(sid);
     }
+    const promises = [];
     for (const [key, gate] of Array.from(this.activeGates.entries())) {
       if (gate.sessionId === sid) {
-        this.closeGate(gate.sessionId, gate.lang);
+        promises.push(this.closeGate(gate.sessionId, gate.lang));
       }
     }
+    return Promise.all(promises);
   }
 
   /**
@@ -921,10 +1066,12 @@ class SonioxGateManager extends EventEmitter {
     }
     this.gateRemovalTimers.clear();
 
+    const promises = [];
     for (const [_, gate] of Array.from(this.activeGates.entries())) {
-      this.closeGate(gate.sessionId, gate.lang);
+      promises.push(this.closeGate(gate.sessionId, gate.lang));
     }
     this.activeGates.clear();
+    return Promise.all(promises);
   }
 
   getStatus(sessionId = null) {
