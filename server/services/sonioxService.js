@@ -50,7 +50,7 @@ const SENTENCE_END = /[.!?؟。！？۔]\s*/g; // Sentence punctuation (incl. Ar
 const MAX_SEGMENT_CHARS = 220; // Force commit during long continuous speech without punctuation
 const MAX_CONCURRENT_GATES = parseInt(process.env.SONIOX_MAX_CONCURRENT_STREAMS || '5', 10);
 const SILENCE_AUTO_CLOSE_MS = 12000; // 12 seconds of silence -> close gate to stop Soniox billing ($0 idle cost)
-const SILENCE_RMS_THRESHOLD = parseInt(process.env.SONIOX_SILENCE_RMS_THRESHOLD || '150', 10); // 16-bit PCM RMS threshold for voice activity
+const SILENCE_RMS_THRESHOLD = parseInt(process.env.SONIOX_SILENCE_RMS_THRESHOLD || '80', 10); // 16-bit PCM RMS threshold for voice activity
 
 /**
  * Calculates Root Mean Square (RMS) sound energy of 16-bit PCM mono audio.
@@ -154,13 +154,25 @@ class SonioxGateManager extends EventEmitter {
     }
   }
 
+  isCooldownActive() {
+    if (this.isRateLimited) {
+      if (this.rateLimitedUntil && Date.now() < this.rateLimitedUntil) {
+        return true;
+      }
+      // Cooldown deadline passed: reset flag and allow gates to reconnect
+      this.isRateLimited = false;
+      this.rateLimitedUntil = 0;
+    }
+    return false;
+  }
+
   isGateEligible(sessionId, lang) {
     if (!this.isOperational) return false;
     if (!sessionId || sessionId === 'default') return false;
     if (!this.isSessionActive(sessionId)) return false;
     if (!this.isPublisherActive(sessionId)) return false;
     if (!this.isLanguageSupported(lang)) return false;
-    if (this.isRateLimited && Date.now() < this.rateLimitedUntil) return false;
+    if (this.isCooldownActive()) return false;
     return true;
   }
 
@@ -180,7 +192,7 @@ class SonioxGateManager extends EventEmitter {
    */
   isStreaming(sessionId = null) {
     if (!this.isOperational) return false;
-    if (this.isRateLimited && Date.now() < this.rateLimitedUntil) return false;
+    if (this.isCooldownActive()) return false;
 
     for (const [_, gate] of this.activeGates.entries()) {
       if (!sessionId || gate.sessionId === sessionId) {
@@ -297,22 +309,45 @@ class SonioxGateManager extends EventEmitter {
     const rawLangs = maybeLangs !== undefined ? maybeLangs : sessionIdOrLangs;
     const reqSet = new Set(Array.from(rawLangs || []).filter(l => l && typeof l === 'string'));
 
+    // Distinguish languages supported natively by Soniox vs indirect languages
+    const supportedLangs = Array.from(reqSet).filter(l => this.isLanguageSupported(l));
+    const indirectLangs = Array.from(reqSet).filter(l => !this.isLanguageSupported(l));
+
+    // If there is active listener demand but NO natively supported language is in the demand (e.g. only 'uz' or 'so'),
+    // we maintain an anchor gate ('en') so Soniox streams live speech tokens and original text.
+    let anchorLang = null;
+    if (supportedLangs.length === 0 && reqSet.size > 0) {
+      anchorLang = 'en';
+    }
+
+    const langsToEnsure = new Set(supportedLangs);
+    if (anchorLang) {
+      langsToEnsure.add(anchorLang);
+    }
+
     // 1. Open newly requested gates for this session and cancel pending close timers
-    for (const lang of reqSet) {
+    for (const lang of langsToEnsure) {
       const sonioxLang = SONIOX_LANG_MAP[lang] || lang;
       const gateKey = `${sid}:${sonioxLang}`;
       if (this.gateRemovalTimers.has(gateKey)) {
         clearTimeout(this.gateRemovalTimers.get(gateKey));
         this.gateRemovalTimers.delete(gateKey);
       }
-      this.ensureGate(sid, lang);
+      const gate = this.ensureGate(sid, lang);
+      if (gate && anchorLang && sonioxLang === anchorLang) {
+        gate.isAnchor = true;
+        if (!gate.indirectLanguages) gate.indirectLanguages = new Set();
+        for (const ind of indirectLangs) gate.indirectLanguages.add(ind);
+      }
     }
 
     // 2. Debounce closure for gates in this session that have 0 listeners
     for (const [gateKey, gate] of this.activeGates.entries()) {
       if (gate.sessionId !== sid) continue;
       const matchingLangs = Array.from(reqSet).filter(l => (SONIOX_LANG_MAP[l] || l) === gate.lang);
-      if (matchingLangs.length === 0) {
+      const isNeededAsAnchor = Boolean(gate.isAnchor && indirectLangs.length > 0);
+
+      if (matchingLangs.length === 0 && !isNeededAsAnchor) {
         if (!this.gateRemovalTimers.has(gateKey)) {
           const timer = setTimeout(() => {
             this.gateRemovalTimers.delete(gateKey);
@@ -327,6 +362,9 @@ class SonioxGateManager extends EventEmitter {
           this.gateRemovalTimers.delete(gateKey);
         }
         gate.subLanguages = new Set(matchingLangs);
+        if (isNeededAsAnchor) {
+          gate.indirectLanguages = new Set(indirectLangs);
+        }
       }
     }
   }
@@ -513,7 +551,7 @@ class SonioxGateManager extends EventEmitter {
         }
 
         // If rate-limited, do not reconnect immediately to avoid DDoS loop
-        if (this.isRateLimited && Date.now() < this.rateLimitedUntil) {
+        if (this.isCooldownActive()) {
           gate.status = 'closed';
           gate.closing = true;
           if (isCurrentActive) {
@@ -542,7 +580,7 @@ class SonioxGateManager extends EventEmitter {
 
         gate.reconnectTimer = setTimeout(() => {
           gate.reconnectTimer = null;
-          if (!gate.closing && this.isOperational && !this.isRateLimited) {
+          if (!gate.closing && this.isOperational && !this.isCooldownActive()) {
             const liveGate = this.activeGates.get(gate.gateKey);
             if (liveGate === gate && liveGate.generation === gate.generation && this.isGateEligible(gate.sessionId, gate.lang)) {
               this.connectGate(gate);
@@ -829,6 +867,25 @@ class SonioxGateManager extends EventEmitter {
           arabicLive: gate.liveOr,
           t: Date.now()
         });
+      }
+
+      // If this gate is an anchor for indirect languages (e.g. uz, so),
+      // forward original speech tokens to their rooms so the display updates in real time
+      if (gate.indirectLanguages && gate.indirectLanguages.size > 0) {
+        for (const indLang of gate.indirectLanguages) {
+          this.emit('token_stream', {
+            sessionId: gate.sessionId,
+            lang: indLang,
+            originalFull,
+            translatedFull: '',
+            originalChunk: '',
+            translatedChunk: '',
+            isReplacement: true,
+            isFinal: false,
+            seq: gate.seq + 1,
+            timestamp: ts
+          });
+        }
       }
     }, PARTIAL_THROTTLE_MS);
   }

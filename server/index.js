@@ -364,6 +364,9 @@ sonioxService.on('connected', ({ sessionId, lang }) => {
   }
 });
 
+// Throttled rolling translation for indirect targets (e.g. Uzbek, Somali) during live streaming
+const lastIndirectPartialTime = new Map();
+
 // Broadcast real-time streaming tokens (sub-200ms word-by-word) strictly to the target session room
 sonioxService.on('token_stream', ({ sessionId, lang, translatedChunk, originalChunk, originalFull, translatedFull, isReplacement, isFinal, seq, timestamp }) => {
   if (!sessionId || sessionId === 'default') return;
@@ -378,6 +381,40 @@ sonioxService.on('token_stream', ({ sessionId, lang, translatedChunk, originalCh
     seq,
     timestamp
   });
+
+  // For active indirect languages (e.g. uz, so), provide throttled rolling translation during sustained speech
+  if (!isFinal && originalFull && originalFull.trim().length > 2) {
+    const session = sessionManager.getSession(sessionId);
+    if (session && session.status === 'active') {
+      const liveLangs = sessionManager.getLiveRequiredLanguages(sessionId);
+      const indirectLangs = liveLangs.filter(l => !sonioxService.isLanguageSupported(l));
+      if (indirectLangs.length > 0) {
+        const now = Date.now();
+        const lastRun = lastIndirectPartialTime.get(sessionId) || 0;
+        if (now - lastRun >= 450) {
+          lastIndirectPartialTime.set(sessionId, now);
+          const srcText = originalFull.trim();
+          translationService.translateMultiple(srcText, indirectLangs).then(results => {
+            for (const [nl, nText] of Object.entries(results)) {
+              if (nText && nText.trim()) {
+                sessionManager.broadcastStreamingToken(sessionId, {
+                  lang: nl,
+                  translatedChunk: '',
+                  originalChunk: '',
+                  originalFull: srcText,
+                  translatedFull: nText,
+                  isReplacement: true,
+                  isFinal: false,
+                  seq,
+                  timestamp
+                });
+              }
+            }
+          }).catch(() => {});
+        }
+      }
+    }
+  }
 });
 
 // When a sentence is finalized by Soniox, save to session history for that specific session ONLY.
@@ -427,7 +464,11 @@ sonioxService.on('sentence_finalized', ({ sessionId, lang, translatedText, final
   };
 
   // Translate for any active session languages not already translated by a Soniox gate
-  const pendingLanguages = Array.from(session.activatedLanguages || []).filter(
+  const neededLangs = new Set([
+    ...Array.from(session.activatedLanguages || []),
+    ...sessionManager.getLiveRequiredLanguages(sessionId)
+  ]);
+  const pendingLanguages = Array.from(neededLangs).filter(
     l => (!existing.translations || !existing.translations[l] || isCorruptOrMissingText(existing.translations[l], l))
   );
   if (pendingLanguages.length > 0) {

@@ -878,6 +878,9 @@ async function startMicrophone() {
   try {
     mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioContext.state === 'suspended') {
+      try { await audioContext.resume(); } catch (_) {}
+    }
     const source = audioContext.createMediaStreamSource(mediaStream);
     analyser = audioContext.createAnalyser();
     analyser.fftSize = 256;
@@ -910,15 +913,15 @@ async function startMicrophone() {
         }
         const inputData = e.inputBuffer.getChannelData(0);
 
-        // Fast browser-side RMS voice check: if room is dead silent (< 0.003) for > 4 seconds, suppress frame spam
+        // Fast browser-side RMS voice check: if room is dead silent (< 0.001) for > 4 seconds, suppress frame spam
         let sum = 0;
         for (let i = 0; i < inputData.length; i++) {
           sum += inputData[i] * inputData[i];
         }
         const rms = Math.sqrt(sum / inputData.length);
-        if (rms < 0.003) {
+        if (rms < 0.001) {
           clientSilenceFrames++;
-          if (clientSilenceFrames > 32) {
+          if (clientSilenceFrames > 48) {
             // Suppress streaming empty silence to save bandwidth and prevent idle charges
             return;
           }
