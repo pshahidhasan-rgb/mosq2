@@ -488,8 +488,36 @@
   }
 
   // ─── SOURCE COLUMN STYLING ───
+  var spokenSeqs = {};
+
   function hasArabicScript(text) {
     return /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/.test(text || '');
+  }
+
+  function isRawArabicLeak(str) {
+    if (!str || typeof str !== 'string') return false;
+    var arabicCount = 0;
+    var otherCount = 0;
+    var totalAlpha = 0;
+    for (var i = 0; i < str.length; i++) {
+      var code = str.charCodeAt(i);
+      if ((code >= 0x0600 && code <= 0x06FF) ||
+          (code >= 0x0750 && code <= 0x077F) ||
+          (code >= 0xFB50 && code <= 0xFDFF) ||
+          (code >= 0xFE70 && code <= 0xFEFF)) {
+        arabicCount++;
+        totalAlpha++;
+      } else if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122) ||
+                 (code >= 0x0400 && code <= 0x04FF) || // Cyrillic
+                 (code >= 0x0980 && code <= 0x09FF) || // Bengali
+                 (code >= 0x4E00 && code <= 0x9FFF)) { // Chinese
+        otherCount++;
+        totalAlpha++;
+      }
+    }
+    if (totalAlpha === 0) return false;
+    if (otherCount > 0 && (otherCount / totalAlpha) > 0.2) return false;
+    return (arabicCount / totalAlpha) > 0.75;
   }
 
   function updateSourceColumnStyling() {
@@ -580,6 +608,8 @@
   function clearTvFeeds() {
     recentFeedItems.length = 0;
     seenKeys = {};
+    spokenSeqs = {};
+    clearActiveStreams();
     if ('speechSynthesis' in window) {
       try { window.speechSynthesis.cancel(); } catch (_) {}
     }
@@ -638,18 +668,16 @@
     function isCorrupt(str) {
       if (!str || typeof str !== 'string' || !safeTrim(str)) return true;
       if (safeStartsWith(str, '[' + lang.toUpperCase() + ']')) return true;
-      if (!isArabicTarget && hasArabicScript(str)) return true;
+      if (!isArabicTarget && isRawArabicLeak(str)) return true;
       return false;
     }
 
     if (typeof transObj === 'object') {
       var direct = transObj[lang];
       if (direct && !isCorrupt(direct)) return direct;
-      var en = transObj.en;
-      if (en && !isCorrupt(en)) return en;
-      var vals = safeValues(transObj);
-      for (var v = 0; v < vals.length; v++) {
-        if (vals[v] && !isCorrupt(vals[v])) return vals[v];
+      // Strict boundary: Only return English if targetLang is explicitly English
+      if (lang === 'en' && transObj.en && !isCorrupt(transObj.en)) {
+        return transObj.en;
       }
       return '';
     }
@@ -674,15 +702,18 @@
         var isCurrent = (i === recentFeedItems.length - 1);
         var pTrans = document.createElement('div');
         pTrans.className = 'para-item ' + (isCurrent ? 'current' : 'history');
+        if (item.seq) {
+          pTrans.setAttribute('data-seq', 'seq_' + item.seq);
+        }
         var text = getValidTranslationText(item.transObj, targetLang);
-        pTrans.textContent = text;
+        pTrans.textContent = text || '…';
         transFeed.appendChild(pTrans);
       }
       scrollFeedsToBottom();
     }
   }
 
-  function appendToFeed(arabicText, transObj, isLive) {
+  function appendToFeed(arabicText, transObj, isLive, seqKey) {
     if (typeof isLive === 'undefined') isLive = true;
     if (!arabicText && !transObj) return;
 
@@ -708,6 +739,9 @@
 
       var pArabic = document.createElement('div');
       pArabic.className = 'para-item current';
+      if (seqKey) {
+        pArabic.setAttribute('data-seq', seqKey);
+      }
       if (isSourceRtl) {
         pArabic.style.direction = 'rtl';
         pArabic.style.textAlign = 'right';
@@ -717,13 +751,8 @@
         pArabic.style.textAlign = 'left';
         pArabic.style.fontFamily = "'Plus Jakarta Sans', sans-serif";
       }
+      pArabic.textContent = arabicText;
       arabicFeed.appendChild(pArabic);
-
-      if (isLive) {
-        streamWordsIntoElement(pArabic, arabicText, 70);
-      } else {
-        pArabic.textContent = arabicText;
-      }
 
       while (arabicFeed.children.length > MAX_HISTORY) {
         arabicFeed.removeChild(arabicFeed.firstElementChild);
@@ -733,28 +762,28 @@
     // 2. Translation column
     var displayTrans = '';
     if (typeof transObj === 'object' && transObj !== null) {
-      displayTrans = transObj[targetLang] || transObj.en || '';
-    } else {
-      displayTrans = transObj || '';
+      displayTrans = getValidTranslationText(transObj, targetLang);
+    } else if (typeof transObj === 'string') {
+      displayTrans = transObj;
     }
 
-    if (displayTrans && transFeed) {
+    if (transFeed) {
       var prevT = transFeed.querySelectorAll('.para-item.current');
       for (var t = 0; t < prevT.length; t++) {
         prevT[t].className = prevT[t].className.replace(/\bcurrent\b/g, '').replace(/\s+/g, ' ') + ' history';
       }
 
       var pTrans = document.createElement('div');
-      pTrans.className = 'para-item current';
+      pTrans.className = 'para-item current' + (displayTrans ? '' : ' translating-placeholder');
+      if (seqKey) {
+        pTrans.setAttribute('data-seq', seqKey);
+      }
+      pTrans.textContent = displayTrans || '…';
       transFeed.appendChild(pTrans);
 
-      if (isLive) {
-        streamWordsIntoElement(pTrans, displayTrans, 75);
-        if (isTvAudioEnabled) {
-          playTvBrowserAudio(displayTrans, targetLang);
-        }
-      } else {
-        pTrans.textContent = displayTrans;
+      if (displayTrans && isTvAudioEnabled && isLive && (!seqKey || !spokenSeqs[seqKey])) {
+        if (seqKey) spokenSeqs[seqKey] = true;
+        playTvBrowserAudio(displayTrans, targetLang);
       }
 
       while (transFeed.children.length > MAX_HISTORY) {
@@ -773,6 +802,9 @@
     var arabic = data.arabic;
     var translations = data.translations;
     var translated = data.translated;
+    var seq = data.seq || 0;
+    var timestamp = data.timestamp || null;
+    var seqKey = seq ? ('seq_' + seq) : (timestamp ? ('ts_' + timestamp.replace(/[^a-zA-Z0-9]/g, '')) : null);
 
     if (!arabic && !translated && !translations) return;
 
@@ -783,6 +815,27 @@
     }
 
     var displayTrans = getValidTranslationText(transObj, targetLang);
+
+    // Keyed idempotency: if an item with this data-seq exists in the DOM, update in place
+    if (seqKey) {
+      var exA = arabicFeed ? arabicFeed.querySelector('[data-seq="' + seqKey + '"]') : null;
+      var exT = transFeed ? transFeed.querySelector('[data-seq="' + seqKey + '"]') : null;
+      if (exA || exT) {
+        if (exA && arabic) {
+          exA.textContent = arabic;
+          exA.className = exA.className.replace(/\bstreaming\b/g, '').replace(/\s+/g, ' ');
+        }
+        if (exT && displayTrans) {
+          exT.textContent = displayTrans;
+          exT.className = exT.className.replace(/\b(streaming|translating-placeholder)\b/g, '').replace(/\s+/g, ' ');
+          if (isTvAudioEnabled && isLive && !spokenSeqs[seqKey]) {
+            spokenSeqs[seqKey] = true;
+            playTvBrowserAudio(displayTrans, targetLang);
+          }
+        }
+        return;
+      }
+    }
 
     var streamingArabic = arabicFeed ? arabicFeed.querySelector('.para-item.current.streaming') : null;
     var streamingTrans = transFeed ? transFeed.querySelector('.para-item.current.streaming') : null;
@@ -799,15 +852,20 @@
           streamingArabic.style.fontFamily = isRtl ? "'Amiri', 'Traditional Arabic', serif" : "'Plus Jakarta Sans', sans-serif";
           streamingArabic.className = streamingArabic.className.replace(/\bstreaming\b/g, '').replace(/\s+/g, ' ');
           streamingArabic.textContent = arabic;
+          if (seqKey) streamingArabic.setAttribute('data-seq', seqKey);
         } else if (streamingArabic.parentNode) {
           streamingArabic.parentNode.removeChild(streamingArabic);
         }
       }
-      if (streamingTrans && displayTrans) {
-        streamingTrans.className = streamingTrans.className.replace(/\bstreaming\b/g, '').replace(/\s+/g, ' ');
-        streamingTrans.textContent = displayTrans;
-        if (isTvAudioEnabled && isLive) {
-          playTvBrowserAudio(displayTrans, targetLang);
+      if (streamingTrans) {
+        streamingTrans.className = streamingTrans.className.replace(/\b(streaming|translating-placeholder)\b/g, '').replace(/\s+/g, ' ');
+        if (displayTrans) {
+          streamingTrans.textContent = displayTrans;
+          if (seqKey) streamingTrans.setAttribute('data-seq', seqKey);
+          if (isTvAudioEnabled && isLive && (!seqKey || !spokenSeqs[seqKey])) {
+            if (seqKey) spokenSeqs[seqKey] = true;
+            playTvBrowserAudio(displayTrans, targetLang);
+          }
         }
       }
       var keepArabic = arabic && (sourceLang === 'ar' ? hasArabicScript(arabic) : safeTrim(arabic).length > 0);
@@ -819,6 +877,10 @@
     var arabicMatch = currentArabic && arabic && safeTrim(currentArabic.textContent) === safeTrim(arabic);
     var transMatch = currentTrans && displayTrans && safeTrim(currentTrans.textContent) === safeTrim(displayTrans);
     if (arabicMatch || transMatch) {
+      if (seqKey) {
+        if (currentArabic) currentArabic.setAttribute('data-seq', seqKey);
+        if (currentTrans) currentTrans.setAttribute('data-seq', seqKey);
+      }
       var keepA = arabic && (sourceLang === 'ar' ? hasArabicScript(arabic) : safeTrim(arabic).length > 0);
       recentFeedItems.push({ arabicText: keepA ? arabic : '', transObj: transObj });
       while (recentFeedItems.length > MAX_HISTORY) recentFeedItems.shift();
@@ -826,7 +888,7 @@
     }
 
     var validArabic = arabic && (sourceLang === 'ar' ? (hasArabicScript(arabic) ? arabic : '') : arabic);
-    appendToFeed(validArabic, transObj, isLive);
+    appendToFeed(validArabic, transObj, isLive, seqKey);
   }
 
   function handleStreamingToken(data) {
@@ -840,6 +902,7 @@
     var isFinal = Boolean(data.isFinal);
     var seq = data.seq || 0;
     var timestamp = data.timestamp || null;
+    var seqKey = seq ? ('seq_' + seq) : (timestamp ? ('ts_' + timestamp.replace(/[^a-zA-Z0-9]/g, '')) : null);
 
     if (lang && lang !== targetLang) {
       return;
@@ -856,30 +919,52 @@
     var isValidSource = sourceContent && (sourceLang === 'ar' ? hasArabicScript(sourceContent) : safeTrim(sourceContent).length > 0);
 
     if (isValidSource && arabicFeed) {
-      var currentArabic = arabicFeed.querySelector('.para-item.current.streaming');
+      var currentArabic = null;
+      if (seqKey) {
+        currentArabic = arabicFeed.querySelector('[data-seq="' + seqKey + '"]');
+      }
       if (!currentArabic) {
+        currentArabic = arabicFeed.querySelector('.para-item.current.streaming');
+      }
+
+      if (currentArabic) {
+        var isArabicFinalized = currentArabic.className.indexOf('streaming') === -1;
+        if (isArabicFinalized && !isFinal) {
+          // Stale provisional partial arrived after finalization: ignore to prevent rollback
+        } else {
+          if (isReplacement) {
+            currentArabic.textContent = safeTrimStart(sourceContent);
+          } else {
+            currentArabic.textContent = safeTrimStart(currentArabic.textContent + sourceContent);
+          }
+          if (seqKey && !currentArabic.getAttribute('data-seq')) {
+            currentArabic.setAttribute('data-seq', seqKey);
+          }
+          if (isFinal) {
+            currentArabic.className = currentArabic.className.replace(/\bstreaming\b/g, '').replace(/\s+/g, ' ');
+          }
+        }
+      } else {
         var prevs = arabicFeed.querySelectorAll('.para-item.current');
         for (var p = 0; p < prevs.length; p++) {
           prevs[p].className = prevs[p].className.replace(/\b(current|streaming)\b/g, '').replace(/\s+/g, ' ') + ' history';
         }
         currentArabic = document.createElement('div');
-        currentArabic.className = 'para-item current streaming';
-        arabicFeed.appendChild(currentArabic);
-      }
-      if (isSourceRtl) {
-        currentArabic.style.direction = 'rtl';
-        currentArabic.style.textAlign = 'right';
-        currentArabic.style.fontFamily = "'Amiri', 'Traditional Arabic', serif";
-      } else {
-        currentArabic.style.direction = 'ltr';
-        currentArabic.style.textAlign = 'left';
-        currentArabic.style.fontFamily = "'Plus Jakarta Sans', sans-serif";
-      }
-
-      if (isReplacement) {
+        currentArabic.className = 'para-item current' + (isFinal ? '' : ' streaming');
+        if (seqKey) {
+          currentArabic.setAttribute('data-seq', seqKey);
+        }
+        if (isSourceRtl) {
+          currentArabic.style.direction = 'rtl';
+          currentArabic.style.textAlign = 'right';
+          currentArabic.style.fontFamily = "'Amiri', 'Traditional Arabic', serif";
+        } else {
+          currentArabic.style.direction = 'ltr';
+          currentArabic.style.textAlign = 'left';
+          currentArabic.style.fontFamily = "'Plus Jakarta Sans', sans-serif";
+        }
         currentArabic.textContent = safeTrimStart(sourceContent);
-      } else {
-        currentArabic.textContent = safeTrimStart(currentArabic.textContent + sourceContent);
+        arabicFeed.appendChild(currentArabic);
       }
 
       while (arabicFeed.children.length > MAX_HISTORY) {
@@ -890,7 +975,13 @@
       // Placeholder on right if translation has not arrived yet
       var transContentCheck = isReplacement ? translatedFull : translatedChunk;
       if ((!transContentCheck || safeTrim(transContentCheck).length === 0) && !isFinal && transFeed) {
-        var currentTransHolder = transFeed.querySelector('.para-item.current.streaming');
+        var currentTransHolder = null;
+        if (seqKey) {
+          currentTransHolder = transFeed.querySelector('[data-seq="' + seqKey + '"]');
+        }
+        if (!currentTransHolder) {
+          currentTransHolder = transFeed.querySelector('.para-item.current.streaming');
+        }
         if (!currentTransHolder) {
           var prevTransHolders = transFeed.querySelectorAll('.para-item.current');
           for (var th = 0; th < prevTransHolders.length; th++) {
@@ -898,6 +989,9 @@
           }
           currentTransHolder = document.createElement('div');
           currentTransHolder.className = 'para-item current streaming translating-placeholder';
+          if (seqKey) {
+            currentTransHolder.setAttribute('data-seq', seqKey);
+          }
           currentTransHolder.textContent = '…';
           transFeed.appendChild(currentTransHolder);
           scrollFeedsToBottom();
@@ -908,27 +1002,56 @@
     // 2. Translation column
     var rawTransContent = isReplacement ? translatedFull : translatedChunk;
     var isArabicTarget = (targetLang === 'ar' || targetLang === 'ur');
-    var isTransCorrupt = rawTransContent && (safeStartsWith(rawTransContent, '[' + targetLang.toUpperCase() + ']') || (!isArabicTarget && hasArabicScript(rawTransContent)));
+    var isTransCorrupt = rawTransContent && (safeStartsWith(rawTransContent, '[' + targetLang.toUpperCase() + ']') || (!isArabicTarget && isRawArabicLeak(rawTransContent)));
     var transContent = isTransCorrupt ? '' : rawTransContent;
 
     if (transContent && transContent.length > 0 && transFeed) {
-      var currentTrans = transFeed.querySelector('.para-item.current.streaming');
+      var currentTrans = null;
+      if (seqKey) {
+        currentTrans = transFeed.querySelector('[data-seq="' + seqKey + '"]');
+      }
       if (!currentTrans) {
+        currentTrans = transFeed.querySelector('.para-item.current.streaming');
+      }
+
+      if (currentTrans) {
+        var isTransFinalized = currentTrans.className.indexOf('streaming') === -1 && currentTrans.className.indexOf('translating-placeholder') === -1;
+        if (isTransFinalized && !isFinal) {
+          // Stale provisional partial arrived after finalization: ignore to prevent rollback
+        } else {
+          currentTrans.className = currentTrans.className.replace(/\btranslating-placeholder\b/g, '').replace(/\s+/g, ' ');
+          if (isReplacement) {
+            currentTrans.textContent = safeTrimStart(transContent);
+          } else {
+            currentTrans.textContent = safeTrimStart(currentTrans.textContent + transContent);
+          }
+          if (seqKey && !currentTrans.getAttribute('data-seq')) {
+            currentTrans.setAttribute('data-seq', seqKey);
+          }
+          if (isFinal) {
+            currentTrans.className = currentTrans.className.replace(/\bstreaming\b/g, '').replace(/\s+/g, ' ');
+            if (isTvAudioEnabled && currentTrans.textContent && currentTrans.textContent !== '…' && (!seqKey || !spokenSeqs[seqKey])) {
+              if (seqKey) spokenSeqs[seqKey] = true;
+              playTvBrowserAudio(currentTrans.textContent, targetLang);
+            }
+          }
+        }
+      } else {
         var prevsT = transFeed.querySelectorAll('.para-item.current');
         for (var pt = 0; pt < prevsT.length; pt++) {
           prevsT[pt].className = prevsT[pt].className.replace(/\b(current|streaming)\b/g, '').replace(/\s+/g, ' ') + ' history';
         }
         currentTrans = document.createElement('div');
-        currentTrans.className = 'para-item current streaming';
-        transFeed.appendChild(currentTrans);
-      } else {
-        currentTrans.className = currentTrans.className.replace(/\btranslating-placeholder\b/g, '').replace(/\s+/g, ' ');
-      }
-
-      if (isReplacement) {
+        currentTrans.className = 'para-item current' + (isFinal ? '' : ' streaming');
+        if (seqKey) {
+          currentTrans.setAttribute('data-seq', seqKey);
+        }
         currentTrans.textContent = safeTrimStart(transContent);
-      } else {
-        currentTrans.textContent = safeTrimStart(currentTrans.textContent + transContent);
+        transFeed.appendChild(currentTrans);
+        if (isFinal && isTvAudioEnabled && currentTrans.textContent && currentTrans.textContent !== '…' && (!seqKey || !spokenSeqs[seqKey])) {
+          if (seqKey) spokenSeqs[seqKey] = true;
+          playTvBrowserAudio(currentTrans.textContent, targetLang);
+        }
       }
 
       while (transFeed.children.length > MAX_HISTORY) {
@@ -938,12 +1061,13 @@
     }
 
     if (isFinal) {
-      var finArabic = arabicFeed ? arabicFeed.querySelector('.para-item.current.streaming') : null;
+      var finArabic = seqKey && arabicFeed ? arabicFeed.querySelector('[data-seq="' + seqKey + '"]') : (arabicFeed ? arabicFeed.querySelector('.para-item.current.streaming') : null);
       if (finArabic) finArabic.className = finArabic.className.replace(/\bstreaming\b/g, '').replace(/\s+/g, ' ');
-      var finTrans = transFeed ? transFeed.querySelector('.para-item.current.streaming') : null;
+      var finTrans = seqKey && transFeed ? transFeed.querySelector('[data-seq="' + seqKey + '"]') : (transFeed ? transFeed.querySelector('.para-item.current.streaming') : null);
       if (finTrans) {
         finTrans.className = finTrans.className.replace(/\b(streaming|translating-placeholder)\b/g, '').replace(/\s+/g, ' ');
-        if (isTvAudioEnabled && finTrans.textContent && finTrans.textContent !== '…') {
+        if (isTvAudioEnabled && finTrans.textContent && finTrans.textContent !== '…' && (!seqKey || !spokenSeqs[seqKey])) {
+          if (seqKey) spokenSeqs[seqKey] = true;
           playTvBrowserAudio(finTrans.textContent, targetLang);
         }
       }
@@ -1075,11 +1199,6 @@
             clientId: tvClientId,
             deviceType: 'computer'
           }));
-          ws.send(JSON.stringify({
-            type: 'SET_SOURCE_LANGUAGE',
-            sessionId: sessionId || 'current',
-            sourceLang: sourceLang
-          }));
         } catch (_) {}
         startTvHeartbeat();
       };
@@ -1146,6 +1265,16 @@
                 initQRCode();
                 reRenderTranslationFeed();
                 fetchBackfilledHistory(targetLang);
+                if (ws && ws.readyState === 1) {
+                  try {
+                    ws.send(JSON.stringify({
+                      type: 'CHANGE_LANGUAGE',
+                      language: targetLang,
+                      role: 'tv',
+                      sessionId: sessionId || 'current'
+                    }));
+                  } catch (_) {}
+                }
               }
             }
           }
@@ -1220,6 +1349,26 @@
         if (data.status) {
           updateTVStatusUI(data.status, data.mosqueName);
         }
+        if (data.tvScreenMode && !getQueryParam('mode')) {
+          applyScreenMode(data.tvScreenMode);
+        }
+        if (data.tvLanguage && safeIncludes(VALID_LANGS, data.tvLanguage) && !getQueryParam('lang')) {
+          if (targetLang !== data.tvLanguage) {
+            targetLang = data.tvLanguage;
+            if (targetLangSelect) targetLangSelect.value = targetLang;
+            try { localStorage.setItem('mosq_tv_lang', targetLang); } catch (_) {}
+            initQRCode();
+            reRenderTranslationFeed();
+          }
+        }
+        if (data.sourceLanguage && safeIncludes(VALID_SOURCE_LANGS, data.sourceLanguage) && !getQueryParam('sourceLang')) {
+          if (sourceLang !== data.sourceLanguage) {
+            sourceLang = data.sourceLanguage;
+            if (sourceLangSelect) sourceLangSelect.value = sourceLang;
+            try { localStorage.setItem('mosq_tv_source_lang', sourceLang); } catch (_) {}
+            updateSourceColumnStyling();
+          }
+        }
         if (data.tvFontSize && data.tvFontSize !== currentTvFontSize) {
           applyTvFontSize(data.tvFontSize, data.tvCapacity, false);
         }
@@ -1248,9 +1397,10 @@
                 seenKeys[k] = true;
                 if (item.seq && item.seq > lastSeqReceived) lastSeqReceived = item.seq;
                 handleIncomingSpeech({
+                  seq: item.seq,
                   arabic: item.arabic,
                   translations: item.translations,
-                  translated: (item.translations && item.translations[targetLang]) || (item.translations && item.translations.en) || item.arabic,
+                  translated: (item.translations && item.translations[targetLang]) || '',
                   ayah: item.ayah,
                   timestamp: item.timestamp
                 }, true);
@@ -1461,5 +1611,14 @@
     document.addEventListener('DOMContentLoaded', onReady);
   } else {
     onReady();
+  }
+
+  if (typeof window !== 'undefined') {
+    window.__tvDisplayTest = {
+      handleStreamingToken: handleStreamingToken,
+      handleIncomingSpeech: handleIncomingSpeech,
+      getValidTranslationText: getValidTranslationText,
+      reRenderTranslationFeed: reRenderTranslationFeed
+    };
   }
 })();

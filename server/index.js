@@ -13,7 +13,7 @@ const { WebSocketServer } = require('ws');
 const QRCode = require('qrcode');
 const { SessionManager } = require('./sessionManager');
 const { STTService } = require('./services/sttService');
-const { TranslationService, hasArabicScript } = require('./services/translationService');
+const { TranslationService, hasArabicScript, isRawArabicLeak } = require('./services/translationService');
 const { TTSService } = require('./services/ttsService');
 const { QuranAIDetector } = require('./services/quranAiDetector');
 
@@ -366,6 +366,7 @@ sonioxService.on('connected', ({ sessionId, lang }) => {
 
 // Throttled rolling translation for indirect targets (e.g. Uzbek, Somali) during live streaming
 const lastIndirectPartialTime = new Map();
+const sessionRollingRevisions = new Map();
 
 // Broadcast real-time streaming tokens (sub-200ms word-by-word) strictly to the target session room
 sonioxService.on('token_stream', ({ sessionId, lang, translatedChunk, originalChunk, originalFull, translatedFull, isReplacement, isFinal, seq, timestamp }) => {
@@ -394,9 +395,26 @@ sonioxService.on('token_stream', ({ sessionId, lang, translatedChunk, originalCh
         if (now - lastRun >= 450) {
           lastIndirectPartialTime.set(sessionId, now);
           const srcText = originalFull.trim();
+          const targetSeq = seq;
+          const currentRev = (sessionRollingRevisions.get(sessionId) || 0) + 1;
+          sessionRollingRevisions.set(sessionId, currentRev);
+
           translationService.translateMultiple(srcText, indirectLangs).then(results => {
+            // Guard 1: Verify session is still active
+            const currentSession = sessionManager.getSession(sessionId);
+            if (!currentSession || currentSession.status !== 'active') return;
+
+            // Guard 2: Discard stale rolling translations if a newer revision was already dispatched
+            if (sessionRollingRevisions.get(sessionId) !== currentRev) return;
+
+            // Guard 3: Never emit provisional partial if this sequence already finalized!
+            const isAlreadyFinal = currentSession.transcripts && currentSession.transcripts.some(
+              t => t.seq === targetSeq && t.translations && indirectLangs.some(il => Boolean(t.translations[il]))
+            );
+            if (isAlreadyFinal) return;
+
             for (const [nl, nText] of Object.entries(results)) {
-              if (nText && nText.trim()) {
+              if (nText && nText.trim() && !isCorruptOrMissingText(nText, nl)) {
                 sessionManager.broadcastStreamingToken(sessionId, {
                   lang: nl,
                   translatedChunk: '',
@@ -405,7 +423,7 @@ sonioxService.on('token_stream', ({ sessionId, lang, translatedChunk, originalCh
                   translatedFull: nText,
                   isReplacement: true,
                   isFinal: false,
-                  seq,
+                  seq: targetSeq,
                   timestamp
                 });
               }
@@ -416,6 +434,14 @@ sonioxService.on('token_stream', ({ sessionId, lang, translatedChunk, originalCh
     }
   }
 });
+
+// Helper to determine if a translation is corrupt or raw untranslated source leakage
+const isCorruptOrMissingText = (str, targetL) => {
+  if (!str || typeof str !== 'string' || !str.trim()) return true;
+  if (str.startsWith(`[${targetL.toUpperCase()}]`)) return true;
+  if (targetL !== 'ar' && targetL !== 'ur' && isRawArabicLeak(str)) return true;
+  return false;
+};
 
 // When a sentence is finalized by Soniox, save to session history for that specific session ONLY.
 // DO NOT broadcast LIVE_SUBTITLE here — the STREAMING_TOKEN with isFinal:true
@@ -455,13 +481,8 @@ sonioxService.on('sentence_finalized', ({ sessionId, lang, translatedText, final
     session.transcripts.push(existing);
   }
 
-  // Translate for any active session languages not covered by Soniox (e.g. Somali 'so', Uzbek 'uz')
-  const isCorruptOrMissingText = (str, targetL) => {
-    if (!str || typeof str !== 'string' || !str.trim()) return true;
-    if (str.startsWith(`[${targetL.toUpperCase()}]`)) return true;
-    if (targetL !== 'ar' && targetL !== 'ur' && hasArabicScript(str)) return true;
-    return false;
-  };
+  // Single-flight translation queue per segment: prevent multiple gates from launching redundant jobs
+  if (!existing._inFlightTargets) existing._inFlightTargets = new Set();
 
   // Translate for any active session languages not already translated by a Soniox gate
   const neededLangs = new Set([
@@ -469,14 +490,19 @@ sonioxService.on('sentence_finalized', ({ sessionId, lang, translatedText, final
     ...sessionManager.getLiveRequiredLanguages(sessionId)
   ]);
   const pendingLanguages = Array.from(neededLangs).filter(
-    l => (!existing.translations || !existing.translations[l] || isCorruptOrMissingText(existing.translations[l], l))
+    l => (!existing.translations || !existing.translations[l] || isCorruptOrMissingText(existing.translations[l], l)) && !existing._inFlightTargets.has(l)
   );
+
   if (pendingLanguages.length > 0) {
+    for (const pl of pendingLanguages) {
+      existing._inFlightTargets.add(pl);
+    }
     const srcText = originalText || resolvedTranslation;
     if (srcText && srcText.trim()) {
       translationService.translateMultiple(srcText, pendingLanguages).then(results => {
         if (!existing.translations) existing.translations = {};
         for (const [nl, nText] of Object.entries(results)) {
+          existing._inFlightTargets.delete(nl);
           if (nText && nText.trim() && !isCorruptOrMissingText(nText, nl)) {
             existing.translations[nl] = nText;
             sessionManager.broadcastStreamingToken(sessionId, {
@@ -492,7 +518,12 @@ sonioxService.on('sentence_finalized', ({ sessionId, lang, translatedText, final
             });
           }
         }
-      }).catch(err => console.warn('[Non-Soniox AutoTranslate] Error:', err.message));
+      }).catch(err => {
+        for (const pl of pendingLanguages) {
+          existing._inFlightTargets.delete(pl);
+        }
+        console.warn('[Non-Soniox AutoTranslate] Error:', err.message);
+      });
     }
   }
 

@@ -218,6 +218,17 @@ class SessionManager extends EventEmitter {
       session.tvLanguage = tvTargetLang;
       session.primaryLanguage = tvTargetLang;
       this.activateLanguage(session.id, tvTargetLang);
+
+      // Atomically synchronize all connected TV subscribers' language on the server
+      const actualId = this.getCanonicalId(sessionId);
+      const subs = this.subscribers.get(actualId);
+      if (subs) {
+        for (const sub of subs) {
+          if (sub.role === 'tv') {
+            sub.language = tvTargetLang;
+          }
+        }
+      }
     }
     if (tvScreenMode !== undefined && tvScreenMode !== null) {
       session.tvScreenMode = tvScreenMode;

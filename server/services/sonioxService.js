@@ -109,6 +109,8 @@ class SonioxGateManager extends EventEmitter {
     this.sessionInactivityTimers = new Map();
     // Key format: "${sessionId}" -> { lang: string, hints: string[] }
     this.sessionSourceLanguages = new Map();
+    // Key format: "${sessionId}" -> monotonic sequence counter
+    this.sessionSequences = new Map();
     this.isRateLimited = false;
     this.rateLimitedUntil = 0;
     this.gateGenerationCounter = 0;
@@ -214,6 +216,17 @@ class SonioxGateManager extends EventEmitter {
     return entry ? entry.hints : [];
   }
 
+  getSessionSeq(sessionId) {
+    return this.sessionSequences.get(sessionId || 'default') || 0;
+  }
+
+  nextSessionSeq(sessionId) {
+    const sid = sessionId || 'default';
+    const next = (this.sessionSequences.get(sid) || 0) + 1;
+    this.sessionSequences.set(sid, next);
+    return next;
+  }
+
   getSourceLanguage(sessionId) {
     const entry = this.sessionSourceLanguages.get(sessionId || 'default');
     return entry ? entry.lang : 'auto';
@@ -222,6 +235,13 @@ class SonioxGateManager extends EventEmitter {
   setSourceLanguage(sessionIdOrLang, maybeLang) {
     const sid = maybeLang ? sessionIdOrLang : 'default';
     const langCode = maybeLang || sessionIdOrLang;
+    const current = this.getSourceLanguage(sid);
+    const target = (!langCode || langCode === 'auto') ? 'auto' : langCode;
+
+    // NO-OP GUARD: If source language is unchanged, keep active streams uninterrupted
+    if (current === target) {
+      return;
+    }
 
     if (!langCode || langCode === 'auto') {
       this.sessionSourceLanguages.set(sid, { lang: 'auto', hints: [] });
@@ -447,7 +467,7 @@ class SonioxGateManager extends EventEmitter {
       liveOr: '',
       currentOriginalText: '',
       currentTranslatedText: '',
-      seq: 0,
+      seq: this.getSessionSeq(sid),
       emitTimer: null,
       keepaliveTimer: null,
       reconnectTimer: null,
@@ -762,7 +782,8 @@ class SonioxGateManager extends EventEmitter {
     arabic = (arabic || '').trim();
     if (!translated && !arabic) return;
 
-    const seq = ++gate.seq;
+    const seq = this.nextSessionSeq(gate.sessionId);
+    gate.seq = seq;
     const ts = new Date().toISOString();
 
     const targets = (gate.subLanguages && gate.subLanguages.size > 0)
@@ -832,6 +853,8 @@ class SonioxGateManager extends EventEmitter {
         ? Array.from(gate.subLanguages)
         : [gate.lang];
 
+      const targetSeq = (this.getSessionSeq(gate.sessionId) || gate.seq) + 1;
+
       for (const subLang of targets) {
         let subTranslatedFull = translatedFull;
         let subLive = gate.liveTr;
@@ -852,7 +875,7 @@ class SonioxGateManager extends EventEmitter {
           translatedChunk: '',
           isReplacement: true,
           isFinal: false,
-          seq: gate.seq + 1,
+          seq: targetSeq,
           timestamp: ts
         });
 
@@ -860,7 +883,7 @@ class SonioxGateManager extends EventEmitter {
         this.emit('partial', {
           sessionId: gate.sessionId,
           lang: subLang,
-          seq: gate.seq + 1,
+          seq: targetSeq,
           stable: subStable,
           live: subLive,
           arabicStable: gate.stableOr,
@@ -882,7 +905,7 @@ class SonioxGateManager extends EventEmitter {
             translatedChunk: '',
             isReplacement: true,
             isFinal: false,
-            seq: gate.seq + 1,
+            seq: targetSeq,
             timestamp: ts
           });
         }

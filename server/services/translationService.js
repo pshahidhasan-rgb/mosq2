@@ -9,6 +9,32 @@
 
 const hasArabicScript = (text) => /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/.test(text || '');
 
+function isRawArabicLeak(str) {
+  if (!str || typeof str !== 'string') return false;
+  let arabicCount = 0;
+  let otherCount = 0;
+  let totalAlpha = 0;
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    if ((code >= 0x0600 && code <= 0x06FF) ||
+        (code >= 0x0750 && code <= 0x077F) ||
+        (code >= 0xFB50 && code <= 0xFDFF) ||
+        (code >= 0xFE70 && code <= 0xFEFF)) {
+      arabicCount++;
+      totalAlpha++;
+    } else if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122) ||
+               (code >= 0x0400 && code <= 0x04FF) || // Cyrillic
+               (code >= 0x0980 && code <= 0x09FF) || // Bengali
+               (code >= 0x4E00 && code <= 0x9FFF)) { // Chinese
+      otherCount++;
+      totalAlpha++;
+    }
+  }
+  if (totalAlpha === 0) return false;
+  if (otherCount > 0 && (otherCount / totalAlpha) > 0.2) return false;
+  return (arabicCount / totalAlpha) > 0.75;
+}
+
 // Arabic orthography normalizer: handles hamzas, waslas, dagger alifs, tashkeel, and diacritics
 function normalizeArabic(text) {
   if (!text) return '';
@@ -282,7 +308,7 @@ class TranslationService {
     if (!text || typeof text !== 'string' || !text.trim()) return false;
     const clean = text.trim();
     if (clean.startsWith(`[${targetLang.toUpperCase()}]`)) return false;
-    if (targetLang !== 'ar' && targetLang !== 'ur' && hasArabicScript(clean)) return false;
+    if (targetLang !== 'ar' && targetLang !== 'ur' && isRawArabicLeak(clean)) return false;
     return true;
   }
 
@@ -487,5 +513,6 @@ module.exports = {
   SERMON_DICTIONARY,
   LANGUAGE_NAMES,
   normalizeArabic,
-  hasArabicScript
+  hasArabicScript,
+  isRawArabicLeak
 };
