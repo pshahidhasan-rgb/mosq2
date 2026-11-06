@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Live Khutbah TV Display — Mishkah AI</title>
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="shortcut icon" href="/favicon.ico" />
   <script>
     // ES3-safe TV runtime error logger: ensures any script error is visible on TV screen
     window.onerror = function (msg, src, line, col) {
@@ -121,14 +123,22 @@
       width: 24px;
       height: 24px;
       border-radius: 6px;
-      background: #10b981;
+      background: transparent;
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: 900;
       font-size: 0.95rem;
       color: #030711;
-      box-shadow: 0 0 12px var(--emerald-glow);
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .brand-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: inherit;
+      display: block;
     }
 
     #mosque-name {
@@ -541,7 +551,7 @@
 
   <!-- Visual TV Boot Status & Error Display -->
   <div id="boot-msg" style="position:fixed; left:0; right:0; top:42%; text-align:center; font-size:24px; font-weight:600; color:#94a3b8; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; pointer-events:none; z-index:9998; padding:0 20px;">
-    <div style="font-size:36px; margin-bottom:12px;">🕌</div>
+    <div style="margin-bottom:14px;"><img src="/logo-icon.png" alt="Mishkah.ai" style="width:52px; height:52px; border-radius:14px; box-shadow:0 0 24px rgba(16,185,129,0.45); display:inline-block; vertical-align:middle;" /></div>
     <div id="boot-msg-text">Connecting to Live TV Display…</div>
   </div>
   <div id="boot-err" style="display:none; position:fixed; left:20px; right:20px; bottom:20px; padding:16px 20px; background:#7f1d1d; color:#fff; font:14px monospace; white-space:pre-wrap; z-index:9999; border-radius:8px; box-shadow:0 4px 20px rgba(0,0,0,0.7);">
@@ -559,7 +569,7 @@
     <!-- Center: Mosque Brand -->
     <div class="center-brand-wrapper">
       <div class="center-brand">
-        <div class="brand-icon">🕌</div>
+        <div class="brand-icon"><img src="/logo-icon.png" alt="Mishkah.ai" /></div>
         <div id="mosque-name">MYO YOUTH CENTER</div>
       </div>
     </div>
